@@ -21,6 +21,7 @@ export interface Game {
   rank?: number;
   num_ratings?: number;
   rating_distribution?: number[];
+  category_ranks?: Record<string, number>;
   categories: string[];
   mechanics: string[];
   designers: string[];

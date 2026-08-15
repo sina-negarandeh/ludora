@@ -80,6 +80,35 @@ const RECSYS_TYPES = [
   { id: 'Hybrid', name: 'Hybrid', available: false },
 ];
 
+const GameRankings: React.FC<{ game: Game }> = ({ game }) => {
+  const hasOverallRank = game.rank && game.rank > 0;
+  const hasCategoryRanks = game.category_ranks && Object.keys(game.category_ranks).length > 0;
+  
+  if (!hasOverallRank && !hasCategoryRanks) return null;
+
+  return (
+    <div className="mt-24 border-t border-neutral/20 pt-16">
+      <h2 className="text-4xl font-serif text-text mb-8">Rankings</h2>
+      <div className="flex flex-wrap gap-4">
+        {hasOverallRank && (
+          <div className="flex items-center gap-3 bg-surface border border-primary/30 px-6 py-4 rounded-full shadow-sm hover:border-primary/60 transition-colors">
+            <TrophyIcon className="w-6 h-6 text-primary" />
+            <span className="font-bold text-text text-xl">#{game.rank}</span>
+            <span className="text-secondary-text font-medium text-lg">Overall</span>
+          </div>
+        )}
+        
+        {hasCategoryRanks && Object.entries(game.category_ranks!).sort((a, b) => a[1] - b[1]).map(([category, rank]) => (
+          <div key={category} className="flex items-center gap-3 bg-surface border border-neutral/30 px-6 py-4 rounded-full shadow-sm hover:border-neutral/60 transition-colors">
+            <span className="font-bold text-text text-xl">#{rank}</span>
+            <span className="text-secondary-text font-medium text-lg">{category}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const UserRatings: React.FC<{ game: Game }> = ({ game }) => {
   if (!game.rating_distribution || !game.num_ratings) return null;
 
@@ -560,6 +589,9 @@ export const GameDetail: React.FC = () => {
 
       {/* Recommendations */}
       <GameRecommendations bgg_id={game.bgg_id} />
+
+      {/* Rankings */}
+      <GameRankings game={game} />
 
       {/* User Ratings */}
       <UserRatings game={game} />

@@ -76,6 +76,7 @@ class Game(Base):
     rank = Column(Integer, nullable=True)
     num_ratings = Column(Integer, nullable=True)
     rating_distribution = Column(JSON, nullable=True)
+    category_ranks = Column(JSON, nullable=True)
 
     # Search and Vector Columns
     embedding = Column(Vector(384))

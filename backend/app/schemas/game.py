@@ -15,6 +15,7 @@ class GameBase(BaseModel):
     rank: Optional[int] = None
     num_ratings: Optional[int] = None
     rating_distribution: Optional[List[int]] = None
+    category_ranks: Optional[dict[str, int]] = None
     categories: list[str] = Field(default_factory=list)
     mechanics: list[str] = Field(default_factory=list)
     designers: list[str] = Field(default_factory=list)
