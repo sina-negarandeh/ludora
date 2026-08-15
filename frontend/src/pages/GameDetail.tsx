@@ -838,10 +838,18 @@ export const GameDetail: React.FC = () => {
             Published {game.year_published}
           </p>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 mb-3">
             {game.categories && game.categories.map(cat => (
                <span key={cat} className="px-4 py-2 bg-neutral/20 text-text rounded-full text-sm font-bold whitespace-nowrap">
                  {CATEGORY_MAP[cat] || cat}
+               </span>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {game.themes && game.themes.map(theme => (
+               <span key={theme} className="px-3 py-1 bg-transparent border border-neutral/40 text-secondary-text rounded-full text-xs font-medium whitespace-nowrap">
+                 {theme}
                </span>
             ))}
           </div>
@@ -888,31 +896,26 @@ export const GameDetail: React.FC = () => {
 
       {/* Details Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-        {/* Description */}
+        {/* Description and Mechanics */}
         <div className="lg:col-span-2">
-          <h2 className="text-4xl font-serif text-text mb-6">About the Game</h2>
-          <div 
-            className="text-lg text-secondary-text leading-relaxed space-y-5"
-            dangerouslySetInnerHTML={{ __html: cleanDescription }}
-          />
+          <div className="mb-12">
+            <h2 className="text-4xl font-serif text-text mb-6">About the Game</h2>
+            <div 
+              className="text-lg text-secondary-text leading-relaxed space-y-5"
+              dangerouslySetInnerHTML={{ __html: cleanDescription }}
+            />
+          </div>
+
+          {game.mechanics && game.mechanics.length > 0 && (
+            <div>
+              <h3 className="text-2xl font-serif text-text mb-4">Mechanics</h3>
+              <ExpandableChipList items={game.mechanics} limit={8} />
+            </div>
+          )}
         </div>
 
         {/* Sidebar Entities */}
         <div className="space-y-10">
-          {game.mechanics && game.mechanics.length > 0 && (
-            <div>
-              <h3 className="text-2xl font-serif text-text mb-4">Mechanics</h3>
-              <ExpandableChipList items={game.mechanics} limit={6} />
-            </div>
-          )}
-
-          {game.themes && game.themes.length > 0 && (
-            <div>
-              <h3 className="text-2xl font-serif text-text mb-4">Themes</h3>
-              <ExpandableChipList items={game.themes} limit={6} />
-            </div>
-          )}
-
           {game.designers && game.designers.length > 0 && (
             <div>
               <h3 className="text-2xl font-serif text-text mb-4">Designers</h3>

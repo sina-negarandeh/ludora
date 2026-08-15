@@ -126,38 +126,47 @@ export const GamesList: React.FC = () => {
 
             <div className="flex-1 overflow-y-auto pr-2 space-y-6 custom-scrollbar">
               
-              {/* Category */}
-              <div>
-                <label className="block text-sm font-bold text-secondary-text mb-2">Category</label>
-                <MultiSelectDropdown 
-                  options={categories || []} 
-                  selected={query.categories || []} 
-                  onChange={(selected) => handleFilterChange('categories', selected)} 
-                  placeholder="All Categories" 
-                />
+              {/* Group: Classification */}
+              <div className="space-y-6">
+                <h4 className="text-xs font-bold text-secondary-text uppercase tracking-wider pb-2 border-b border-neutral/10">Classification</h4>
+                
+                {/* Category */}
+                <div>
+                  <label className="block text-sm font-bold text-secondary-text mb-2">Category</label>
+                  <MultiSelectDropdown 
+                    options={categories || []} 
+                    selected={query.categories || []} 
+                    onChange={(selected) => handleFilterChange('categories', selected)} 
+                    placeholder="All Categories" 
+                  />
+                </div>
+
+                {/* Theme */}
+                <div>
+                  <label className="block text-sm font-bold text-secondary-text mb-2">Theme</label>
+                  <SearchableCombobox 
+                    options={themes} 
+                    selected={query.themes || []} 
+                    onChange={(selected) => handleFilterChange('themes', selected)} 
+                    placeholder="Search themes..." 
+                  />
+                </div>
               </div>
 
-              {/* Theme */}
-              <div>
-                <label className="block text-sm font-bold text-secondary-text mb-2">Theme</label>
-                <SearchableCombobox 
-                  options={themes} 
-                  selected={query.themes || []} 
-                  onChange={(selected) => handleFilterChange('themes', selected)} 
-                  placeholder="Search themes..." 
-                />
-              </div>
-
-              {/* Mechanic */}
-              <div>
-                <label className="block text-sm font-bold text-secondary-text mb-2">Mechanic</label>
-                <SearchableCombobox 
-                  options={mechanics || []} 
-                  selected={query.mechanics || []} 
-                  onChange={(selected) => handleFilterChange('mechanics', selected)} 
-                  placeholder="Search mechanics..." 
-                />
-              </div>
+              {/* Group: Gameplay */}
+              <div className="space-y-6 pt-2">
+                <h4 className="text-xs font-bold text-secondary-text uppercase tracking-wider pb-2 border-b border-neutral/10">Gameplay</h4>
+                
+                {/* Mechanic */}
+                <div>
+                  <label className="block text-sm font-bold text-secondary-text mb-2">Mechanic</label>
+                  <SearchableCombobox 
+                    options={mechanics || []} 
+                    selected={query.mechanics || []} 
+                    onChange={(selected) => handleFilterChange('mechanics', selected)} 
+                    placeholder="Search mechanics..." 
+                  />
+                </div>
 
               {/* Players */}
               <div>
@@ -195,18 +204,23 @@ export const GamesList: React.FC = () => {
                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className={`w-3 h-3 transition-transform ${showAdvancedPlayers ? 'rotate-180' : ''}`}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
                  </button>
 
-                 <div className={`overflow-hidden transition-all duration-300 ${showAdvancedPlayers ? 'max-h-24 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
-                   <div className="flex items-center gap-2">
-                     <input type="number" min="1" placeholder="Min" value={query.min_players || ''} onChange={(e) => { handleFilterChange('min_players', parseInt(e.target.value)); handleFilterChange('exact_players', undefined); }} className="w-full bg-neutral/10 border-none rounded-xl px-3 py-2 text-text focus:ring-2 focus:ring-primary/50 outline-none" />
-                     <span className="text-secondary-text">-</span>
-                     <input type="number" min="1" placeholder="Max" value={query.max_players || ''} onChange={(e) => { handleFilterChange('max_players', parseInt(e.target.value)); handleFilterChange('exact_players', undefined); }} className="w-full bg-neutral/10 border-none rounded-xl px-3 py-2 text-text focus:ring-2 focus:ring-primary/50 outline-none" />
-                   </div>
-                 </div>
+                  <div className={`overflow-hidden transition-all duration-300 ${showAdvancedPlayers ? 'max-h-24 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
+                    <div className="flex items-center gap-2">
+                      <input type="number" min="1" placeholder="Min" value={query.min_players || ''} onChange={(e) => { handleFilterChange('min_players', parseInt(e.target.value)); handleFilterChange('exact_players', undefined); }} className="w-full bg-neutral/10 border-none rounded-xl px-3 py-2 text-text focus:ring-2 focus:ring-primary/50 outline-none" />
+                      <span className="text-secondary-text">-</span>
+                      <input type="number" min="1" placeholder="Max" value={query.max_players || ''} onChange={(e) => { handleFilterChange('max_players', parseInt(e.target.value)); handleFilterChange('exact_players', undefined); }} className="w-full bg-neutral/10 border-none rounded-xl px-3 py-2 text-text focus:ring-2 focus:ring-primary/50 outline-none" />
+                    </div>
+                  </div>
+               </div>
               </div>
 
-              {/* Complexity */}
-              <div>
-                 <label className="block text-sm font-bold text-secondary-text mb-3">Complexity (1.0 - 5.0)</label>
+              {/* Group: Experience */}
+              <div className="space-y-6 pt-2">
+                <h4 className="text-xs font-bold text-secondary-text uppercase tracking-wider pb-2 border-b border-neutral/10">Experience</h4>
+
+                {/* Complexity */}
+                <div>
+                   <label className="block text-sm font-bold text-secondary-text mb-3">Complexity (1.0 - 5.0)</label>
                  
                  <div className="flex flex-wrap gap-2 mb-4">
                    {[
@@ -262,7 +276,8 @@ export const GamesList: React.FC = () => {
                    <span className="text-sm font-bold text-secondary-text min-w-[1.5rem]">
                      {(query.max_weight || 5.0).toFixed(1)}
                    </span>
-                 </div>
+                   </div>
+                </div>
               </div>
 
             </div>
@@ -306,39 +321,49 @@ export const GamesList: React.FC = () => {
             </button>
           </div>
           
-          <div className="flex-1 space-y-8">
-              {/* Category */}
-              <div>
-                <label className="block text-lg font-bold text-secondary-text mb-3">Category</label>
-                <MultiSelectDropdown 
-                  options={categories || []} 
-                  selected={query.categories || []} 
-                  onChange={(selected) => handleFilterChange('categories', selected)} 
-                  placeholder="All Categories" 
-                />
+          <div className="flex-1 space-y-10">
+              
+              {/* Group: Classification */}
+              <div className="space-y-8">
+                <h4 className="text-sm font-bold text-secondary-text uppercase tracking-wider pb-3 border-b border-neutral/10">Classification</h4>
+                
+                {/* Category */}
+                <div>
+                  <label className="block text-lg font-bold text-secondary-text mb-3">Category</label>
+                  <MultiSelectDropdown 
+                    options={categories || []} 
+                    selected={query.categories || []} 
+                    onChange={(selected) => handleFilterChange('categories', selected)} 
+                    placeholder="All Categories" 
+                  />
+                </div>
+
+                {/* Theme */}
+                <div>
+                  <label className="block text-lg font-bold text-secondary-text mb-3">Theme</label>
+                  <SearchableCombobox 
+                    options={themes} 
+                    selected={query.themes || []} 
+                    onChange={(selected) => handleFilterChange('themes', selected)} 
+                    placeholder="Search themes..." 
+                  />
+                </div>
               </div>
 
-              {/* Theme */}
-              <div>
-                <label className="block text-lg font-bold text-secondary-text mb-3">Theme</label>
-                <SearchableCombobox 
-                  options={themes} 
-                  selected={query.themes || []} 
-                  onChange={(selected) => handleFilterChange('themes', selected)} 
-                  placeholder="Search themes..." 
-                />
-              </div>
-
-              {/* Mechanic */}
-              <div>
-                <label className="block text-lg font-bold text-secondary-text mb-3">Mechanic</label>
-                <SearchableCombobox 
-                  options={mechanics || []} 
-                  selected={query.mechanics || []} 
-                  onChange={(selected) => handleFilterChange('mechanics', selected)} 
-                  placeholder="Search mechanics..." 
-                />
-              </div>
+              {/* Group: Gameplay */}
+              <div className="space-y-8 pt-4">
+                <h4 className="text-sm font-bold text-secondary-text uppercase tracking-wider pb-3 border-b border-neutral/10">Gameplay</h4>
+                
+                {/* Mechanic */}
+                <div>
+                  <label className="block text-lg font-bold text-secondary-text mb-3">Mechanic</label>
+                  <SearchableCombobox 
+                    options={mechanics || []} 
+                    selected={query.mechanics || []} 
+                    onChange={(selected) => handleFilterChange('mechanics', selected)} 
+                    placeholder="Search mechanics..." 
+                  />
+                </div>
 
               {/* Players */}
               <div>
@@ -376,18 +401,23 @@ export const GamesList: React.FC = () => {
                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className={`w-4 h-4 transition-transform ${showAdvancedPlayers ? 'rotate-180' : ''}`}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
                  </button>
 
-                 <div className={`overflow-hidden transition-all duration-300 ${showAdvancedPlayers ? 'max-h-24 opacity-100 mt-3' : 'max-h-0 opacity-0'}`}>
-                   <div className="flex items-center gap-3">
-                     <input type="number" min="1" placeholder="Min" value={query.min_players || ''} onChange={(e) => { handleFilterChange('min_players', parseInt(e.target.value)); handleFilterChange('exact_players', undefined); }} className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 text-lg text-text focus:ring-2 focus:ring-primary/50 outline-none" />
-                     <span className="text-secondary-text">-</span>
-                     <input type="number" min="1" placeholder="Max" value={query.max_players || ''} onChange={(e) => { handleFilterChange('max_players', parseInt(e.target.value)); handleFilterChange('exact_players', undefined); }} className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 text-lg text-text focus:ring-2 focus:ring-primary/50 outline-none" />
-                   </div>
-                 </div>
+                  <div className={`overflow-hidden transition-all duration-300 ${showAdvancedPlayers ? 'max-h-24 opacity-100 mt-3' : 'max-h-0 opacity-0'}`}>
+                    <div className="flex items-center gap-3">
+                      <input type="number" min="1" placeholder="Min" value={query.min_players || ''} onChange={(e) => { handleFilterChange('min_players', parseInt(e.target.value)); handleFilterChange('exact_players', undefined); }} className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 text-lg text-text focus:ring-2 focus:ring-primary/50 outline-none" />
+                      <span className="text-secondary-text">-</span>
+                      <input type="number" min="1" placeholder="Max" value={query.max_players || ''} onChange={(e) => { handleFilterChange('max_players', parseInt(e.target.value)); handleFilterChange('exact_players', undefined); }} className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 text-lg text-text focus:ring-2 focus:ring-primary/50 outline-none" />
+                    </div>
+                  </div>
+               </div>
               </div>
 
-              {/* Complexity */}
-              <div>
-                 <label className="block text-lg font-bold text-secondary-text mb-4">Complexity (1.0 - 5.0)</label>
+              {/* Group: Experience */}
+              <div className="space-y-8 pt-4">
+                <h4 className="text-sm font-bold text-secondary-text uppercase tracking-wider pb-3 border-b border-neutral/10">Experience</h4>
+
+                {/* Complexity */}
+                <div>
+                   <label className="block text-lg font-bold text-secondary-text mb-4">Complexity (1.0 - 5.0)</label>
                  
                  <div className="flex flex-wrap gap-3 mb-6">
                    {[
@@ -442,8 +472,9 @@ export const GamesList: React.FC = () => {
 
                    <span className="text-lg font-bold text-secondary-text min-w-[2rem]">
                      {(query.max_weight || 5.0).toFixed(1)}
-                   </span>
-                 </div>
+                    </span>
+                  </div>
+                </div>
               </div>
           </div>
           
