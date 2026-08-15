@@ -1,0 +1,35 @@
+import axios from 'axios';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+const apiClient = axios.create({
+  baseURL: API_URL,
+});
+
+export interface Game {
+  bgg_id: number;
+  name: string;
+  description: string;
+  year_published: number;
+  game_weight: number;
+  avg_rating: number;
+  min_players: number;
+  max_players: number;
+  mfg_playtime: number;
+  min_age: number;
+  image_path?: string;
+  rank?: number;
+  categories?: string;
+}
+
+export interface PaginatedGames {
+  total: number;
+  items: Game[];
+}
+
+export const fetchGames = async (skip: number = 0, limit: number = 24): Promise<PaginatedGames> => {
+  const { data } = await apiClient.get<PaginatedGames>('/api/games', {
+    params: { skip, limit },
+  });
+  return data;
+};

@@ -1,0 +1,27 @@
+import React from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { GamesList } from './pages/GamesList';
+
+const queryClient = new QueryClient();
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <div className="sticky top-4 z-50 px-4 w-full">
+          <header className="bg-white/80 backdrop-blur-md px-8 shadow-sm border border-neutral/20 flex items-center h-[4rem] rounded-full">
+            <h1 className="text-4xl text-primary font-logo tracking-wide translate-y-5 pb-1">ludora</h1>
+          </header>
+        </div>
+        <div className="min-h-screen bg-background">
+          <Routes>
+            <Route path="/" element={<GamesList />} />
+          </Routes>
+        </div>
+      </BrowserRouter>
+    </QueryClientProvider>
+  );
+}
+
+export default App;

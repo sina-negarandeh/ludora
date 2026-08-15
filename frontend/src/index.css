@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-background text-text font-sans antialiased;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary text-white px-4 py-2 rounded-lg font-semibold shadow-sm hover:bg-[#d54e22] transition-colors focus:ring-2 focus:ring-offset-2 focus:ring-primary;
+  }
+  .card {
+    @apply bg-white border border-surface rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-300;
+  }
+}
