@@ -21,6 +21,15 @@ export const GamesList: React.FC = () => {
   const pageSize = query.limit || 24;
   const page = (query.skip || 0) / pageSize;
 
+  const activeFiltersCount = 
+    (query.categories?.length || 0) +
+    (query.mechanics?.length || 0) +
+    (query.exact_players !== undefined ? 1 : 0) +
+    (query.min_players !== undefined ? 1 : 0) +
+    (query.max_players !== undefined ? 1 : 0) +
+    (query.min_weight !== undefined && query.min_weight > 1.0 ? 1 : 0) +
+    (query.max_weight !== undefined && query.max_weight < 5.0 ? 1 : 0);
+
   const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: fetchCategories, staleTime: Infinity });
   const { data: mechanics } = useQuery({ queryKey: ['mechanics'], queryFn: fetchMechanics, staleTime: Infinity });
 
@@ -79,6 +88,12 @@ export const GamesList: React.FC = () => {
             <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
           </svg>
           <span>Filters</span>
+          {activeFiltersCount > 0 && (
+            <>
+              <div className="w-px h-5 bg-primary/30 mx-1"></div>
+              <span>{activeFiltersCount}</span>
+            </>
+          )}
         </button>
       )}
 
@@ -243,6 +258,12 @@ export const GamesList: React.FC = () => {
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
             </svg>
             <span>Filters</span>
+            {activeFiltersCount > 0 && (
+              <>
+                <div className="w-px h-4 bg-primary/30 mx-0.5"></div>
+                <span>{activeFiltersCount}</span>
+              </>
+            )}
           </button>
         </div>
       )}
