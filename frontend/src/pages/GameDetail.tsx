@@ -109,6 +109,247 @@ const GameRankings: React.FC<{ game: Game }> = ({ game }) => {
   );
 };
 
+// Distribution Interfaces
+interface MetricDistribution {
+  x: number[];
+  density: number[];
+  cdf: number[];
+  min: number;
+  max: number;
+}
+type CategoryDistributions = Record<string, MetricDistribution>;
+type AllDistributions = Record<string, CategoryDistributions>;
+
+const DistributionChart = ({ 
+  title, 
+  value, 
+  metric, 
+  category, 
+  distributions,
+  leftLabel,
+  rightLabel,
+  formatValue,
+  formatPercentile,
+  formatAvg
+}: { 
+  title: string, value: number, metric: string, category: string, distributions: AllDistributions,
+  leftLabel: string, rightLabel: string, formatValue: (v: number) => string, formatPercentile: (cdf: number, catName: string) => string, formatAvg: (v: number) => string
+}) => {
+  const dist = distributions[category]?.[metric] || distributions['Overall']?.[metric];
+  if (!dist) return null;
+
+  const usedCategoryName = distributions[category]?.[metric] ? category : 'Overall';
+  const displayCategory = usedCategoryName === 'Overall' ? 'All Games' : `${usedCategoryName} Games`;
+
+  // Calculate Marker Position
+  const p = Math.max(0, Math.min(1, (value - dist.min) / (dist.max - dist.min)));
+  
+  // Find CDF
+  let closestIdx = 0;
+  let minDiff = Infinity;
+  for (let i = 0; i < dist.x.length; i++) {
+    const diff = Math.abs(dist.x[i] - value);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closestIdx = i;
+    }
+  }
+  const cdfValue = dist.cdf[closestIdx];
+
+  // Expected value (average) from density
+  const sumDensity = dist.density.reduce((a, b) => a + b, 0);
+  const avgValue = sumDensity > 0 ? dist.density.reduce((sum, d, i) => sum + (dist.x[i] * d), 0) / sumDensity : 0;
+  const avgP = Math.max(0, Math.min(1, (avgValue - dist.min) / (dist.max - dist.min)));
+
+  // Smooth Path Generator
+  const generateSmoothPath = (points: [number, number][]) => {
+    if (points.length === 0) return '';
+    if (points.length === 1) return `M ${points[0][0]},${points[0][1]}`;
+    
+    const controlPoint = (current: [number, number], previous: [number, number] | undefined, next: [number, number] | undefined, reverse: boolean) => {
+      const p = previous || current;
+      const n = next || current;
+      const smoothing = 0.15;
+      const lengthX = n[0] - p[0];
+      const lengthY = n[1] - p[1];
+      const length = Math.sqrt(Math.pow(lengthX, 2) + Math.pow(lengthY, 2)) * smoothing;
+      const angle = Math.atan2(lengthY, lengthX) + (reverse ? Math.PI : 0);
+      return [current[0] + Math.cos(angle) * length, current[1] + Math.sin(angle) * length];
+    };
+
+    let path = `M ${points[0][0]},${points[0][1]}`;
+    for (let i = 1; i < points.length; i++) {
+      const cps = controlPoint(points[i - 1], points[i - 2], points[i], false);
+      const cpe = controlPoint(points[i], points[i - 1], points[i + 1], true);
+      path += ` C ${cps[0]},${cps[1]} ${cpe[0]},${cpe[1]} ${points[i][0]},${points[i][1]}`;
+    }
+    return path;
+  };
+
+  // Find exact Y position on the curve for the marker
+  let densityAtValue = 0;
+  for (let i = 0; i < dist.x.length - 1; i++) {
+    if (value >= dist.x[i] && value <= dist.x[i+1]) {
+      const range = dist.x[i+1] - dist.x[i];
+      const fraction = (value - dist.x[i]) / range;
+      densityAtValue = dist.density[i] + fraction * (dist.density[i+1] - dist.density[i]);
+      break;
+    }
+  }
+  if (value <= dist.x[0]) densityAtValue = dist.density[0];
+  if (value >= dist.x[dist.x.length-1]) densityAtValue = dist.density[dist.density.length-1];
+  const markerY = 100 - (densityAtValue * 90);
+
+  // SVG Path
+  const pts: [number, number][] = dist.density.map((d, i) => {
+    const x = (i / (dist.density.length - 1)) * 100;
+    const y = 100 - (d * 90); // keep a 10% top margin
+    return [x, y];
+  });
+  
+  const pathLine = generateSmoothPath(pts);
+  const pathD = `${pathLine} L 100,100 L 0,100 Z`;
+
+  // Check if labels will overlap (within 18% of chart width)
+  const isOverlap = Math.abs(p - avgP) < 0.18;
+
+  return (
+    <div className="flex flex-col mb-8">
+      <div className="flex justify-between items-baseline mb-2">
+        <h4 className="text-lg font-bold text-text">{title}</h4>
+        <span className="text-xl font-bold text-primary">{formatValue(value)}</span>
+      </div>
+      
+      <div className="relative h-24 w-full mb-1 border-b-2 border-stone-300">
+        {/* Background Area */}
+        <svg className="w-full h-full overflow-visible absolute inset-0" preserveAspectRatio="none" viewBox="0 0 100 100">
+          <path d={pathD} className="fill-primary/20" />
+          <path d={pathLine} fill="none" className="stroke-primary/60 stroke-2" />
+        </svg>
+
+        {/* Average Marker */}
+        <div 
+          className="absolute top-0 bottom-0 flex flex-col items-center z-0 pointer-events-none"
+          style={{ left: `${avgP * 100}%`, transform: 'translateX(-50%)' }}
+        >
+          <div className="w-px border-l-2 border-dashed border-neutral/30 h-full relative" />
+          <div className={`absolute top-0 bg-surface/80 backdrop-blur-sm px-1 text-secondary-text/80 text-[9px] font-bold uppercase tracking-wider whitespace-nowrap transition-transform ${isOverlap ? 'translate-y-[-220%]' : 'translate-y-[-100%]'}`}>
+            AVG {formatAvg(avgValue)}
+          </div>
+        </div>
+
+        {/* This Game Marker */}
+        <div 
+          className="absolute top-0 bottom-0 flex flex-col items-center z-10 pointer-events-none"
+          style={{ left: `${p * 100}%`, transform: 'translateX(-50%)' }}
+        >
+          <div className="text-primary text-[10px] font-bold whitespace-nowrap mb-0.5 translate-y-[-100%] absolute top-0">
+            This Game
+          </div>
+          <div className="w-[2px] bg-primary h-full relative">
+            <div 
+              className="absolute left-1/2 -translate-x-1/2 w-3 h-3 bg-primary rounded-full border-2 border-surface" 
+              style={{ top: `${markerY}%`, marginTop: '-6px' }} 
+            />
+          </div>
+        </div>
+      </div>
+      
+      <div className="flex justify-between text-xs text-secondary-text/60 font-bold uppercase tracking-wider mb-2">
+        <span>{leftLabel}</span>
+        <span>{rightLabel}</span>
+      </div>
+      
+      <p className="text-sm text-secondary-text font-medium">
+        {formatPercentile(cdfValue, displayCategory)}
+      </p>
+    </div>
+  );
+};
+
+const GameDistributions: React.FC<{ game: Game }> = ({ game }) => {
+  const [distributions, setDistributions] = useState<AllDistributions | null>(null);
+
+  useEffect(() => {
+    fetch('/distributions.json')
+      .then(r => r.json())
+      .then(data => setDistributions(data))
+      .catch(console.error);
+  }, []);
+
+  if (!distributions) return null;
+
+  // Find primary category
+  let primaryCategory = 'Overall';
+  if (game.category_ranks && Object.keys(game.category_ranks).length > 0) {
+    primaryCategory = Object.entries(game.category_ranks).sort((a, b) => a[1] - b[1])[0][0];
+  }
+
+  return (
+    <div className="mt-24 border-t border-neutral/20 pt-16">
+      <h2 className="text-4xl font-serif text-text mb-8">Stats</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-16 gap-y-12">
+        {game.game_weight != null && game.game_weight > 0 && (
+          <DistributionChart 
+            title="Complexity"
+            value={game.game_weight}
+            metric="Complexity"
+            category={primaryCategory}
+            distributions={distributions}
+            leftLabel="Lighter"
+            rightLabel="Heavier"
+            formatValue={v => `${v.toFixed(2)} / 5`}
+            formatAvg={v => v.toFixed(2)}
+            formatPercentile={(cdf, cat) => `Heavier than ${Math.round(cdf * 100)}% of ${cat}`}
+          />
+        )}
+        {game.mfg_playtime != null && game.mfg_playtime > 0 && (
+          <DistributionChart 
+            title="Playtime"
+            value={game.mfg_playtime}
+            metric="Playtime"
+            category={primaryCategory}
+            distributions={distributions}
+            leftLabel="Shorter"
+            rightLabel="Longer"
+            formatValue={v => `${v} Mins`}
+            formatAvg={v => Math.round(v).toString()}
+            formatPercentile={(cdf, cat) => `Longer than ${Math.round(cdf * 100)}% of ${cat}`}
+          />
+        )}
+        {game.min_age != null && game.min_age > 0 && (
+          <DistributionChart 
+            title="Minimum Age"
+            value={game.min_age}
+            metric="Min Age"
+            category={primaryCategory}
+            distributions={distributions}
+            leftLabel="Younger"
+            rightLabel="Older"
+            formatValue={v => `${v}+ Years`}
+            formatAvg={v => v.toFixed(1)}
+            formatPercentile={(cdf, cat) => `More mature than ${Math.round(cdf * 100)}% of ${cat}`}
+          />
+        )}
+        {game.max_players != null && game.max_players > 0 && (
+          <DistributionChart 
+            title="Max Players"
+            value={game.max_players}
+            metric="Players"
+            category={primaryCategory}
+            distributions={distributions}
+            leftLabel="Fewer"
+            rightLabel="More"
+            formatValue={v => `${v} Players`}
+            formatAvg={v => v.toFixed(1)}
+            formatPercentile={(cdf, cat) => `Accommodates more players than ${Math.round(cdf * 100)}% of ${cat}`}
+          />
+        )}
+      </div>
+    </div>
+  );
+};
+
 const UserRatings: React.FC<{ game: Game }> = ({ game }) => {
   if (!game.rating_distribution || !game.num_ratings || game.rating_distribution.length === 0) return null;
 
@@ -698,6 +939,9 @@ export const GameDetail: React.FC = () => {
 
       {/* User Ratings */}
       <UserRatings game={game} />
+
+      {/* Game Distributions */}
+      <GameDistributions game={game} />
     </div>
   );
 };
