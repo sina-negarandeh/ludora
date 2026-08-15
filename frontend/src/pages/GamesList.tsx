@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { fetchGames, fetchCategories, fetchMechanics, fetchSearch } from '../api/games';
 import type { GameQuery, SearchQueryPayload } from '../api/games';
 import { GameCard } from '../components/GameCard';
@@ -55,6 +55,7 @@ export const GamesList: React.FC = () => {
       return fetchGames(query);
     },
     staleTime: 60000,
+    placeholderData: keepPreviousData,
   });
 
   const handleFilterChange = (key: keyof GameQuery, value: any) => {
