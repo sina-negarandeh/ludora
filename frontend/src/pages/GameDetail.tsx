@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import DOMPurify from 'dompurify';
-import { fetchGame } from '../api/games';
+import { useQuery } from '@tanstack/react-query';
+import { fetchGame, fetchRecommendations } from '../api/games';
 import type { Game } from '../api/games';
+import { GameCard } from '../components/GameCard';
 import { StarIcon, ClockIcon, UserGroupIcon, AcademicCapIcon, TrophyIcon, UserIcon, ArrowLeftIcon } from '@heroicons/react/24/solid';
 
 const CATEGORY_MAP: Record<string, string> = {
@@ -53,6 +55,72 @@ const ExpandableChipList: React.FC<{ items: string[], limit?: number }> = ({ ite
         >
           {expanded ? 'Show less' : `+ ${hiddenCount} more...`}
         </button>
+      )}
+    </div>
+  );
+};
+
+const GameRecommendations: React.FC<{ bgg_id: number }> = ({ bgg_id }) => {
+  const [model, setModel] = useState('hybrid');
+  
+  const { data, isLoading } = useQuery({
+    queryKey: ['recommendations', bgg_id, model],
+    queryFn: () => fetchRecommendations(bgg_id, model, 10),
+  });
+
+  return (
+    <div className="mt-24 border-t border-neutral/20 pt-16">
+      <div className="flex flex-col md:flex-row items-center justify-between mb-8 gap-4">
+        <div>
+          <h2 className="text-4xl font-serif text-text mb-2">Similar Games</h2>
+          <p className="text-secondary-text">Matches based on shared items characteristics.</p>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          <label htmlFor="model-select" className="text-sm font-bold text-secondary-text uppercase tracking-wider">
+            Algorithm
+          </label>
+          <select
+            id="model-select"
+            value={model}
+            onChange={e => setModel(e.target.value)}
+            className="bg-surface border border-neutral text-text font-medium rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary outline-none cursor-pointer shadow-sm"
+          >
+            <option value="popularity">Popularity Baseline</option>
+            <option value="metadata">Content-Based: Metadata</option>
+            <option value="tfidf">NLP-Based: TF-IDF</option>
+            <option value="embedding">Semantic: Embedding</option>
+            <option value="hybrid">Hybrid Ranking</option>
+            <option value="graph_jaccard">Graph: Weighted Jaccard</option>
+            <option value="node2vec">Graph: DeepWalk (Node2Vec)</option>
+          </select>
+        </div>
+      </div>
+      
+      {isLoading ? (
+        <div className="flex gap-6 overflow-x-auto pb-8 snap-x">
+           {[1,2,3,4,5].map(i => <div key={i} className="min-w-[240px] h-[320px] bg-neutral/10 rounded-2xl animate-pulse snap-start" />)}
+        </div>
+      ) : data?.recommendations?.length === 0 ? (
+        <div className="text-center py-12 text-secondary-text">No recommendations found.</div>
+      ) : (
+        <div className="flex gap-6 overflow-x-auto pb-8 snap-x" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          {data?.recommendations.map(rec => (
+            <div key={rec.game.bgg_id || rec.game.id} className="min-w-[300px] max-w-[300px] snap-start flex flex-col gap-3">
+              <div className="flex-1">
+                <GameCard 
+                  game={rec.game as any} 
+                  matchPercentage={model === 'popularity' ? undefined : Math.round(rec.score * 100)} 
+                />
+              </div>
+              {rec.reason && rec.reason.length > 0 && (
+                <div className="text-xs font-medium text-primary bg-primary/10 border border-primary/20 px-3 py-2 rounded-lg line-clamp-2 leading-relaxed shrink-0 shadow-sm">
+                  {rec.reason[0]}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -271,6 +339,9 @@ export const GameDetail: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Recommendations */}
+      <GameRecommendations bgg_id={game.bgg_id} />
     </div>
   );
 };

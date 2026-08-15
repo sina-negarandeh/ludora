@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from pgvector.sqlalchemy import Vector
@@ -87,3 +87,17 @@ class Game(Base):
     designers = relationship("Designer", secondary="game_designers")
     publishers = relationship("Publisher", secondary="game_publishers")
     artists = relationship("Artist", secondary="game_artists")
+
+class GameRecommendation(Base):
+    __tablename__ = "game_recommendations"
+    
+    game_id = Column(Integer, ForeignKey("games.bgg_id", ondelete="CASCADE"), primary_key=True)
+    recommended_game_id = Column(Integer, ForeignKey("games.bgg_id", ondelete="CASCADE"), primary_key=True)
+    model = Column(String, primary_key=True)
+    
+    score = Column(Float, nullable=False)
+    reasons = Column(JSON)
+    
+    # Relationships
+    game = relationship("Game", foreign_keys=[game_id])
+    recommended_game = relationship("Game", foreign_keys=[recommended_game_id])

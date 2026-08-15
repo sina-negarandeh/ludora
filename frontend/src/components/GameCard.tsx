@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 
 interface GameCardProps {
   game: Game;
+  matchPercentage?: number;
 }
 
 const CATEGORY_MAP: Record<string, string> = {
@@ -47,7 +48,42 @@ const ScrollingTitle: React.FC<{ title: string; year: number }> = ({ title, year
   );
 };
 
-export const GameCard: React.FC<GameCardProps> = ({ game }) => {
+const CircularProgress: React.FC<{ percentage: number }> = ({ percentage }) => {
+  const radius = 16;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (percentage / 100) * circumference;
+  
+  return (
+    <div className="relative flex items-center justify-center w-11 h-11 bg-white/90 backdrop-blur-md rounded-full shadow-sm border border-white/40 text-text">
+      <svg className="w-full h-full transform -rotate-90" viewBox="0 0 40 40">
+        <circle
+          className="text-neutral/30"
+          strokeWidth="3.5"
+          stroke="currentColor"
+          fill="transparent"
+          r={radius}
+          cx="20"
+          cy="20"
+        />
+        <circle
+          className="text-primary transition-all duration-1000 ease-out"
+          strokeWidth="3.5"
+          strokeDasharray={circumference}
+          strokeDashoffset={strokeDashoffset}
+          strokeLinecap="round"
+          stroke="currentColor"
+          fill="transparent"
+          r={radius}
+          cx="20"
+          cy="20"
+        />
+      </svg>
+      <span className="absolute text-[10px] font-extrabold">{percentage}%</span>
+    </div>
+  );
+};
+
+export const GameCard: React.FC<GameCardProps> = ({ game, matchPercentage }) => {
   const renderComplexityDots = (weight: number | null | undefined) => {
     if (!weight) return <span className="text-secondary-text">N/A</span>;
     const dots = [];
@@ -90,6 +126,12 @@ export const GameCard: React.FC<GameCardProps> = ({ game }) => {
         ) : (
           <div className="w-full h-full flex items-center justify-center text-secondary-text relative z-10">
             No Image
+          </div>
+        )}
+        
+        {matchPercentage !== undefined && (
+          <div className="absolute top-3 right-3 z-20">
+            <CircularProgress percentage={matchPercentage} />
           </div>
         )}
         

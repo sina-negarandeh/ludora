@@ -140,3 +140,27 @@ export const fetchSearch = async (
   );
   return data;
 };
+
+export interface RecommendationItem {
+  game: Game;
+  score: number;
+  reason: string[];
+}
+
+export interface RecommendationResponse {
+  source_game: Game;
+  model: string;
+  recommendations: RecommendationItem[];
+}
+
+export const fetchRecommendations = async (
+  bgg_id: number,
+  model: string = 'hybrid',
+  limit: number = 10
+): Promise<RecommendationResponse> => {
+  const { data } = await apiClient.get<RecommendationResponse>(
+    `/api/games/${bgg_id}/recommendations`,
+    { params: { model, limit } }
+  );
+  return data;
+};
