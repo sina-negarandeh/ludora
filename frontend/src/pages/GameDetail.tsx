@@ -148,42 +148,46 @@ export const GameDetail: React.FC = () => {
         </Link>
       </div>
 
-      {/* Hero Section */}
-      <div className="relative w-full aspect-[16/9] md:aspect-[21/9] rounded-3xl overflow-hidden mb-12 shadow-lg bg-neutral/10 flex items-center justify-center group">
-        {game.image_path && (
-          <>
-            {/* Ambient Background */}
-            <div 
-              className="absolute inset-0 bg-cover bg-center blur-3xl opacity-60 scale-110"
-              style={{ backgroundImage: `url(${game.image_path})` }}
-            />
-            {/* Crisp Foreground Image */}
-            <img 
-              src={game.image_path} 
-              alt={game.name}
-              className="relative z-10 max-h-[90%] max-w-[90%] object-contain drop-shadow-2xl transition-transform duration-500 group-hover:scale-105"
-            />
-          </>
-        )}
-      </div>
+      {/* Top Section: Box Art & Title */}
+      <div className="flex flex-col md:flex-row gap-8 lg:gap-12 mb-16">
+        {/* Left Column: Box Art */}
+        <div className="w-full md:w-1/3 lg:w-1/4 shrink-0 flex justify-center md:justify-start">
+          {game.image_path ? (
+            <div className="relative group w-full max-w-[320px] md:max-w-none">
+              {/* Ambient Glow */}
+              <div 
+                className="absolute inset-0 bg-cover bg-center blur-2xl opacity-40 scale-105 translate-y-4"
+                style={{ backgroundImage: `url(${game.image_path})` }}
+              />
+              <img 
+                src={game.image_path} 
+                alt={game.name}
+                className="relative z-10 w-full h-auto object-contain rounded-2xl shadow-2xl transition-transform duration-500 group-hover:scale-[1.02]"
+              />
+            </div>
+          ) : (
+            <div className="w-full max-w-[320px] md:max-w-none aspect-[3/4] bg-neutral/10 rounded-2xl flex items-center justify-center">
+              <span className="text-secondary-text">No image available</span>
+            </div>
+          )}
+        </div>
 
-      {/* Title & Core Metadata */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
-        <div>
-          <h1 className="text-5xl sm:text-7xl font-serif text-text leading-tight mb-2">
+        {/* Right Column: Title & Metadata */}
+        <div className="flex-1 flex flex-col justify-center py-4">
+          <h1 className="text-5xl sm:text-7xl font-serif text-text leading-tight mb-4">
             {game.name}
           </h1>
-          <p className="text-2xl text-secondary-text font-medium">
+          <p className="text-2xl text-secondary-text font-medium mb-6">
             Published {game.year_published}
           </p>
-        </div>
-        
-        <div className="flex flex-wrap items-center gap-3">
-          {game.categories && game.categories.map(cat => (
-             <span key={cat} className="px-4 py-2 bg-neutral/20 text-text rounded-full text-sm font-bold whitespace-nowrap">
-               {CATEGORY_MAP[cat] || cat}
-             </span>
-          ))}
+
+          <div className="flex flex-wrap items-center gap-3">
+            {game.categories && game.categories.map(cat => (
+               <span key={cat} className="px-4 py-2 bg-neutral/20 text-text rounded-full text-sm font-bold whitespace-nowrap">
+                 {CATEGORY_MAP[cat] || cat}
+               </span>
+            ))}
+          </div>
         </div>
       </div>
 
