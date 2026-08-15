@@ -128,9 +128,9 @@ export const GameDetail: React.FC = () => {
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
-          {game.categories && game.categories.split(',').map(cat => (
+          {game.categories && game.categories.map(cat => (
              <span key={cat} className="px-4 py-2 bg-neutral/20 text-text rounded-full text-sm font-bold whitespace-nowrap">
-               {CATEGORY_MAP[cat.trim()] || cat.trim()}
+               {CATEGORY_MAP[cat] || cat}
              </span>
           ))}
         </div>
@@ -174,13 +174,58 @@ export const GameDetail: React.FC = () => {
         </div>
       </div>
 
-      {/* Description */}
-      <div className="max-w-4xl">
-        <h2 className="text-4xl font-serif text-text mb-6">About the Game</h2>
-        <div 
-          className="text-lg text-secondary-text leading-relaxed space-y-5"
-          dangerouslySetInnerHTML={{ __html: cleanDescription }}
-        />
+      {/* Details Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+        {/* Description */}
+        <div className="lg:col-span-2">
+          <h2 className="text-4xl font-serif text-text mb-6">About the Game</h2>
+          <div 
+            className="text-lg text-secondary-text leading-relaxed space-y-5"
+            dangerouslySetInnerHTML={{ __html: cleanDescription }}
+          />
+        </div>
+
+        {/* Sidebar Entities */}
+        <div className="space-y-10">
+          {game.mechanics && game.mechanics.length > 0 && (
+            <div>
+              <h3 className="text-2xl font-serif text-text mb-4">Mechanics</h3>
+              <div className="flex flex-wrap gap-2">
+                {game.mechanics.map(mech => (
+                  <span key={mech} className="px-3 py-1.5 bg-surface border border-neutral rounded-lg text-sm text-secondary-text font-medium">
+                    {mech}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {game.designers && game.designers.length > 0 && (
+            <div>
+              <h3 className="text-2xl font-serif text-text mb-4">Designers</h3>
+              <div className="flex flex-col gap-2">
+                {game.designers.map(des => (
+                  <span key={des} className="text-secondary-text font-medium">
+                    {des}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {game.publishers && game.publishers.length > 0 && (
+            <div>
+              <h3 className="text-2xl font-serif text-text mb-4">Publishers</h3>
+              <div className="flex flex-col gap-2">
+                {game.publishers.map(pub => (
+                  <span key={pub} className="text-secondary-text font-medium">
+                    {pub}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

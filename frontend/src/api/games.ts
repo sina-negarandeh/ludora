@@ -19,7 +19,10 @@ export interface Game {
   min_age: number;
   image_path?: string;
   rank?: number;
-  categories?: string;
+  categories: string[];
+  mechanics: string[];
+  designers: string[];
+  publishers: string[];
 }
 
 export interface PaginatedGames {
