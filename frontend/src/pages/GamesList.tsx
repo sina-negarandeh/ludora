@@ -85,27 +85,37 @@ export const GamesList: React.FC = () => {
               {/* Category */}
               <div>
                 <label className="block text-sm font-bold text-secondary-text mb-2">Category</label>
-                <select 
-                  value={filters.category || ''}
-                  onChange={(e) => handleFilterChange('category', e.target.value)}
-                  className="w-full bg-neutral/10 border-none rounded-xl px-4 py-2.5 text-text focus:ring-2 focus:ring-primary/50 outline-none appearance-none cursor-pointer"
-                >
-                  <option value="">All Categories</option>
-                  {categories?.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <div className="relative">
+                  <select 
+                    value={filters.category || ''}
+                    onChange={(e) => handleFilterChange('category', e.target.value)}
+                    className="w-full bg-neutral/10 border-none rounded-xl px-4 py-2.5 pr-10 text-text focus:ring-2 focus:ring-primary/50 outline-none appearance-none cursor-pointer"
+                  >
+                    <option value="">All Categories</option>
+                    {categories?.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-secondary-text">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                  </div>
+                </div>
               </div>
 
               {/* Mechanic */}
               <div>
                 <label className="block text-sm font-bold text-secondary-text mb-2">Mechanic</label>
-                <select 
-                  value={filters.mechanic || ''}
-                  onChange={(e) => handleFilterChange('mechanic', e.target.value)}
-                  className="w-full bg-neutral/10 border-none rounded-xl px-4 py-2.5 text-text focus:ring-2 focus:ring-primary/50 outline-none appearance-none cursor-pointer"
-                >
-                  <option value="">All Mechanics</option>
-                  {mechanics?.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
+                <div className="relative">
+                  <select 
+                    value={filters.mechanic || ''}
+                    onChange={(e) => handleFilterChange('mechanic', e.target.value)}
+                    className="w-full bg-neutral/10 border-none rounded-xl px-4 py-2.5 pr-10 text-text focus:ring-2 focus:ring-primary/50 outline-none appearance-none cursor-pointer"
+                  >
+                    <option value="">All Mechanics</option>
+                    {mechanics?.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                  <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-secondary-text">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                  </div>
+                </div>
               </div>
 
               {/* Players */}
@@ -175,27 +185,37 @@ export const GamesList: React.FC = () => {
               {/* Category */}
               <div>
                 <label className="block text-lg font-bold text-secondary-text mb-3">Category</label>
-                <select 
-                  value={filters.category || ''}
-                  onChange={(e) => handleFilterChange('category', e.target.value)}
-                  className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 text-lg text-text outline-none appearance-none"
-                >
-                  <option value="">All Categories</option>
-                  {categories?.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <div className="relative">
+                  <select 
+                    value={filters.category || ''}
+                    onChange={(e) => handleFilterChange('category', e.target.value)}
+                    className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 pr-12 text-lg text-text outline-none appearance-none"
+                  >
+                    <option value="">All Categories</option>
+                    {categories?.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <div className="absolute inset-y-0 right-0 flex items-center px-6 pointer-events-none text-secondary-text">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                  </div>
+                </div>
               </div>
 
               {/* Mechanic */}
               <div>
                 <label className="block text-lg font-bold text-secondary-text mb-3">Mechanic</label>
-                <select 
-                  value={filters.mechanic || ''}
-                  onChange={(e) => handleFilterChange('mechanic', e.target.value)}
-                  className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 text-lg text-text outline-none appearance-none"
-                >
-                  <option value="">All Mechanics</option>
-                  {mechanics?.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
+                <div className="relative">
+                  <select 
+                    value={filters.mechanic || ''}
+                    onChange={(e) => handleFilterChange('mechanic', e.target.value)}
+                    className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 pr-12 text-lg text-text outline-none appearance-none"
+                  >
+                    <option value="">All Mechanics</option>
+                    {mechanics?.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                  <div className="absolute inset-y-0 right-0 flex items-center px-6 pointer-events-none text-secondary-text">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                  </div>
+                </div>
               </div>
           </div>
           
@@ -225,17 +245,22 @@ export const GamesList: React.FC = () => {
             )}
             
             <div className="flex items-center gap-2 bg-surface border border-neutral/30 rounded-xl p-1 shadow-sm">
-              <select 
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="bg-transparent border-none text-text font-medium text-sm focus:ring-0 cursor-pointer py-1.5 pl-3 pr-8 appearance-none outline-none"
-              >
-                <option value="rank">Rank</option>
-                <option value="rating">Rating</option>
-                <option value="year">Year Published</option>
-                <option value="complexity">Complexity</option>
-                <option value="name">Name</option>
-              </select>
+              <div className="relative">
+                <select 
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="bg-transparent border-none text-text font-medium text-sm focus:ring-0 cursor-pointer py-1.5 pl-3 pr-8 appearance-none outline-none"
+                >
+                  <option value="rank">Rank</option>
+                  <option value="rating">Rating</option>
+                  <option value="year">Year Published</option>
+                  <option value="complexity">Complexity</option>
+                  <option value="name">Name</option>
+                </select>
+                <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none text-secondary-text">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                </div>
+              </div>
               
               <button 
                 onClick={() => setOrder(order === 'asc' ? 'desc' : 'asc')}
