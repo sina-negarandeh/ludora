@@ -7,7 +7,7 @@ import { MultiSelectDropdown } from '../components/MultiSelectDropdown';
 import { SearchableCombobox } from '../components/SearchableCombobox';
 
 export const GamesList: React.FC = () => {
-  const [isSidebarOpen, setSidebarOpen] = useState(true);
+  const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [showAdvancedPlayers, setShowAdvancedPlayers] = useState(false);
   const [searchMode, setSearchMode] = useState<'lexical' | 'semantic' | 'hybrid'>('hybrid');
   
