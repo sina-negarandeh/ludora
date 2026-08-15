@@ -48,7 +48,7 @@ export const GamesList: React.FC = () => {
   const clearFilters = () => setQuery({ sort_by: query.sort_by, order: query.order, skip: 0, limit: pageSize });
 
   return (
-    <div className="w-full px-4 py-8 flex gap-6 lg:gap-8 items-start relative">
+    <div className="w-full px-4 pt-12 lg:pt-24 pb-8 flex gap-6 lg:gap-8 items-start relative">
       
       {/* Mobile Pill Overlay */}
       {!isSidebarOpen && (
@@ -64,9 +64,8 @@ export const GamesList: React.FC = () => {
       )}
 
       {/* Desktop Sidebar Container */}
-      <div className={`hidden lg:block sticky top-24 z-10 transition-all duration-300 flex-shrink-0 ${isSidebarOpen ? 'w-[280px]' : 'w-[140px]'}`}>
-        {isSidebarOpen ? (
-          <aside className="w-full bg-white/80 backdrop-blur-xl border border-neutral/20 shadow-sm rounded-3xl p-6 flex flex-col h-[calc(100vh-8rem)] animate-in fade-in zoom-in-95 duration-200">
+      <div className={`hidden lg:block sticky top-24 z-10 transition-all duration-300 flex-shrink-0 ${isSidebarOpen ? 'w-[280px] opacity-100' : 'w-0 opacity-0 overflow-hidden'}`}>
+        <aside className="w-[280px] bg-white/80 backdrop-blur-xl border border-neutral/20 shadow-sm rounded-3xl p-6 flex flex-col h-[calc(100vh-8rem)] animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-serif text-text font-bold">Filters</h3>
               <button onClick={() => setSidebarOpen(false)} className="p-1.5 rounded-full hover:bg-neutral/10 text-secondary-text hover:text-text transition-colors">
@@ -224,18 +223,22 @@ export const GamesList: React.FC = () => {
                </button>
             </div>
           </aside>
-        ) : (
+      </div>
+
+      {/* Floating Desktop Filters Button (when sidebar is closed) */}
+      {!isSidebarOpen && (
+        <div className="fixed top-24 left-4 lg:left-8 z-40 hidden lg:flex pointer-events-none">
           <button 
             onClick={() => setSidebarOpen(true)}
-            className="w-full bg-white/80 backdrop-blur-md shadow-sm border border-neutral/20 flex items-center justify-center gap-2 h-[4rem] rounded-full text-primary font-bold hover:opacity-80 transition-opacity animate-in fade-in zoom-in-95 duration-200"
+            className="pointer-events-auto bg-white/80 backdrop-blur-md px-5 py-2.5 shadow-lg border border-neutral/20 flex items-center justify-center gap-2 rounded-full text-primary font-bold hover:bg-neutral/5 transition-colors animate-in fade-in zoom-in-95 duration-200"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
             </svg>
             <span>Filters</span>
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Mobile Full Screen Sidebar (When Open) */}
       {isSidebarOpen && (
