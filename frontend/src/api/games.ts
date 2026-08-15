@@ -35,6 +35,7 @@ export interface GameFilters {
   query?: string;
   category?: string;
   mechanic?: string;
+  exact_players?: number;
   min_players?: number;
   max_players?: number;
   min_weight?: number;

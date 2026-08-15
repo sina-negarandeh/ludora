@@ -16,6 +16,7 @@ class GameQueryService:
         query_str: Optional[str] = None,
         category: Optional[str] = None,
         mechanic: Optional[str] = None,
+        exact_players: Optional[int] = None,
         min_players: Optional[int] = None,
         max_players: Optional[int] = None,
         min_weight: Optional[float] = None,
@@ -28,6 +29,9 @@ class GameQueryService:
         if query_str:
             query = query.filter(Game.name.ilike(f"%{query_str}%"))
         
+        if exact_players is not None:
+            query = query.filter(Game.min_players <= exact_players, Game.max_players >= exact_players)
+            
         if min_players is not None:
             query = query.filter(Game.min_players >= min_players)
         if max_players is not None:

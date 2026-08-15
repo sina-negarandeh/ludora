@@ -9,6 +9,7 @@ export const GamesList: React.FC = () => {
   const [sortBy, setSortBy] = useState('rank');
   const [order, setOrder] = useState('asc');
   const [isSidebarOpen, setSidebarOpen] = useState(true);
+  const [showAdvancedPlayers, setShowAdvancedPlayers] = useState(false);
   
   const [filters, setFilters] = useState<GameFilters>({});
   
@@ -121,10 +122,45 @@ export const GamesList: React.FC = () => {
               {/* Players */}
               <div>
                  <label className="block text-sm font-bold text-secondary-text mb-2">Players</label>
-                 <div className="flex items-center gap-2">
-                   <input type="number" min="1" placeholder="Min" value={filters.min_players || ''} onChange={(e) => handleFilterChange('min_players', parseInt(e.target.value))} className="w-full bg-neutral/10 border-none rounded-xl px-3 py-2 text-text focus:ring-2 focus:ring-primary/50 outline-none" />
-                   <span className="text-secondary-text">-</span>
-                   <input type="number" min="1" placeholder="Max" value={filters.max_players || ''} onChange={(e) => handleFilterChange('max_players', parseInt(e.target.value))} className="w-full bg-neutral/10 border-none rounded-xl px-3 py-2 text-text focus:ring-2 focus:ring-primary/50 outline-none" />
+                 
+                 <div className="flex flex-wrap gap-2">
+                   {[
+                     { label: 'Any', value: undefined },
+                     { label: '1 (Solo)', value: 1 },
+                     { label: '2', value: 2 },
+                     { label: '3', value: 3 },
+                     { label: '4', value: 4 },
+                     { label: '5', value: 5 },
+                     { label: '6+', value: 6 },
+                   ].map(opt => (
+                     <button
+                       key={opt.label}
+                       onClick={() => {
+                         handleFilterChange('exact_players', opt.value);
+                         handleFilterChange('min_players', undefined);
+                         handleFilterChange('max_players', undefined);
+                       }}
+                       className={`px-3 py-1.5 rounded-full text-sm font-bold transition-colors ${filters.exact_players === opt.value && filters.min_players === undefined && filters.max_players === undefined ? 'bg-primary text-white shadow-md' : 'bg-neutral/10 text-secondary-text hover:bg-neutral/20'}`}
+                     >
+                       {opt.label}
+                     </button>
+                   ))}
+                 </div>
+
+                 <button 
+                   onClick={() => setShowAdvancedPlayers(!showAdvancedPlayers)} 
+                   className="mt-3 text-xs text-secondary-text font-medium hover:text-primary transition-colors flex items-center gap-1"
+                 >
+                   <span>Specify Min/Max</span>
+                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className={`w-3 h-3 transition-transform ${showAdvancedPlayers ? 'rotate-180' : ''}`}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                 </button>
+
+                 <div className={`overflow-hidden transition-all duration-300 ${showAdvancedPlayers ? 'max-h-24 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
+                   <div className="flex items-center gap-2">
+                     <input type="number" min="1" placeholder="Min" value={filters.min_players || ''} onChange={(e) => { handleFilterChange('min_players', parseInt(e.target.value)); handleFilterChange('exact_players', undefined); }} className="w-full bg-neutral/10 border-none rounded-xl px-3 py-2 text-text focus:ring-2 focus:ring-primary/50 outline-none" />
+                     <span className="text-secondary-text">-</span>
+                     <input type="number" min="1" placeholder="Max" value={filters.max_players || ''} onChange={(e) => { handleFilterChange('max_players', parseInt(e.target.value)); handleFilterChange('exact_players', undefined); }} className="w-full bg-neutral/10 border-none rounded-xl px-3 py-2 text-text focus:ring-2 focus:ring-primary/50 outline-none" />
+                   </div>
                  </div>
               </div>
 
@@ -216,6 +252,61 @@ export const GamesList: React.FC = () => {
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
                   </div>
                 </div>
+              </div>
+
+              {/* Players */}
+              <div>
+                 <label className="block text-lg font-bold text-secondary-text mb-3">Players</label>
+                 
+                 <div className="flex flex-wrap gap-3">
+                   {[
+                     { label: 'Any', value: undefined },
+                     { label: '1 (Solo)', value: 1 },
+                     { label: '2', value: 2 },
+                     { label: '3', value: 3 },
+                     { label: '4', value: 4 },
+                     { label: '5', value: 5 },
+                     { label: '6+', value: 6 },
+                   ].map(opt => (
+                     <button
+                       key={opt.label}
+                       onClick={() => {
+                         handleFilterChange('exact_players', opt.value);
+                         handleFilterChange('min_players', undefined);
+                         handleFilterChange('max_players', undefined);
+                       }}
+                       className={`px-4 py-2 rounded-full text-base font-bold transition-colors ${filters.exact_players === opt.value && filters.min_players === undefined && filters.max_players === undefined ? 'bg-primary text-white shadow-md' : 'bg-neutral/10 text-secondary-text hover:bg-neutral/20'}`}
+                     >
+                       {opt.label}
+                     </button>
+                   ))}
+                 </div>
+
+                 <button 
+                   onClick={() => setShowAdvancedPlayers(!showAdvancedPlayers)} 
+                   className="mt-4 text-sm text-secondary-text font-medium hover:text-primary transition-colors flex items-center gap-1"
+                 >
+                   <span>Specify Min/Max</span>
+                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className={`w-4 h-4 transition-transform ${showAdvancedPlayers ? 'rotate-180' : ''}`}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                 </button>
+
+                 <div className={`overflow-hidden transition-all duration-300 ${showAdvancedPlayers ? 'max-h-24 opacity-100 mt-3' : 'max-h-0 opacity-0'}`}>
+                   <div className="flex items-center gap-3">
+                     <input type="number" min="1" placeholder="Min" value={filters.min_players || ''} onChange={(e) => { handleFilterChange('min_players', parseInt(e.target.value)); handleFilterChange('exact_players', undefined); }} className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 text-lg text-text focus:ring-2 focus:ring-primary/50 outline-none" />
+                     <span className="text-secondary-text">-</span>
+                     <input type="number" min="1" placeholder="Max" value={filters.max_players || ''} onChange={(e) => { handleFilterChange('max_players', parseInt(e.target.value)); handleFilterChange('exact_players', undefined); }} className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 text-lg text-text focus:ring-2 focus:ring-primary/50 outline-none" />
+                   </div>
+                 </div>
+              </div>
+
+              {/* Complexity */}
+              <div>
+                 <label className="block text-lg font-bold text-secondary-text mb-3">Complexity (1.0 - 5.0)</label>
+                 <div className="flex items-center gap-3">
+                   <input type="number" step="0.1" min="1" max="5" placeholder="Min" value={filters.min_weight || ''} onChange={(e) => handleFilterChange('min_weight', parseFloat(e.target.value))} className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 text-lg text-text focus:ring-2 focus:ring-primary/50 outline-none" />
+                   <span className="text-secondary-text">-</span>
+                   <input type="number" step="0.1" min="1" max="5" placeholder="Max" value={filters.max_weight || ''} onChange={(e) => handleFilterChange('max_weight', parseFloat(e.target.value))} className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 text-lg text-text focus:ring-2 focus:ring-primary/50 outline-none" />
+                 </div>
               </div>
           </div>
           
