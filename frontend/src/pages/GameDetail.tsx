@@ -89,7 +89,7 @@ const UserRatings: React.FC<{ game: Game }> = ({ game }) => {
     <div className="mt-24 border-t border-neutral/20 pt-16">
       <h2 className="text-4xl font-serif text-text mb-8">Ratings</h2>
       
-      <div className="flex flex-col md:flex-row gap-16 items-center">
+      <div className="flex flex-col md:flex-row gap-16 items-end">
         {/* Left: Bar Plot */}
         <div className="flex-1 w-full flex items-end gap-2 h-64 relative">
           {/* Background Grid Lines */}
@@ -106,7 +106,7 @@ const UserRatings: React.FC<{ game: Game }> = ({ game }) => {
               <div key={i} className="flex-1 flex flex-col items-center gap-1 group h-full z-10">
                 <div className="w-full relative flex-1 flex items-end justify-center">
                   <div 
-                    className="w-full bg-primary/60 group-hover:bg-primary transition-all duration-300 rounded-t-sm relative min-h-[4px]"
+                    className="w-full bg-primary/60 group-hover:bg-primary transition-all duration-300 rounded-t-lg relative min-h-[4px]"
                     style={{ height: `${heightPercentage}%` }}
                   >
                     {/* Tooltip on hover */}
@@ -122,21 +122,24 @@ const UserRatings: React.FC<{ game: Game }> = ({ game }) => {
         </div>
 
         {/* Right: Stats Summary */}
-        <div className="w-full md:w-1/3 flex flex-col items-center md:items-start text-center md:text-left">
-          <span className="block text-secondary-text font-medium text-lg mb-2">Average Rating</span>
-          <div className="flex flex-col sm:flex-row items-center gap-4 mb-4">
-            <span className="block text-7xl font-bold text-text leading-none">
-              {game.avg_rating.toFixed(1)}
-            </span>
-            <div className="flex items-center gap-1">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <StarIcon 
-                  key={star} 
-                  className={`w-6 h-6 sm:w-8 sm:h-8 ${star <= Math.round(game.avg_rating / 2) ? 'text-primary' : 'text-neutral/40'}`}
-                />
-              ))}
+        <div className="w-full md:w-1/3 flex flex-col items-center md:items-start text-center md:text-left justify-end pb-1">
+          <div className="flex flex-col items-center md:items-start mb-6">
+            <span className="block text-secondary-text font-medium text-lg mb-1">Average Rating</span>
+            <div className="flex flex-col sm:flex-row items-center gap-3">
+              <span className="block text-7xl font-bold text-text leading-none">
+                {game.avg_rating.toFixed(1)}
+              </span>
+              <div className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <StarIcon 
+                    key={star} 
+                    className={`w-6 h-6 sm:w-8 sm:h-8 ${star <= Math.round(game.avg_rating / 2) ? 'text-primary' : 'text-neutral/40'}`}
+                  />
+                ))}
+              </div>
             </div>
           </div>
+          
           <span className="block text-secondary-text font-medium text-lg">
             Based on {game.num_ratings.toLocaleString()} total reviews
           </span>
