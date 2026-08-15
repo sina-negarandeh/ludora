@@ -25,20 +25,21 @@ def main():
     Session = sessionmaker(bind=engine)
     session = Session()
 
-    csv_path = os.path.join(os.path.dirname(__file__), '../data/raw/games.csv')
+    csv_path = os.path.join(os.path.dirname(__file__), '../data/raw/reviews/games_detailed_info2025.csv')
     print(f"Loading games data from {csv_path}...")
     
     df = pd.read_csv(csv_path)
+    df.rename(columns={'id': 'BGGId'}, inplace=True)
     
     rank_mapping = {
-        'Rank:strategygames': 'Strategy Games',
-        'Rank:abstracts': 'Abstract Games',
-        'Rank:familygames': 'Family Games',
-        'Rank:thematic': 'Thematic Games',
-        'Rank:cgs': 'Customizable Games',
-        'Rank:wargames': 'Wargames',
-        'Rank:partygames': 'Party Games',
-        'Rank:childrensgames': "Children's Games"
+        'Strategy Game Rank': 'Strategy',
+        'Abstract Game Rank': 'Abstract',
+        'Family Game Rank': 'Family',
+        'Thematic Rank': 'Thematic',
+        'Customizable Rank': 'CGS',
+        'War Game Rank': 'War',
+        'Party Game Rank': 'Party',
+        "Children's Game Rank": 'Childrens'
     }
     
     print("Parsing ranks and updating database...")

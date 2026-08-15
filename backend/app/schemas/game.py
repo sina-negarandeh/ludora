@@ -1,6 +1,11 @@
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Any
 
+class ThemeMetadata(BaseModel):
+    id: int
+    name: str
+    game_count: int
+
 class GameBase(BaseModel):
     name: str
     description: Optional[str] = None
@@ -17,6 +22,7 @@ class GameBase(BaseModel):
     rating_distribution: Optional[List[int]] = None
     category_ranks: Optional[dict[str, int]] = None
     categories: list[str] = Field(default_factory=list)
+    themes: list[str] = Field(default_factory=list)
     mechanics: list[str] = Field(default_factory=list)
     designers: list[str] = Field(default_factory=list)
     publishers: list[str] = Field(default_factory=list)
@@ -28,7 +34,7 @@ class GameCreate(GameBase):
 class GameResponse(GameBase):
     bgg_id: int
 
-    @field_validator('categories', 'mechanics', 'designers', 'publishers', 'artists', mode='before')
+    @field_validator('categories', 'themes', 'mechanics', 'designers', 'publishers', 'artists', mode='before')
     @classmethod
     def extract_names(cls, v: Any) -> list[str]:
         if not v:

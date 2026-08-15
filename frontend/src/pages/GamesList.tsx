@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { fetchGames, fetchCategories, fetchMechanics, fetchSearch } from '../api/games';
+import { fetchGames, fetchCategories, fetchThemes, fetchMechanics, fetchSearch } from '../api/games';
 import type { GameQuery, SearchQueryPayload } from '../api/games';
 import { GameCard } from '../components/GameCard';
 import { MultiSelectDropdown } from '../components/MultiSelectDropdown';
@@ -34,6 +34,7 @@ export const GamesList: React.FC = () => {
 
   const activeFiltersCount = 
     (query.categories?.length || 0) +
+    (query.themes?.length || 0) +
     (query.mechanics?.length || 0) +
     (query.exact_players !== undefined ? 1 : 0) +
     (query.min_players !== undefined ? 1 : 0) +
@@ -42,7 +43,10 @@ export const GamesList: React.FC = () => {
     (query.max_weight !== undefined && query.max_weight < 5.0 ? 1 : 0);
 
   const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: fetchCategories, staleTime: Infinity });
+  const { data: themesData } = useQuery({ queryKey: ['themes'], queryFn: fetchThemes, staleTime: Infinity });
   const { data: mechanics } = useQuery({ queryKey: ['mechanics'], queryFn: fetchMechanics, staleTime: Infinity });
+
+  const themes = themesData?.map(t => t.name) || [];
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['games', query, searchMode],
@@ -53,6 +57,7 @@ export const GamesList: React.FC = () => {
           mode: searchMode,
           filters: {
             categories: query.categories,
+            themes: query.themes,
             mechanics: query.mechanics,
             exact_players: query.exact_players,
             min_players: query.min_players,
@@ -129,6 +134,17 @@ export const GamesList: React.FC = () => {
                   selected={query.categories || []} 
                   onChange={(selected) => handleFilterChange('categories', selected)} 
                   placeholder="All Categories" 
+                />
+              </div>
+
+              {/* Theme */}
+              <div>
+                <label className="block text-sm font-bold text-secondary-text mb-2">Theme</label>
+                <SearchableCombobox 
+                  options={themes} 
+                  selected={query.themes || []} 
+                  onChange={(selected) => handleFilterChange('themes', selected)} 
+                  placeholder="Search themes..." 
                 />
               </div>
 
@@ -299,6 +315,17 @@ export const GamesList: React.FC = () => {
                   selected={query.categories || []} 
                   onChange={(selected) => handleFilterChange('categories', selected)} 
                   placeholder="All Categories" 
+                />
+              </div>
+
+              {/* Theme */}
+              <div>
+                <label className="block text-lg font-bold text-secondary-text mb-3">Theme</label>
+                <SearchableCombobox 
+                  options={themes} 
+                  selected={query.themes || []} 
+                  onChange={(selected) => handleFilterChange('themes', selected)} 
+                  placeholder="Search themes..." 
                 />
               </div>
 

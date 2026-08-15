@@ -32,6 +32,7 @@ def main():
         
         for game in batch:
             cat_str = ", ".join([c.name for c in game.categories])
+            theme_str = ", ".join([t.name for t in game.themes])
             mech_str = ", ".join([m.name for m in game.mechanics])
             des_str = ", ".join([d.name for d in game.designers])
             pub_str = ", ".join([p.name for p in game.publishers])
@@ -41,6 +42,7 @@ def main():
                 f"Name: {game.name}\n"
                 f"Description: {game.description or ''}\n"
                 f"Categories: {cat_str}\n"
+                f"Themes: {theme_str}\n"
                 f"Mechanics: {mech_str}\n"
                 f"Designers: {des_str}\n"
                 f"Publishers: {pub_str}\n"

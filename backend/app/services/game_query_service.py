@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Tuple, List, Optional
-from app.database.models import Game, Category, Mechanic, Designer, Publisher
+from app.database.models import Game, Category, Theme, Mechanic, Designer, Publisher
 
 class GameQueryService:
     def __init__(self, db: Session):
@@ -15,6 +15,7 @@ class GameQueryService:
         order: str = "asc",
         query_str: Optional[str] = None,
         categories: Optional[List[str]] = None,
+        themes: Optional[List[str]] = None,
         mechanics: Optional[List[str]] = None,
         exact_players: Optional[int] = None,
         min_players: Optional[int] = None,
@@ -46,6 +47,9 @@ class GameQueryService:
         if categories:
             for cat in categories:
                 query = query.filter(Game.categories.any(Category.name == cat))
+        if themes:
+            for theme in themes:
+                query = query.filter(Game.themes.any(Theme.name == theme))
         if mechanics:
             for mech in mechanics:
                 query = query.filter(Game.mechanics.any(Mechanic.name == mech))
@@ -86,3 +90,15 @@ class GameQueryService:
 
     def get_publishers(self) -> List[str]:
         return [p[0] for p in self.db.query(Publisher.name).order_by(Publisher.name).all()]
+
+    def get_themes(self) -> List[dict]:
+        from app.database.models import GameTheme
+        themes = self.db.query(
+            Theme.id, 
+            Theme.name, 
+            func.count(GameTheme.game_id).label("game_count")
+        ).join(GameTheme, Theme.id == GameTheme.theme_id)\
+         .group_by(Theme.id)\
+         .order_by(Theme.name).all()
+        
+        return [{"id": t.id, "name": t.name, "game_count": t.game_count} for t in themes]

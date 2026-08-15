@@ -906,6 +906,13 @@ export const GameDetail: React.FC = () => {
             </div>
           )}
 
+          {game.themes && game.themes.length > 0 && (
+            <div>
+              <h3 className="text-2xl font-serif text-text mb-4">Themes</h3>
+              <ExpandableChipList items={game.themes} limit={6} />
+            </div>
+          )}
+
           {game.designers && game.designers.length > 0 && (
             <div>
               <h3 className="text-2xl font-serif text-text mb-4">Designers</h3>

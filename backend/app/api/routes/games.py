@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from app.database.session import get_db
 from app.database.models import Game
-from app.schemas.game import GameResponse, PaginatedGames
+from app.schemas.game import GameResponse, PaginatedGames, ThemeMetadata
 from app.services.game_query_service import GameQueryService
 
 router = APIRouter()
@@ -17,6 +17,7 @@ def get_games(
     order: str = Query("asc"),
     query: Optional[str] = None,
     categories: Optional[List[str]] = Query(None),
+    themes: Optional[List[str]] = Query(None),
     mechanics: Optional[List[str]] = Query(None),
     exact_players: Optional[int] = None,
     min_players: Optional[int] = None,
@@ -33,6 +34,7 @@ def get_games(
         order=order,
         query_str=query,
         categories=categories,
+        themes=themes,
         mechanics=mechanics,
         exact_players=exact_players,
         min_players=min_players,
@@ -45,6 +47,10 @@ def get_games(
 @router.get("/categories", response_model=List[str])
 def get_categories(db: Session = Depends(get_db)):
     return GameQueryService(db).get_categories()
+
+@router.get("/themes", response_model=List[ThemeMetadata])
+def get_themes(db: Session = Depends(get_db)):
+    return GameQueryService(db).get_themes()
 
 @router.get("/mechanics", response_model=List[str])
 def get_mechanics(db: Session = Depends(get_db)):

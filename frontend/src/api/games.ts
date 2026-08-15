@@ -23,6 +23,7 @@ export interface Game {
   rating_distribution?: number[];
   category_ranks?: Record<string, number>;
   categories: string[];
+  themes: string[];
   mechanics: string[];
   designers: string[];
   publishers: string[];
@@ -37,6 +38,7 @@ export interface PaginatedGames {
 export interface GameQuery {
   query?: string;
   categories?: string[];
+  themes?: string[];
   mechanics?: string[];
   exact_players?: number;
   min_players?: number;
@@ -85,6 +87,17 @@ export const fetchCategories = async (): Promise<string[]> => {
   return data;
 };
 
+export interface ThemeMetadata {
+  id: number;
+  name: string;
+  game_count: number;
+}
+
+export const fetchThemes = async (): Promise<ThemeMetadata[]> => {
+  const { data } = await apiClient.get<ThemeMetadata[]>('/api/games/themes');
+  return data;
+};
+
 export const fetchMechanics = async (): Promise<string[]> => {
   const { data } = await apiClient.get<string[]>('/api/games/mechanics');
   return data;
@@ -105,6 +118,7 @@ export interface SearchQueryPayload {
   mode: 'lexical' | 'semantic' | 'hybrid';
   filters?: {
     categories?: string[];
+    themes?: string[];
     mechanics?: string[];
     exact_players?: number;
     min_players?: number;

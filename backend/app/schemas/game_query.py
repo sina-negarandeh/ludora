@@ -3,6 +3,7 @@ from typing import Optional, List
 
 class GameFilter(BaseModel):
     categories: Optional[List[str]] = None
+    themes: Optional[List[str]] = None
     mechanics: Optional[List[str]] = None
     exact_players: Optional[int] = None
     min_players: Optional[int] = None
