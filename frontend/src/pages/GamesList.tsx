@@ -1,46 +1,51 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchGames, fetchCategories, fetchMechanics } from '../api/games';
-import type { GameFilters } from '../api/games';
+import type { GameQuery } from '../api/games';
 import { GameCard } from '../components/GameCard';
+import { MultiSelectDropdown } from '../components/MultiSelectDropdown';
+import { SearchableCombobox } from '../components/SearchableCombobox';
 
 export const GamesList: React.FC = () => {
-  const [page, setPage] = useState(0);
-  const [sortBy, setSortBy] = useState('rank');
-  const [order, setOrder] = useState('asc');
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [showAdvancedPlayers, setShowAdvancedPlayers] = useState(false);
   
-  const [filters, setFilters] = useState<GameFilters>({});
+  const [query, setQuery] = useState<GameQuery>({
+    sort_by: 'rank',
+    order: 'asc',
+    skip: 0,
+    limit: 24
+  });
   
-  const pageSize = 24;
+  const pageSize = query.limit || 24;
+  const page = (query.skip || 0) / pageSize;
 
   const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: fetchCategories, staleTime: Infinity });
   const { data: mechanics } = useQuery({ queryKey: ['mechanics'], queryFn: fetchMechanics, staleTime: Infinity });
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['games', page, sortBy, order, filters],
-    queryFn: () => fetchGames(page * pageSize, pageSize, sortBy, order, filters),
+    queryKey: ['games', query],
+    queryFn: () => fetchGames(query),
     staleTime: 60000,
   });
 
-  React.useEffect(() => {
-    setPage(0);
-  }, [sortBy, order, filters]);
-
-  const handleFilterChange = (key: keyof GameFilters, value: any) => {
-    setFilters(prev => {
-      const newFilters = { ...prev };
-      if (value === '' || value === undefined || (typeof value === 'number' && isNaN(value))) {
-        delete newFilters[key];
+  const handleFilterChange = (key: keyof GameQuery, value: any) => {
+    setQuery(prev => {
+      const newQuery = { ...prev, skip: 0 };
+      if (value === '' || value === undefined || (typeof value === 'number' && isNaN(value)) || (Array.isArray(value) && value.length === 0)) {
+        delete newQuery[key];
       } else {
-        newFilters[key] = value;
+        newQuery[key] = value;
       }
-      return newFilters;
+      return newQuery;
     });
   };
 
-  const clearFilters = () => setFilters({});
+  const handlePageChange = (newPage: number) => {
+    setQuery(prev => ({ ...prev, skip: newPage * pageSize }));
+  };
+
+  const clearFilters = () => setQuery({ sort_by: query.sort_by, order: query.order, skip: 0, limit: pageSize });
 
   return (
     <div className="w-full px-4 py-8 flex gap-6 lg:gap-8 items-start relative">
@@ -77,7 +82,7 @@ export const GamesList: React.FC = () => {
                 <input 
                   type="text" 
                   placeholder="e.g. Gloomhaven..."
-                  value={filters.query || ''}
+                  value={query.query || ''}
                   onChange={(e) => handleFilterChange('query', e.target.value)}
                   className="w-full bg-neutral/10 border-none rounded-xl px-4 py-2.5 text-text focus:ring-2 focus:ring-primary/50 placeholder-secondary-text/50 outline-none transition-shadow"
                 />
@@ -86,37 +91,23 @@ export const GamesList: React.FC = () => {
               {/* Category */}
               <div>
                 <label className="block text-sm font-bold text-secondary-text mb-2">Category</label>
-                <div className="relative">
-                  <select 
-                    value={filters.category || ''}
-                    onChange={(e) => handleFilterChange('category', e.target.value)}
-                    className="w-full bg-neutral/10 border-none rounded-xl px-4 py-2.5 pr-10 text-text focus:ring-2 focus:ring-primary/50 outline-none appearance-none cursor-pointer"
-                  >
-                    <option value="">All Categories</option>
-                    {categories?.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                  <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-secondary-text">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
-                  </div>
-                </div>
+                <MultiSelectDropdown 
+                  options={categories || []} 
+                  selected={query.categories || []} 
+                  onChange={(selected) => handleFilterChange('categories', selected)} 
+                  placeholder="All Categories" 
+                />
               </div>
 
               {/* Mechanic */}
               <div>
                 <label className="block text-sm font-bold text-secondary-text mb-2">Mechanic</label>
-                <div className="relative">
-                  <select 
-                    value={filters.mechanic || ''}
-                    onChange={(e) => handleFilterChange('mechanic', e.target.value)}
-                    className="w-full bg-neutral/10 border-none rounded-xl px-4 py-2.5 pr-10 text-text focus:ring-2 focus:ring-primary/50 outline-none appearance-none cursor-pointer"
-                  >
-                    <option value="">All Mechanics</option>
-                    {mechanics?.map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                  <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-secondary-text">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
-                  </div>
-                </div>
+                <SearchableCombobox 
+                  options={mechanics || []} 
+                  selected={query.mechanics || []} 
+                  onChange={(selected) => handleFilterChange('mechanics', selected)} 
+                  placeholder="Search mechanics..." 
+                />
               </div>
 
               {/* Players */}
@@ -140,7 +131,7 @@ export const GamesList: React.FC = () => {
                          handleFilterChange('min_players', undefined);
                          handleFilterChange('max_players', undefined);
                        }}
-                       className={`px-3 py-1.5 rounded-full text-sm font-bold transition-colors ${filters.exact_players === opt.value && filters.min_players === undefined && filters.max_players === undefined ? 'bg-primary text-white shadow-md' : 'bg-neutral/10 text-secondary-text hover:bg-neutral/20'}`}
+                       className={`px-3 py-1.5 rounded-full text-sm font-bold transition-colors ${query.exact_players === opt.value && query.min_players === undefined && query.max_players === undefined ? 'bg-primary text-white shadow-md' : 'bg-neutral/10 text-secondary-text hover:bg-neutral/20'}`}
                      >
                        {opt.label}
                      </button>
@@ -157,9 +148,9 @@ export const GamesList: React.FC = () => {
 
                  <div className={`overflow-hidden transition-all duration-300 ${showAdvancedPlayers ? 'max-h-24 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
                    <div className="flex items-center gap-2">
-                     <input type="number" min="1" placeholder="Min" value={filters.min_players || ''} onChange={(e) => { handleFilterChange('min_players', parseInt(e.target.value)); handleFilterChange('exact_players', undefined); }} className="w-full bg-neutral/10 border-none rounded-xl px-3 py-2 text-text focus:ring-2 focus:ring-primary/50 outline-none" />
+                     <input type="number" min="1" placeholder="Min" value={query.min_players || ''} onChange={(e) => { handleFilterChange('min_players', parseInt(e.target.value)); handleFilterChange('exact_players', undefined); }} className="w-full bg-neutral/10 border-none rounded-xl px-3 py-2 text-text focus:ring-2 focus:ring-primary/50 outline-none" />
                      <span className="text-secondary-text">-</span>
-                     <input type="number" min="1" placeholder="Max" value={filters.max_players || ''} onChange={(e) => { handleFilterChange('max_players', parseInt(e.target.value)); handleFilterChange('exact_players', undefined); }} className="w-full bg-neutral/10 border-none rounded-xl px-3 py-2 text-text focus:ring-2 focus:ring-primary/50 outline-none" />
+                     <input type="number" min="1" placeholder="Max" value={query.max_players || ''} onChange={(e) => { handleFilterChange('max_players', parseInt(e.target.value)); handleFilterChange('exact_players', undefined); }} className="w-full bg-neutral/10 border-none rounded-xl px-3 py-2 text-text focus:ring-2 focus:ring-primary/50 outline-none" />
                    </div>
                  </div>
               </div>
@@ -180,7 +171,7 @@ export const GamesList: React.FC = () => {
                          handleFilterChange('min_weight', preset.min);
                          handleFilterChange('max_weight', preset.max);
                        }}
-                       className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${filters.min_weight === preset.min && filters.max_weight === preset.max ? 'bg-primary text-white shadow-md' : 'bg-neutral/10 text-secondary-text hover:bg-neutral/20'}`}
+                       className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${query.min_weight === preset.min && query.max_weight === preset.max ? 'bg-primary text-white shadow-md' : 'bg-neutral/10 text-secondary-text hover:bg-neutral/20'}`}
                      >
                        {preset.label}
                      </button>
@@ -189,7 +180,7 @@ export const GamesList: React.FC = () => {
 
                  <div className="flex items-center gap-3">
                    <span className="text-sm font-bold text-secondary-text min-w-[1.5rem] text-right">
-                     {(filters.min_weight || 1.0).toFixed(1)}
+                     {(query.min_weight || 1.0).toFixed(1)}
                    </span>
                    
                    <div className="relative w-full h-8 flex items-center">
@@ -197,30 +188,30 @@ export const GamesList: React.FC = () => {
                      <div 
                        className="absolute h-1.5 bg-primary rounded-full pointer-events-none" 
                        style={{ 
-                         left: `${(((filters.min_weight || 1.0) - 1.0) / 4.0) * 100}%`,
-                         width: `${(((filters.max_weight || 5.0) - (filters.min_weight || 1.0)) / 4.0) * 100}%` 
+                         left: `${(((query.min_weight || 1.0) - 1.0) / 4.0) * 100}%`,
+                         width: `${(((query.max_weight || 5.0) - (query.min_weight || 1.0)) / 4.0) * 100}%` 
                        }} 
                      />
                      <input 
-                       type="range" min="1.0" max="5.0" step="0.1" value={filters.min_weight || 1.0}
+                       type="range" min="1.0" max="5.0" step="0.1" value={query.min_weight || 1.0}
                        onChange={(e) => {
-                         const val = Math.min(parseFloat(e.target.value), (filters.max_weight || 5.0));
+                         const val = Math.min(parseFloat(e.target.value), (query.max_weight || 5.0));
                          handleFilterChange('min_weight', val);
                        }}
-                       className={`absolute w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-grab active:[&::-webkit-slider-thumb]:cursor-grabbing [&::-moz-range-thumb]:pointer-events-auto ${(filters.min_weight || 1.0) > 3.0 ? 'z-20' : 'z-10'}`}
+                       className={`absolute w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-grab active:[&::-webkit-slider-thumb]:cursor-grabbing [&::-moz-range-thumb]:pointer-events-auto ${(query.min_weight || 1.0) > 3.0 ? 'z-20' : 'z-10'}`}
                      />
                      <input 
-                       type="range" min="1.0" max="5.0" step="0.1" value={filters.max_weight || 5.0}
+                       type="range" min="1.0" max="5.0" step="0.1" value={query.max_weight || 5.0}
                        onChange={(e) => {
-                         const val = Math.max(parseFloat(e.target.value), (filters.min_weight || 1.0));
+                         const val = Math.max(parseFloat(e.target.value), (query.min_weight || 1.0));
                          handleFilterChange('max_weight', val);
                        }}
-                       className={`absolute w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-grab active:[&::-webkit-slider-thumb]:cursor-grabbing [&::-moz-range-thumb]:pointer-events-auto ${(filters.min_weight || 1.0) > 3.0 ? 'z-10' : 'z-20'}`}
+                       className={`absolute w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-grab active:[&::-webkit-slider-thumb]:cursor-grabbing [&::-moz-range-thumb]:pointer-events-auto ${(query.min_weight || 1.0) > 3.0 ? 'z-10' : 'z-20'}`}
                      />
                    </div>
 
                    <span className="text-sm font-bold text-secondary-text min-w-[1.5rem]">
-                     {(filters.max_weight || 5.0).toFixed(1)}
+                     {(query.max_weight || 5.0).toFixed(1)}
                    </span>
                  </div>
               </div>
@@ -263,7 +254,7 @@ export const GamesList: React.FC = () => {
                 <input 
                   type="text" 
                   placeholder="e.g. Gloomhaven..."
-                  value={filters.query || ''}
+                  value={query.query || ''}
                   onChange={(e) => handleFilterChange('query', e.target.value)}
                   className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 text-lg text-text outline-none"
                 />
@@ -272,37 +263,23 @@ export const GamesList: React.FC = () => {
               {/* Category */}
               <div>
                 <label className="block text-lg font-bold text-secondary-text mb-3">Category</label>
-                <div className="relative">
-                  <select 
-                    value={filters.category || ''}
-                    onChange={(e) => handleFilterChange('category', e.target.value)}
-                    className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 pr-12 text-lg text-text outline-none appearance-none"
-                  >
-                    <option value="">All Categories</option>
-                    {categories?.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                  <div className="absolute inset-y-0 right-0 flex items-center px-6 pointer-events-none text-secondary-text">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
-                  </div>
-                </div>
+                <MultiSelectDropdown 
+                  options={categories || []} 
+                  selected={query.categories || []} 
+                  onChange={(selected) => handleFilterChange('categories', selected)} 
+                  placeholder="All Categories" 
+                />
               </div>
 
               {/* Mechanic */}
               <div>
                 <label className="block text-lg font-bold text-secondary-text mb-3">Mechanic</label>
-                <div className="relative">
-                  <select 
-                    value={filters.mechanic || ''}
-                    onChange={(e) => handleFilterChange('mechanic', e.target.value)}
-                    className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 pr-12 text-lg text-text outline-none appearance-none"
-                  >
-                    <option value="">All Mechanics</option>
-                    {mechanics?.map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                  <div className="absolute inset-y-0 right-0 flex items-center px-6 pointer-events-none text-secondary-text">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
-                  </div>
-                </div>
+                <SearchableCombobox 
+                  options={mechanics || []} 
+                  selected={query.mechanics || []} 
+                  onChange={(selected) => handleFilterChange('mechanics', selected)} 
+                  placeholder="Search mechanics..." 
+                />
               </div>
 
               {/* Players */}
@@ -326,7 +303,7 @@ export const GamesList: React.FC = () => {
                          handleFilterChange('min_players', undefined);
                          handleFilterChange('max_players', undefined);
                        }}
-                       className={`px-4 py-2 rounded-full text-base font-bold transition-colors ${filters.exact_players === opt.value && filters.min_players === undefined && filters.max_players === undefined ? 'bg-primary text-white shadow-md' : 'bg-neutral/10 text-secondary-text hover:bg-neutral/20'}`}
+                       className={`px-4 py-2 rounded-full text-base font-bold transition-colors ${query.exact_players === opt.value && query.min_players === undefined && query.max_players === undefined ? 'bg-primary text-white shadow-md' : 'bg-neutral/10 text-secondary-text hover:bg-neutral/20'}`}
                      >
                        {opt.label}
                      </button>
@@ -343,9 +320,9 @@ export const GamesList: React.FC = () => {
 
                  <div className={`overflow-hidden transition-all duration-300 ${showAdvancedPlayers ? 'max-h-24 opacity-100 mt-3' : 'max-h-0 opacity-0'}`}>
                    <div className="flex items-center gap-3">
-                     <input type="number" min="1" placeholder="Min" value={filters.min_players || ''} onChange={(e) => { handleFilterChange('min_players', parseInt(e.target.value)); handleFilterChange('exact_players', undefined); }} className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 text-lg text-text focus:ring-2 focus:ring-primary/50 outline-none" />
+                     <input type="number" min="1" placeholder="Min" value={query.min_players || ''} onChange={(e) => { handleFilterChange('min_players', parseInt(e.target.value)); handleFilterChange('exact_players', undefined); }} className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 text-lg text-text focus:ring-2 focus:ring-primary/50 outline-none" />
                      <span className="text-secondary-text">-</span>
-                     <input type="number" min="1" placeholder="Max" value={filters.max_players || ''} onChange={(e) => { handleFilterChange('max_players', parseInt(e.target.value)); handleFilterChange('exact_players', undefined); }} className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 text-lg text-text focus:ring-2 focus:ring-primary/50 outline-none" />
+                     <input type="number" min="1" placeholder="Max" value={query.max_players || ''} onChange={(e) => { handleFilterChange('max_players', parseInt(e.target.value)); handleFilterChange('exact_players', undefined); }} className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 text-lg text-text focus:ring-2 focus:ring-primary/50 outline-none" />
                    </div>
                  </div>
               </div>
@@ -366,7 +343,7 @@ export const GamesList: React.FC = () => {
                          handleFilterChange('min_weight', preset.min);
                          handleFilterChange('max_weight', preset.max);
                        }}
-                       className={`px-4 py-2 rounded-full text-sm font-bold transition-colors ${filters.min_weight === preset.min && filters.max_weight === preset.max ? 'bg-primary text-white shadow-md' : 'bg-neutral/10 text-secondary-text hover:bg-neutral/20'}`}
+                       className={`px-4 py-2 rounded-full text-sm font-bold transition-colors ${query.min_weight === preset.min && query.max_weight === preset.max ? 'bg-primary text-white shadow-md' : 'bg-neutral/10 text-secondary-text hover:bg-neutral/20'}`}
                      >
                        {preset.label}
                      </button>
@@ -375,7 +352,7 @@ export const GamesList: React.FC = () => {
 
                  <div className="flex items-center gap-4 px-2">
                    <span className="text-lg font-bold text-secondary-text min-w-[2rem] text-right">
-                     {(filters.min_weight || 1.0).toFixed(1)}
+                     {(query.min_weight || 1.0).toFixed(1)}
                    </span>
                    
                    <div className="relative w-full h-10 flex items-center">
@@ -383,37 +360,37 @@ export const GamesList: React.FC = () => {
                      <div 
                        className="absolute h-2 bg-primary rounded-full pointer-events-none" 
                        style={{ 
-                         left: `${(((filters.min_weight || 1.0) - 1.0) / 4.0) * 100}%`,
-                         width: `${(((filters.max_weight || 5.0) - (filters.min_weight || 1.0)) / 4.0) * 100}%` 
+                         left: `${(((query.min_weight || 1.0) - 1.0) / 4.0) * 100}%`,
+                         width: `${(((query.max_weight || 5.0) - (query.min_weight || 1.0)) / 4.0) * 100}%` 
                        }} 
                      />
                      <input 
-                       type="range" min="1.0" max="5.0" step="0.1" value={filters.min_weight || 1.0}
+                       type="range" min="1.0" max="5.0" step="0.1" value={query.min_weight || 1.0}
                        onChange={(e) => {
-                         const val = Math.min(parseFloat(e.target.value), (filters.max_weight || 5.0));
+                         const val = Math.min(parseFloat(e.target.value), (query.max_weight || 5.0));
                          handleFilterChange('min_weight', val);
                        }}
-                       className={`absolute w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-[3px] [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:cursor-grab active:[&::-webkit-slider-thumb]:cursor-grabbing [&::-moz-range-thumb]:pointer-events-auto ${(filters.min_weight || 1.0) > 3.0 ? 'z-20' : 'z-10'}`}
+                       className={`absolute w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-[3px] [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:cursor-grab active:[&::-webkit-slider-thumb]:cursor-grabbing [&::-moz-range-thumb]:pointer-events-auto ${(query.min_weight || 1.0) > 3.0 ? 'z-20' : 'z-10'}`}
                      />
                      <input 
-                       type="range" min="1.0" max="5.0" step="0.1" value={filters.max_weight || 5.0}
+                       type="range" min="1.0" max="5.0" step="0.1" value={query.max_weight || 5.0}
                        onChange={(e) => {
-                         const val = Math.max(parseFloat(e.target.value), (filters.min_weight || 1.0));
+                         const val = Math.max(parseFloat(e.target.value), (query.min_weight || 1.0));
                          handleFilterChange('max_weight', val);
                        }}
-                       className={`absolute w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-[3px] [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:cursor-grab active:[&::-webkit-slider-thumb]:cursor-grabbing [&::-moz-range-thumb]:pointer-events-auto ${(filters.min_weight || 1.0) > 3.0 ? 'z-10' : 'z-20'}`}
+                       className={`absolute w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-[3px] [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:cursor-grab active:[&::-webkit-slider-thumb]:cursor-grabbing [&::-moz-range-thumb]:pointer-events-auto ${(query.min_weight || 1.0) > 3.0 ? 'z-10' : 'z-20'}`}
                      />
                    </div>
 
                    <span className="text-lg font-bold text-secondary-text min-w-[2rem]">
-                     {(filters.max_weight || 5.0).toFixed(1)}
+                     {(query.max_weight || 5.0).toFixed(1)}
                    </span>
                  </div>
               </div>
           </div>
           
           <div className="pt-8 mt-8 border-t border-neutral/20">
-            <button onClick={() => { clearFilters(); setSidebarOpen(false); }} className="w-full py-4 rounded-2xl bg-primary text-white font-bold text-lg">
+            <button onClick={() => { setSidebarOpen(false); }} className="w-full py-4 rounded-2xl bg-primary text-white font-bold text-lg">
               Show Results
             </button>
           </div>
@@ -440,8 +417,8 @@ export const GamesList: React.FC = () => {
             <div className="flex items-center gap-2 bg-surface border border-neutral/30 rounded-xl p-1 shadow-sm">
               <div className="relative">
                 <select 
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
+                  value={query.sort_by || 'rank'}
+                  onChange={(e) => handleFilterChange('sort_by', e.target.value)}
                   className="bg-transparent border-none text-text font-medium text-sm focus:ring-0 cursor-pointer py-1.5 pl-3 pr-8 appearance-none outline-none"
                 >
                   <option value="rank">Rank</option>
@@ -456,11 +433,11 @@ export const GamesList: React.FC = () => {
               </div>
               
               <button 
-                onClick={() => setOrder(order === 'asc' ? 'desc' : 'asc')}
+                onClick={() => handleFilterChange('order', query.order === 'asc' ? 'desc' : 'asc')}
                 className="p-1.5 bg-neutral/10 hover:bg-neutral/20 rounded-lg text-secondary-text transition-colors"
-                title={`Sort ${order === 'asc' ? 'Descending' : 'Ascending'}`}
+                title={`Sort ${query.order === 'asc' ? 'Descending' : 'Ascending'}`}
               >
-                {order === 'asc' ? (
+                {query.order === 'asc' ? (
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 4.5h14.25M3 9h9.75M3 13.5h9.75m4.5-4.5v12m0 0l-3.75-3.75M17.25 21L21 17.25" />
                   </svg>
@@ -504,7 +481,7 @@ export const GamesList: React.FC = () => {
             <div className="fixed bottom-6 left-0 w-full px-4 z-40 flex justify-center pointer-events-none">
               <div className="bg-white/80 backdrop-blur-md px-6 shadow-lg border border-neutral/20 flex items-center justify-between gap-6 h-[4rem] rounded-full pointer-events-auto min-w-[300px]">
                 <button
-                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  onClick={() => handlePageChange(page - 1)}
                   disabled={page === 0}
                   className="flex items-center gap-1 text-primary font-bold hover:opacity-80 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed"
                 >
@@ -519,7 +496,7 @@ export const GamesList: React.FC = () => {
                 </span>
                 
                 <button
-                  onClick={() => setPage((p) => p + 1)}
+                  onClick={() => handlePageChange(page + 1)}
                   disabled={data ? (page + 1) * pageSize >= data.total : false}
                   className="flex items-center gap-1 text-primary font-bold hover:opacity-80 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed"
                 >

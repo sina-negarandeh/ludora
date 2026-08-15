@@ -14,8 +14,8 @@ class GameQueryService:
         sort_by: str = "rank", 
         order: str = "asc",
         query_str: Optional[str] = None,
-        category: Optional[str] = None,
-        mechanic: Optional[str] = None,
+        categories: Optional[List[str]] = None,
+        mechanics: Optional[List[str]] = None,
         exact_players: Optional[int] = None,
         min_players: Optional[int] = None,
         max_players: Optional[int] = None,
@@ -42,11 +42,13 @@ class GameQueryService:
         if max_weight is not None:
             query = query.filter(Game.game_weight <= max_weight)
 
-        # Joins
-        if category:
-            query = query.join(Game.categories).filter(Category.name == category)
-        if mechanic:
-            query = query.join(Game.mechanics).filter(Mechanic.name == mechanic)
+        # Joins (Multi-select AND matching)
+        if categories:
+            for cat in categories:
+                query = query.filter(Game.categories.any(Category.name == cat))
+        if mechanics:
+            for mech in mechanics:
+                query = query.filter(Game.mechanics.any(Mechanic.name == mech))
 
         # Count total after filters but before pagination
         # Use query.with_entities() to efficiently count without fetching full objects

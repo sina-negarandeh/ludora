@@ -31,27 +31,44 @@ export interface PaginatedGames {
   items: Game[];
 }
 
-export interface GameFilters {
+export interface GameQuery {
   query?: string;
-  category?: string;
-  mechanic?: string;
+  categories?: string[];
+  mechanics?: string[];
   exact_players?: number;
   min_players?: number;
   max_players?: number;
   min_weight?: number;
   max_weight?: number;
+  sort_by?: string;
+  order?: string;
+  skip?: number;
+  limit?: number;
 }
 
-export const fetchGames = async (
-  skip: number = 0, 
-  limit: number = 24,
-  sortBy: string = 'rank',
-  order: string = 'asc',
-  filters: GameFilters = {}
-): Promise<PaginatedGames> => {
-  const { data } = await apiClient.get<PaginatedGames>('/api/games', {
-    params: { skip, limit, sort_by: sortBy, order, ...filters },
+export const fetchGames = async (gameQuery: GameQuery = {}) => {
+  const params = new URLSearchParams();
+  
+  // Set default pagination
+  params.append('skip', (gameQuery.skip ?? 0).toString());
+  params.append('limit', (gameQuery.limit ?? 50).toString());
+  
+  if (gameQuery.sort_by) params.append('sort_by', gameQuery.sort_by);
+  if (gameQuery.order) params.append('order', gameQuery.order);
+  
+  Object.entries(gameQuery).forEach(([key, value]) => {
+    if (['skip', 'limit', 'sort_by', 'order'].includes(key)) return;
+    
+    if (value !== undefined && value !== null && value !== '') {
+      if (Array.isArray(value)) {
+        value.forEach(v => params.append(key, v.toString()));
+      } else {
+        params.append(key, value.toString());
+      }
+    }
   });
+
+  const { data } = await apiClient.get<PaginatedGames>('/api/games', { params });
   return data;
 };
 
