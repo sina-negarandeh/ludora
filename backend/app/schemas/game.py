@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Any
 
 class GameBase(BaseModel):
@@ -13,10 +13,11 @@ class GameBase(BaseModel):
     min_age: Optional[int] = None
     image_path: Optional[str] = None
     rank: Optional[int] = None
-    categories: list[str] = []
-    mechanics: list[str] = []
-    designers: list[str] = []
-    publishers: list[str] = []
+    categories: list[str] = Field(default_factory=list)
+    mechanics: list[str] = Field(default_factory=list)
+    designers: list[str] = Field(default_factory=list)
+    publishers: list[str] = Field(default_factory=list)
+    artists: list[str] = Field(default_factory=list)
 
 class GameCreate(GameBase):
     bgg_id: int
@@ -24,7 +25,7 @@ class GameCreate(GameBase):
 class GameResponse(GameBase):
     bgg_id: int
 
-    @field_validator('categories', 'mechanics', 'designers', 'publishers', mode='before')
+    @field_validator('categories', 'mechanics', 'designers', 'publishers', 'artists', mode='before')
     @classmethod
     def extract_names(cls, v: Any) -> list[str]:
         if not v:

@@ -23,6 +23,7 @@ export interface Game {
   mechanics: string[];
   designers: string[];
   publishers: string[];
+  artists: string[];
 }
 
 export interface PaginatedGames {

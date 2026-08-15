@@ -213,6 +213,19 @@ export const GameDetail: React.FC = () => {
             </div>
           )}
 
+          {game.artists && game.artists.length > 0 && (
+            <div>
+              <h3 className="text-2xl font-serif text-text mb-4">Artists</h3>
+              <div className="flex flex-col gap-2">
+                {game.artists.map(art => (
+                  <span key={art} className="text-secondary-text font-medium">
+                    {art}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {game.publishers && game.publishers.length > 0 && (
             <div>
               <h3 className="text-2xl font-serif text-text mb-4">Publishers</h3>

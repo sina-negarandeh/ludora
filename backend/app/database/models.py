@@ -7,44 +7,54 @@ from app.database.session import Base
 class GameCategory(Base):
     __tablename__ = "game_categories"
     game_id = Column(Integer, ForeignKey("games.bgg_id", ondelete="CASCADE"), primary_key=True)
-    category_id = Column(Integer, ForeignKey("categories.id", ondelete="CASCADE"), primary_key=True)
+    category_id = Column(Integer, ForeignKey("categories.id", ondelete="CASCADE"), primary_key=True, index=True)
 
 class GameMechanic(Base):
     __tablename__ = "game_mechanics"
     game_id = Column(Integer, ForeignKey("games.bgg_id", ondelete="CASCADE"), primary_key=True)
-    mechanic_id = Column(Integer, ForeignKey("mechanics.id", ondelete="CASCADE"), primary_key=True)
+    mechanic_id = Column(Integer, ForeignKey("mechanics.id", ondelete="CASCADE"), primary_key=True, index=True)
 
 class GameDesigner(Base):
     __tablename__ = "game_designers"
     game_id = Column(Integer, ForeignKey("games.bgg_id", ondelete="CASCADE"), primary_key=True)
-    designer_id = Column(Integer, ForeignKey("designers.id", ondelete="CASCADE"), primary_key=True)
+    designer_id = Column(Integer, ForeignKey("designers.id", ondelete="CASCADE"), primary_key=True, index=True)
 
 class GamePublisher(Base):
     __tablename__ = "game_publishers"
     game_id = Column(Integer, ForeignKey("games.bgg_id", ondelete="CASCADE"), primary_key=True)
-    publisher_id = Column(Integer, ForeignKey("publishers.id", ondelete="CASCADE"), primary_key=True)
+    publisher_id = Column(Integer, ForeignKey("publishers.id", ondelete="CASCADE"), primary_key=True, index=True)
+
+class GameArtist(Base):
+    __tablename__ = "game_artists"
+    game_id = Column(Integer, ForeignKey("games.bgg_id", ondelete="CASCADE"), primary_key=True)
+    artist_id = Column(Integer, ForeignKey("artists.id", ondelete="CASCADE"), primary_key=True, index=True)
 
 # --- Entity Tables ---
 
 class Category(Base):
     __tablename__ = "categories"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, unique=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False)
 
 class Mechanic(Base):
     __tablename__ = "mechanics"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, unique=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False)
 
 class Designer(Base):
     __tablename__ = "designers"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, unique=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False)
 
 class Publisher(Base):
     __tablename__ = "publishers"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, unique=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False)
+
+class Artist(Base):
+    __tablename__ = "artists"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, unique=True, index=True, nullable=False)
 
 # --- Core Table ---
 
@@ -52,7 +62,7 @@ class Game(Base):
     __tablename__ = "games"
 
     bgg_id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
+    name = Column(String, index=True, nullable=False)
     description = Column(String)
     year_published = Column(Integer)
     game_weight = Column(Float)
@@ -69,3 +79,4 @@ class Game(Base):
     mechanics = relationship("Mechanic", secondary="game_mechanics")
     designers = relationship("Designer", secondary="game_designers")
     publishers = relationship("Publisher", secondary="game_publishers")
+    artists = relationship("Artist", secondary="game_artists")

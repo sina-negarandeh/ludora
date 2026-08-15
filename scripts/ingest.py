@@ -9,8 +9,8 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '../backend'))
 sys.path.append('/app')
 
-from app.database.models import Game, Category, Mechanic, Designer, Publisher
-from app.database.models import GameCategory, GameMechanic, GameDesigner, GamePublisher
+from app.database.models import Game, Category, Mechanic, Designer, Publisher, Artist
+from app.database.models import GameCategory, GameMechanic, GameDesigner, GamePublisher, GameArtist
 from app.core.config import settings
 
 def clean_val(val, default):
@@ -25,7 +25,8 @@ def extract_associations(df, name_map, id_key):
         bgg_id = int(row.BGGId)
         for i, val in enumerate(row[1:]):
             if val == 1:
-                assoc_list.append({"game_id": bgg_id, id_key: name_map[names[i]]})
+                if names[i] in name_map:
+                    assoc_list.append({"game_id": bgg_id, id_key: name_map[names[i]]})
     return assoc_list
 
 def chunk_list(lst, n):
@@ -39,36 +40,64 @@ def main():
     session = Session()
 
     print("Truncating all tables...")
-    session.execute(text("TRUNCATE TABLE games, categories, mechanics, designers, publishers CASCADE"))
+    session.execute(text("TRUNCATE TABLE games, categories, mechanics, designers, publishers, artists CASCADE"))
     session.commit()
 
     base_path = '/data/raw' if os.path.exists('/data/raw/games.csv') else os.path.join(os.path.dirname(__file__), '../data/raw')
     
+    # ---------------------------------------------------------
+    # 1. EXTRACT
+    # ---------------------------------------------------------
     print("Loading CSVs...")
     df_games = pd.read_csv(os.path.join(base_path, 'games.csv'))
     df_mechanics = pd.read_csv(os.path.join(base_path, 'mechanics.csv'))
     df_designers = pd.read_csv(os.path.join(base_path, 'designers_reduced.csv'))
     df_publishers = pd.read_csv(os.path.join(base_path, 'publishers_reduced.csv'))
+    df_artists = pd.read_csv(os.path.join(base_path, 'artists_reduced.csv'))
 
+    # ---------------------------------------------------------
+    # 2. STAGE & VALIDATE
+    # ---------------------------------------------------------
+    print("Running Staging Validations...")
+    # Assert Game integrity
+    assert df_games['BGGId'].is_unique, "BGGId is not unique in games.csv"
+    assert df_games['Name'].notnull().all(), "Null names found in games.csv"
+    
+    # Assert matrix relationships match BGGIds
+    valid_game_ids = set(df_games['BGGId'])
+    assert df_mechanics['BGGId'].isin(valid_game_ids).all(), "Orphan mechanics relationships"
+    assert df_designers['BGGId'].isin(valid_game_ids).all(), "Orphan designers relationships"
+    assert df_publishers['BGGId'].isin(valid_game_ids).all(), "Orphan publishers relationships"
+    assert df_artists['BGGId'].isin(valid_game_ids).all(), "Orphan artists relationships"
+
+    # ---------------------------------------------------------
+    # 3. LOAD (Entities)
+    # ---------------------------------------------------------
     print("Populating Entities...")
     cat_names = ['Thematic', 'Strategy', 'War', 'Family', 'CGS', 'Abstract', 'Party', 'Childrens']
     mech_names = list(df_mechanics.columns.drop('BGGId'))
     des_names = list(df_designers.columns.drop('BGGId'))
     pub_names = list(df_publishers.columns.drop('BGGId'))
+    art_names = list(df_artists.columns.drop('BGGId'))
 
     categories = [Category(name=n) for n in cat_names]
     mechanics = [Mechanic(name=n) for n in mech_names]
     designers = [Designer(name=n) for n in des_names]
     publishers = [Publisher(name=n) for n in pub_names]
+    artists = [Artist(name=n) for n in art_names]
     
-    session.add_all(categories + mechanics + designers + publishers)
+    session.add_all(categories + mechanics + designers + publishers + artists)
     session.commit()
 
     cat_map = {c.name: c.id for c in session.query(Category).all()}
     mech_map = {m.name: m.id for m in session.query(Mechanic).all()}
     des_map = {d.name: d.id for d in session.query(Designer).all()}
     pub_map = {p.name: p.id for p in session.query(Publisher).all()}
+    art_map = {a.name: a.id for a in session.query(Artist).all()}
 
+    # ---------------------------------------------------------
+    # 4. LOAD (Games & Relationships)
+    # ---------------------------------------------------------
     print(f"Inserting {len(df_games)} Games...")
     games_to_insert = []
     for _, row in df_games.iterrows():
@@ -98,29 +127,24 @@ def main():
             if row.get(f'Cat:{cat}') == 1:
                 gc_list.append({"game_id": bgg_id, "category_id": cat_map[cat]})
     
-    print("Extracting Mechanics...")
+    print("Extracting Associations...")
     gm_list = extract_associations(df_mechanics, mech_map, "mechanic_id")
-    
-    print("Extracting Designers...")
     gd_list = extract_associations(df_designers, des_map, "designer_id")
-    
-    print("Extracting Publishers...")
     gp_list = extract_associations(df_publishers, pub_map, "publisher_id")
+    ga_list = extract_associations(df_artists, art_map, "artist_id")
 
     print("Inserting Associations in batches...")
     batch_size = 50000
     if gc_list:
-        for chunk in chunk_list(gc_list, batch_size):
-            session.execute(insert(GameCategory), chunk)
+        for chunk in chunk_list(gc_list, batch_size): session.execute(insert(GameCategory), chunk)
     if gm_list:
-        for chunk in chunk_list(gm_list, batch_size):
-            session.execute(insert(GameMechanic), chunk)
+        for chunk in chunk_list(gm_list, batch_size): session.execute(insert(GameMechanic), chunk)
     if gd_list:
-        for chunk in chunk_list(gd_list, batch_size):
-            session.execute(insert(GameDesigner), chunk)
+        for chunk in chunk_list(gd_list, batch_size): session.execute(insert(GameDesigner), chunk)
     if gp_list:
-        for chunk in chunk_list(gp_list, batch_size):
-            session.execute(insert(GamePublisher), chunk)
+        for chunk in chunk_list(gp_list, batch_size): session.execute(insert(GamePublisher), chunk)
+    if ga_list:
+        for chunk in chunk_list(ga_list, batch_size): session.execute(insert(GameArtist), chunk)
             
     session.commit()
     print("Ingestion complete!")
