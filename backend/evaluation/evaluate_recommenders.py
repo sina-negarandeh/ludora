@@ -17,7 +17,7 @@ def main():
     Session = sessionmaker(bind=engine)
     session = Session()
 
-    models = ['metadata', 'tfidf', 'embedding', 'hybrid', 'graph_jaccard', 'node2vec']
+    models = ['metadata', 'tfidf', 'embedding', 'hybrid', 'graph_jaccard', 'node2vec', 'cf_item_cosine', 'cf_svd', 'cf_als']
     
     print("Loading game embeddings for diversity calculation...")
     games = session.query(Game.bgg_id, Game.embedding).filter(Game.embedding.isnot(None)).all()

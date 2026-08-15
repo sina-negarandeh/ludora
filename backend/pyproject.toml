@@ -17,6 +17,8 @@ dependencies = [
     "scikit-learn>=1.5.0",
     "networkx>=3.0",
     "node2vec>=0.4.6",
+    "implicit>=0.7.3",
+    "scikit-surprise>=1.1.5",
 ]
 
 [build-system]

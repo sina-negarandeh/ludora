@@ -6,6 +6,7 @@ import networkx as nx
 from node2vec import Node2Vec
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.dialects.postgresql import insert
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import MultiLabelBinarizer
 
@@ -91,7 +92,7 @@ def main():
     w_art = 0.025 / total_w
     
     LIMIT = 10
-    batch_size = 500
+    batch_size = 200
     
     recs_to_insert = []
     
@@ -118,28 +119,36 @@ def main():
         for i in range(end_idx - start_idx):
             jaccard_sim[i, start_idx + i] = -1
             
-        topk = np.argsort(jaccard_sim, axis=1)[:, -LIMIT:][:, ::-1]
+        jaccard_topk = np.argsort(jaccard_sim, axis=1)[:, -LIMIT:][:, ::-1]
         
         for i in range(end_idx - start_idx):
             gid = bgg_ids[start_idx + i]
-            for tgt_idx in topk[i]:
+            # Graph Jaccard recs
+            for tgt_idx in jaccard_topk[i]:
                 score = float(jaccard_sim[i, tgt_idx])
                 if score <= 0: continue
-                recs_to_insert.append(GameRecommendation(
-                    game_id=gid,
-                    recommended_game_id=bgg_ids[tgt_idx],
-                    model='graph_jaccard',
-                    score=score,
-                    reasons=["High shared attributes overlap"]
-                ))
-                
-        if len(recs_to_insert) >= 20000:
-            session.bulk_save_objects(recs_to_insert)
+                recs_to_insert.append({
+                    'game_id': gid,
+                    'recommended_game_id': bgg_ids[tgt_idx],
+                    'model': 'graph_jaccard',
+                    'score': score,
+                    'reasons': ["High structural similarity (Weighted Jaccard)"]
+                })
+        
+        # Commit periodically
+        if len(recs_to_insert) >= 5000:
+            stmt = insert(GameRecommendation).values(recs_to_insert).on_conflict_do_nothing(
+                index_elements=['game_id', 'recommended_game_id', 'model']
+            )
+            session.execute(stmt)
             session.commit()
             recs_to_insert = []
             
     if recs_to_insert:
-        session.bulk_save_objects(recs_to_insert)
+        stmt = insert(GameRecommendation).values(recs_to_insert).on_conflict_do_nothing(
+            index_elements=['game_id', 'recommended_game_id', 'model']
+        )
+        session.execute(stmt)
         session.commit()
         recs_to_insert = []
 
@@ -229,21 +238,27 @@ def main():
             for tgt_idx in topk[i]:
                 score = float(sim[i, tgt_idx])
                 if score <= 0: continue
-                recs_to_insert.append(GameRecommendation(
-                    game_id=gid,
-                    recommended_game_id=bgg_ids[tgt_idx],
-                    model='node2vec',
-                    score=score,
-                    reasons=["Deep graph relationship match"]
-                ))
+                recs_to_insert.append({
+                    'game_id': gid,
+                    'recommended_game_id': bgg_ids[tgt_idx],
+                    'model': 'node2vec',
+                    'score': score,
+                    'reasons': ["Deep graph relationship match"]
+                })
                 
-        if len(recs_to_insert) >= 20000:
-            session.bulk_save_objects(recs_to_insert)
+        if len(recs_to_insert) >= 5000:
+            stmt = insert(GameRecommendation).values(recs_to_insert).on_conflict_do_nothing(
+                index_elements=['game_id', 'recommended_game_id', 'model']
+            )
+            session.execute(stmt)
             session.commit()
             recs_to_insert = []
             
     if recs_to_insert:
-        session.bulk_save_objects(recs_to_insert)
+        stmt = insert(GameRecommendation).values(recs_to_insert).on_conflict_do_nothing(
+            index_elements=['game_id', 'recommended_game_id', 'model']
+        )
+        session.execute(stmt)
         session.commit()
         
     print("Graph recommendation precomputation complete!")

@@ -68,12 +68,15 @@ const MODELS = [
   { id: 'hybrid', name: 'Hybrid System', coverage: 90.49, ild: 0.39, category: 'Content-Based Filtering' },
   { id: 'graph_jaccard', name: 'Graph Jaccard', coverage: 94.03, ild: 0.52, category: 'Content-Based Filtering' },
   { id: 'node2vec', name: 'Graph DeepWalk', coverage: 96.55, ild: 0.54, category: 'Content-Based Filtering' },
+  { id: 'cf_item_cosine', name: 'Item-Item Cosine', coverage: null, ild: null, category: 'Collaborative Filtering' },
+  { id: 'cf_svd', name: 'Matrix Factorization (SVD)', coverage: null, ild: null, category: 'Collaborative Filtering' },
+  { id: 'cf_als', name: 'Alternating Least Squares (ALS)', coverage: null, ild: null, category: 'Collaborative Filtering' },
 ];
 
 const RECSYS_TYPES = [
   { id: 'Popularity-Based', name: 'Popularity-Based', available: true },
   { id: 'Content-Based Filtering', name: 'Content-Based Filtering', available: true },
-  { id: 'Collaborative Filtering', name: 'Collaborative Filtering', available: false },
+  { id: 'Collaborative Filtering', name: 'Collaborative Filtering', available: true },
   { id: 'Hybrid', name: 'Hybrid', available: false },
 ];
 

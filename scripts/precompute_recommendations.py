@@ -5,6 +5,7 @@ import json
 import numpy as np
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.dialects.postgresql import insert
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import MinMaxScaler
@@ -117,7 +118,7 @@ def main():
     # Compute Similarities & Save
     # ---------------------------------------------------------
     LIMIT = 10
-    batch_size = 500
+    batch_size = 100
     
     recs_to_insert = []
     
@@ -186,58 +187,64 @@ def main():
             for tgt_idx in meta_topk[i]:
                 score = float(meta_sim[i, tgt_idx])
                 if score <= 0: continue
-                recs_to_insert.append(GameRecommendation(
-                    game_id=gid,
-                    recommended_game_id=bgg_ids[tgt_idx],
-                    model='metadata',
-                    score=score,
-                    reasons=["Similar categories and mechanics"]
-                ))
+                recs_to_insert.append({
+                    'game_id': gid,
+                    'recommended_game_id': bgg_ids[tgt_idx],
+                    'model': 'metadata',
+                    'score': score,
+                    'reasons': ["Similar categories and mechanics"]
+                })
                 
             # TF-IDF recs
             for tgt_idx in tfidf_topk[i]:
                 score = float(tfidf_sim[i, tgt_idx])
                 if score <= 0: continue
-                recs_to_insert.append(GameRecommendation(
-                    game_id=gid,
-                    recommended_game_id=bgg_ids[tgt_idx],
-                    model='tfidf',
-                    score=score,
-                    reasons=["Similar text descriptions"]
-                ))
+                recs_to_insert.append({
+                    'game_id': gid,
+                    'recommended_game_id': bgg_ids[tgt_idx],
+                    'model': 'tfidf',
+                    'score': score,
+                    'reasons': ["Similar text descriptions"]
+                })
                 
             # Embedding recs
             for tgt_idx in emb_topk[i]:
                 score = float(emb_sim[i, tgt_idx])
                 if score <= 0: continue
-                recs_to_insert.append(GameRecommendation(
-                    game_id=gid,
-                    recommended_game_id=bgg_ids[tgt_idx],
-                    model='embedding',
-                    score=score,
-                    reasons=["High semantic similarity"]
-                ))
+                recs_to_insert.append({
+                    'game_id': gid,
+                    'recommended_game_id': bgg_ids[tgt_idx],
+                    'model': 'embedding',
+                    'score': score,
+                    'reasons': ["High semantic similarity"]
+                })
                 
             # Hybrid recs
             for tgt_idx in hybrid_topk[i]:
                 score = float(hybrid_sim[i, tgt_idx])
                 if score <= 0: continue
-                recs_to_insert.append(GameRecommendation(
-                    game_id=gid,
-                    recommended_game_id=bgg_ids[tgt_idx],
-                    model='hybrid',
-                    score=score,
-                    reasons=["High overall match (content + quality)"]
-                ))
+                recs_to_insert.append({
+                    'game_id': gid,
+                    'recommended_game_id': bgg_ids[tgt_idx],
+                    'model': 'hybrid',
+                    'score': score,
+                    'reasons': ["High overall match (content + quality)"]
+                })
 
         # Commit periodically
-        if len(recs_to_insert) >= 20000:
-            session.bulk_save_objects(recs_to_insert)
+        if len(recs_to_insert) >= 5000:
+            stmt = insert(GameRecommendation).values(recs_to_insert).on_conflict_do_nothing(
+                index_elements=['game_id', 'recommended_game_id', 'model']
+            )
+            session.execute(stmt)
             session.commit()
             recs_to_insert = []
 
     if recs_to_insert:
-        session.bulk_save_objects(recs_to_insert)
+        stmt = insert(GameRecommendation).values(recs_to_insert).on_conflict_do_nothing(
+            index_elements=['game_id', 'recommended_game_id', 'model']
+        )
+        session.execute(stmt)
         session.commit()
 
     print("Recommendation precomputation complete!")
