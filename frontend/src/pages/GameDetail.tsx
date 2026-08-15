@@ -92,10 +92,13 @@ export const GameDetail: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
-      <Link to="/games" className="inline-flex items-center gap-2 text-primary font-bold hover:text-primary-focus transition-colors mb-8 bg-surface px-5 py-2.5 rounded-full shadow-sm border border-neutral">
-        <ArrowLeftIcon className="w-5 h-5" />
-        Back to games
-      </Link>
+      {/* Fixed Back Button */}
+      <div className="fixed top-24 left-4 z-40 pointer-events-none">
+        <Link to="/games" className="pointer-events-auto bg-white/80 backdrop-blur-md px-6 shadow-sm border border-neutral/20 flex items-center gap-2 h-[4rem] rounded-full text-primary font-bold hover:opacity-80 transition-opacity">
+          <ArrowLeftIcon className="w-5 h-5" />
+          <span>Back to games</span>
+        </Link>
+      </div>
 
       {/* Hero Section */}
       <div className="relative w-full aspect-[16/9] md:aspect-[21/9] rounded-3xl overflow-hidden mb-12 shadow-lg bg-neutral/10 flex items-center justify-center group">
