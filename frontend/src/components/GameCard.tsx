@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import type { Game } from "../api/games";
 import { StarIcon, ClockIcon, UserGroupIcon, AcademicCapIcon, TrophyIcon, UserIcon } from '@heroicons/react/24/solid';
+import { Link } from 'react-router-dom';
 
 interface GameCardProps {
   game: Game;
@@ -65,7 +66,10 @@ export const GameCard: React.FC<GameCardProps> = ({ game }) => {
   };
 
   return (
-    <div className="card flex flex-col group h-full">
+    <Link 
+      to={`/games/${game.bgg_id}`}
+      className="card flex flex-col group h-full cursor-pointer hover:-translate-y-1 transition-all duration-300"
+    >
       <div className="relative aspect-[4/3] overflow-hidden bg-surface group">
         {game.image_path ? (
           <>
@@ -136,6 +140,6 @@ export const GameCard: React.FC<GameCardProps> = ({ game }) => {
           </div>
         </div>
       </div>
-    </div>
+    </Link>
   );
 };

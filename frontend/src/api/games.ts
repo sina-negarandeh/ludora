@@ -33,3 +33,8 @@ export const fetchGames = async (skip: number = 0, limit: number = 24): Promise<
   });
   return data;
 };
+
+export const fetchGame = async (bgg_id: number): Promise<Game> => {
+  const { data } = await apiClient.get<Game>(`/api/games/${bgg_id}`);
+  return data;
+};

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List
@@ -23,4 +23,6 @@ def get_games(
 @router.get("/{bgg_id}", response_model=GameResponse)
 def get_game(bgg_id: int, db: Session = Depends(get_db)):
     game = db.query(Game).filter(Game.bgg_id == bgg_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
     return game
