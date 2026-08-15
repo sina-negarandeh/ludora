@@ -80,6 +80,72 @@ const RECSYS_TYPES = [
   { id: 'Hybrid', name: 'Hybrid', available: false },
 ];
 
+const UserRatings: React.FC<{ game: Game }> = ({ game }) => {
+  if (!game.rating_distribution || !game.num_ratings) return null;
+
+  const maxCount = Math.max(...game.rating_distribution);
+
+  return (
+    <div className="mt-24 border-t border-neutral/20 pt-16">
+      <h2 className="text-4xl font-serif text-text mb-8">User Ratings</h2>
+      
+      <div className="flex flex-col md:flex-row gap-16 items-center">
+        {/* Left: Bar Plot */}
+        <div className="flex-1 w-full flex items-end gap-2 h-64 relative">
+          {/* Background Grid Lines */}
+          <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-6 z-0">
+            {[0, 1, 2, 3, 4].map((line) => (
+              <div key={line} className="w-full border-t border-dashed border-neutral/40" />
+            ))}
+          </div>
+
+          {/* Bars */}
+          {game.rating_distribution.map((count, i) => {
+            const heightPercentage = maxCount > 0 ? (count / maxCount) * 100 : 0;
+            return (
+              <div key={i} className="flex-1 flex flex-col items-center gap-1 group h-full z-10">
+                <div className="w-full relative flex-1 flex items-end justify-center">
+                  <div 
+                    className="w-full bg-primary/60 group-hover:bg-primary transition-all duration-300 rounded-t-sm relative min-h-[4px]"
+                    style={{ height: `${heightPercentage}%` }}
+                  >
+                    {/* Tooltip on hover */}
+                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-surface shadow-md rounded-md px-2 py-1 text-xs text-text border border-neutral/20 pointer-events-none whitespace-nowrap z-20">
+                      {count.toLocaleString()} ratings
+                    </div>
+                  </div>
+                </div>
+                <span className="text-sm font-bold text-secondary-text/60 mt-1">{i + 1}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Right: Stats Summary */}
+        <div className="w-full md:w-1/3 flex flex-col items-center md:items-start text-center md:text-left">
+          <span className="block text-secondary-text font-medium text-lg mb-2">Average Rating</span>
+          <div className="flex flex-col sm:flex-row items-center gap-4 mb-4">
+            <span className="block text-7xl font-bold text-text leading-none">
+              {game.avg_rating.toFixed(1)}
+            </span>
+            <div className="flex items-center gap-1">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <StarIcon 
+                  key={star} 
+                  className={`w-6 h-6 sm:w-8 sm:h-8 ${star <= Math.round(game.avg_rating / 2) ? 'text-primary' : 'text-neutral/40'}`}
+                />
+              ))}
+            </div>
+          </div>
+          <span className="block text-secondary-text font-medium text-lg">
+            Based on {game.num_ratings.toLocaleString()} total reviews
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const GameRecommendations: React.FC<{ bgg_id: number }> = ({ bgg_id }) => {
   const [model, setModel] = useState('hybrid');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -491,6 +557,9 @@ export const GameDetail: React.FC = () => {
 
       {/* Recommendations */}
       <GameRecommendations bgg_id={game.bgg_id} />
+
+      {/* User Ratings */}
+      <UserRatings game={game} />
     </div>
   );
 };

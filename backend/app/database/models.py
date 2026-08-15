@@ -74,6 +74,8 @@ class Game(Base):
     min_age = Column(Integer)
     image_path = Column(String)
     rank = Column(Integer, nullable=True)
+    num_ratings = Column(Integer, nullable=True)
+    rating_distribution = Column(JSON, nullable=True)
 
     # Search and Vector Columns
     embedding = Column(Vector(384))

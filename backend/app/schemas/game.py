@@ -13,6 +13,8 @@ class GameBase(BaseModel):
     min_age: Optional[int] = None
     image_path: Optional[str] = None
     rank: Optional[int] = None
+    num_ratings: Optional[int] = None
+    rating_distribution: Optional[List[int]] = None
     categories: list[str] = Field(default_factory=list)
     mechanics: list[str] = Field(default_factory=list)
     designers: list[str] = Field(default_factory=list)

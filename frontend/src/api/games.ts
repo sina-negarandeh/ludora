@@ -19,6 +19,8 @@ export interface Game {
   min_age: number;
   image_path?: string;
   rank?: number;
+  num_ratings?: number;
+  rating_distribution?: number[];
   categories: string[];
   mechanics: string[];
   designers: string[];
