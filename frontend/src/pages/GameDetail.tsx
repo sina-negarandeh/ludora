@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchGame, fetchRecommendations } from '../api/games';
 import type { Game } from '../api/games';
 import { GameCard } from '../components/GameCard';
-import { StarIcon, ClockIcon, UserGroupIcon, AcademicCapIcon, TrophyIcon, UserIcon, ArrowLeftIcon } from '@heroicons/react/24/solid';
+import { StarIcon, ClockIcon, UserGroupIcon, AcademicCapIcon, TrophyIcon, UserIcon, ArrowLeftIcon, HandThumbUpIcon } from '@heroicons/react/24/solid';
 
 const CATEGORY_MAP: Record<string, string> = {
   'CGS': 'Collectible Game System',
@@ -114,64 +114,134 @@ const UserRatings: React.FC<{ game: Game }> = ({ game }) => {
 
   const maxCount = Math.max(...game.rating_distribution);
 
+  // Calculate "Recommended" percentage (scores 7-10 -> indexes 6-9)
+  const recommendedCount = game.rating_distribution.slice(6).reduce((sum, count) => sum + count, 0);
+  const recommendedPercentage = game.num_ratings > 0 ? Math.round((recommendedCount / game.num_ratings) * 100) : 0;
+  
+  // Gauge chart math (75% arc)
+  const gaugeRadius = 46;
+  const gaugeCircumference = 2 * Math.PI * gaugeRadius;
+  const gaugeArcLength = 0.75 * gaugeCircumference;
+  const progressLength = (recommendedPercentage / 100) * gaugeArcLength;
+
   return (
     <div className="mt-24 border-t border-neutral/20 pt-16">
       <h2 className="text-4xl font-serif text-text mb-8">Ratings</h2>
       
-      <div className="flex flex-col md:flex-row gap-16 items-end">
+      <div className="flex flex-col md:flex-row gap-16 items-start">
         {/* Left: Bar Plot */}
-        <div className="flex-1 w-full flex items-end gap-2 h-64 relative">
-          {/* Background Grid Lines */}
-          <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-6 z-0">
-            {[0, 1, 2, 3, 4].map((line) => (
-              <div key={line} className="w-full border-t border-dashed border-neutral/40" />
-            ))}
-          </div>
+        <div className="flex-1 w-full flex flex-col relative">
+          
+          {/* Chart Area */}
+          <div className="flex-1 w-full flex items-end gap-2 relative z-10 h-64">
+            {/* Background Grid Lines */}
+            <div className="absolute inset-0 flex flex-col justify-between pointer-events-none z-0">
+              {[0, 1, 2, 3, 4].map((line) => (
+                <div key={line} className={`w-full border-t ${line === 4 ? 'border-solid border-neutral/40' : 'border-dashed border-neutral/20'}`} />
+              ))}
+            </div>
 
-          {/* Bars */}
-          {game.rating_distribution.map((count, i) => {
-            const heightPercentage = maxCount > 0 ? (count / maxCount) * 100 : 0;
-            return (
-              <div key={i} className="flex-1 flex flex-col items-center gap-1 group h-full z-10">
-                <div className="w-full relative flex-1 flex items-end justify-center">
-                  <div 
-                    className="w-full bg-primary/60 group-hover:bg-primary transition-all duration-300 rounded-t-lg relative min-h-[4px]"
-                    style={{ height: `${heightPercentage}%` }}
-                  >
-                    {/* Tooltip on hover */}
-                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-surface shadow-md rounded-md px-2 py-1 text-xs text-text border border-neutral/20 pointer-events-none whitespace-nowrap z-20">
-                      {count.toLocaleString()} ratings
+            {/* Bars */}
+            {game.rating_distribution.map((count, i) => {
+              const heightPercentage = maxCount > 0 ? (count / maxCount) * 100 : 0;
+              return (
+                <div key={i} className="flex-1 flex flex-col items-center group h-full z-10">
+                  <div className="w-full relative flex-1 flex items-end justify-center">
+                    <div 
+                      className="w-full bg-primary/60 group-hover:bg-primary transition-all duration-300 rounded-t-lg relative min-h-[4px]"
+                      style={{ height: `${heightPercentage}%` }}
+                    >
+                      {/* Tooltip on hover */}
+                      <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-surface shadow-md rounded-md px-2 py-1 text-xs text-text border border-neutral/20 pointer-events-none whitespace-nowrap z-20">
+                        {count.toLocaleString()} ratings
+                      </div>
                     </div>
                   </div>
                 </div>
-                <span className="text-sm font-bold text-secondary-text/60 mt-1">{i + 1}</span>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+
+          {/* X-Axis Labels */}
+          <div className="flex items-center gap-2 mt-2 w-full z-10">
+            {game.rating_distribution.map((_, i) => (
+              <span key={i} className="flex-1 text-center text-sm font-bold text-secondary-text/60">
+                {i + 1}
+              </span>
+            ))}
+          </div>
         </div>
 
         {/* Right: Stats Summary */}
-        <div className="w-full md:w-1/3 flex flex-col items-center md:items-start text-center md:text-left justify-end pb-1">
-          <div className="flex flex-col items-center md:items-start mb-6">
-            <span className="block text-secondary-text font-medium text-lg mb-1">Average Rating</span>
-            <div className="flex flex-col sm:flex-row items-center gap-3">
-              <span className="block text-7xl font-bold text-text leading-none">
-                {game.avg_rating.toFixed(1)}
+        <div className="w-full md:w-1/3 flex flex-col justify-end h-64">
+          <div className="flex flex-col xl:flex-row items-center xl:items-end justify-center xl:justify-start w-full gap-12">
+            
+            <div className="flex flex-col items-center md:items-start text-center md:text-left">
+              <span className="block text-secondary-text font-medium text-lg mb-1">Average Rating</span>
+              <div className="flex flex-col sm:flex-row items-center gap-3">
+                <span className="block text-7xl font-bold text-text leading-none">
+                  {game.avg_rating.toFixed(1)}
+                </span>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <StarIcon 
+                      key={star} 
+                      className={`w-6 h-6 sm:w-8 sm:h-8 ${star <= Math.round(game.avg_rating / 2) ? 'text-primary' : 'text-neutral/40'}`}
+                    />
+                  ))}
+                </div>
+              </div>
+              <span className="block text-secondary-text font-medium text-xs mt-3 w-full text-center md:text-left">
+                Based on {game.num_ratings.toLocaleString()} total reviews
               </span>
-              <div className="flex items-center gap-1">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <StarIcon 
-                    key={star} 
-                    className={`w-6 h-6 sm:w-8 sm:h-8 ${star <= Math.round(game.avg_rating / 2) ? 'text-primary' : 'text-neutral/40'}`}
+            </div>
+
+            {/* Gauge Chart for % Recommended */}
+            <div className="relative flex flex-col items-center justify-center shrink-0">
+              <div className="relative w-32 h-32 flex items-center justify-center">
+                {/* SVG Gauge */}
+                <svg className="w-full h-full absolute inset-0 transform rotate-[135deg]">
+                  {/* Background Arc */}
+                  <circle
+                    cx="64"
+                    cy="64"
+                    r={gaugeRadius}
+                    stroke="currentColor"
+                    strokeWidth="12"
+                    fill="transparent"
+                    strokeDasharray={`${gaugeArcLength} ${gaugeCircumference}`}
+                    className="text-neutral/20"
+                    strokeLinecap="round"
                   />
-                ))}
+                  {/* Progress Arc */}
+                  <circle
+                    cx="64"
+                    cy="64"
+                    r={gaugeRadius}
+                    stroke="currentColor"
+                    strokeWidth="12"
+                    fill="transparent"
+                    strokeDasharray={`${progressLength} ${gaugeCircumference}`}
+                    className="text-[#00C853] transition-all duration-1000 ease-out"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                {/* Center Content */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center pt-1">
+                  <span className="text-3xl font-bold text-[#00C853] leading-none">{recommendedPercentage}%</span>
+                </div>
+                {/* Thumb Icon in the gap */}
+                <div className="absolute left-1/2 -translate-x-1/2 top-[94px]">
+                  <HandThumbUpIcon className="w-8 h-8 text-[#00C853]" />
+                </div>
+              </div>
+              <div className="flex flex-col items-center mt-3 text-center">
+                <span className="text-sm font-bold text-text">Positive Ratings</span>
+                <span className="text-[10px] font-medium text-secondary-text uppercase tracking-wider mt-0.5">Scores 7-10</span>
               </div>
             </div>
+
           </div>
-          
-          <span className="block text-secondary-text font-medium text-lg">
-            Based on {game.num_ratings.toLocaleString()} total reviews
-          </span>
         </div>
       </div>
     </div>
