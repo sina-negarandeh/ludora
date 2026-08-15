@@ -110,12 +110,29 @@ const GameRankings: React.FC<{ game: Game }> = ({ game }) => {
 };
 
 const UserRatings: React.FC<{ game: Game }> = ({ game }) => {
-  if (!game.rating_distribution || !game.num_ratings) return null;
+  if (!game.rating_distribution || !game.num_ratings || game.rating_distribution.length === 0) return null;
 
-  const maxCount = Math.max(...game.rating_distribution);
+  // We now have 19 items in rating_distribution representing 1.0, 1.5, 2.0... 10.0
+  // Group into 10 visual bins: 
+  // Bin 0 (Bar 1): index 0 (1.0), index 1 (1.5)
+  // ...
+  // Bin 9 (Bar 10): index 18 (10.0)
+  const groupedDistribution = Array.from({ length: 10 }, (_, i) => {
+    const baseIndex = i * 2;
+    const countWhole = game.rating_distribution![baseIndex] || 0;
+    const countHalf = game.rating_distribution![baseIndex + 1] || 0;
+    return {
+      barNumber: i + 1,
+      totalCount: countWhole + countHalf,
+      countWhole,
+      countHalf,
+    };
+  });
 
-  // Calculate "Recommended" percentage (scores 7-10 -> indexes 6-9)
-  const recommendedCount = game.rating_distribution.slice(6).reduce((sum, count) => sum + count, 0);
+  const maxCount = Math.max(...groupedDistribution.map(b => b.totalCount));
+
+  // Calculate "Recommended" percentage (scores 7.0+ -> indexes 12-18)
+  const recommendedCount = game.rating_distribution.slice(12).reduce((sum, count) => sum + count, 0);
   const recommendedPercentage = game.num_ratings > 0 ? Math.round((recommendedCount / game.num_ratings) * 100) : 0;
   
   // Gauge chart math (75% arc)
@@ -142,8 +159,8 @@ const UserRatings: React.FC<{ game: Game }> = ({ game }) => {
             </div>
 
             {/* Bars */}
-            {game.rating_distribution.map((count, i) => {
-              const heightPercentage = maxCount > 0 ? (count / maxCount) * 100 : 0;
+            {groupedDistribution.map((bin, i) => {
+              const heightPercentage = maxCount > 0 ? (bin.totalCount / maxCount) * 100 : 0;
               return (
                 <div key={i} className="flex-1 flex flex-col items-center group h-full z-10">
                   <div className="w-full relative flex-1 flex items-end justify-center">
@@ -152,8 +169,22 @@ const UserRatings: React.FC<{ game: Game }> = ({ game }) => {
                       style={{ height: `${heightPercentage}%` }}
                     >
                       {/* Tooltip on hover */}
-                      <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-surface shadow-md rounded-md px-2 py-1 text-xs text-text border border-neutral/20 pointer-events-none whitespace-nowrap z-20">
-                        {count.toLocaleString()} ratings
+                      <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-surface shadow-md rounded-md px-3 py-2 text-xs text-text border border-neutral/20 pointer-events-none whitespace-nowrap z-20 flex flex-col items-center">
+                        <span className="font-bold border-b border-neutral/20 pb-1 mb-1 w-full text-center">
+                          Score {bin.barNumber}{bin.barNumber < 10 ? ` - ${bin.barNumber}.5` : '.0'}
+                        </span>
+                        <div className="flex flex-col gap-0.5 text-secondary-text w-full">
+                          <div className="flex justify-between gap-4">
+                            <span>{bin.barNumber}.0:</span>
+                            <span className="font-medium text-text">{bin.countWhole.toLocaleString()}</span>
+                          </div>
+                          {bin.barNumber < 10 && (
+                            <div className="flex justify-between gap-4">
+                              <span>{bin.barNumber}.5:</span>
+                              <span className="font-medium text-text">{bin.countHalf.toLocaleString()}</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -164,9 +195,9 @@ const UserRatings: React.FC<{ game: Game }> = ({ game }) => {
 
           {/* X-Axis Labels */}
           <div className="flex items-center gap-2 mt-2 w-full z-10">
-            {game.rating_distribution.map((_, i) => (
+            {groupedDistribution.map((bin, i) => (
               <span key={i} className="flex-1 text-center text-sm font-bold text-secondary-text/60">
-                {i + 1}
+                {bin.barNumber}
               </span>
             ))}
           </div>
@@ -228,7 +259,9 @@ const UserRatings: React.FC<{ game: Game }> = ({ game }) => {
                 </svg>
                 {/* Center Content */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center pt-1">
-                  <span className="text-3xl font-bold text-[#00C853] leading-none">{recommendedPercentage}%</span>
+                  <span className={`${recommendedPercentage === 100 ? 'text-2xl' : 'text-3xl'} font-bold text-[#00C853] leading-none`}>
+                    {recommendedPercentage}%
+                  </span>
                 </div>
                 {/* Thumb Icon in the gap */}
                 <div className="absolute left-1/2 -translate-x-1/2 top-[94px]">

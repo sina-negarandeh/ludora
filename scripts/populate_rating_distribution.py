@@ -12,16 +12,7 @@ from app.core.config import settings
 
 def get_bucket(val_str):
     val = float(val_str)
-    if val <= 1.0: return 1
-    elif val <= 2.0: return 2
-    elif val <= 3.0: return 3
-    elif val <= 4.0: return 4
-    elif val <= 5.0: return 5
-    elif val <= 6.0: return 6
-    elif val <= 7.0: return 7
-    elif val <= 8.0: return 8
-    elif val <= 9.0: return 9
-    else: return 10
+    return max(1.0, round(val * 2) / 2)
 
 def main():
     print("Connecting to database...")
@@ -36,8 +27,9 @@ def main():
     
     score_cols = [c for c in df.columns if c not in ('BGGId', 'total_ratings')]
     
-    # Initialize buckets with zeros
-    bucket_df = pd.DataFrame(0.0, index=df.index, columns=range(1, 11))
+    # Initialize buckets with zeros (1.0, 1.5, ... 10.0)
+    bucket_keys = [x / 2.0 for x in range(2, 21)]
+    bucket_df = pd.DataFrame(0.0, index=df.index, columns=bucket_keys)
     
     # Sum columns into buckets
     for c in score_cols:
@@ -50,10 +42,10 @@ def main():
     print("Updating database...")
     updates = []
     
-    # Ensure all buckets 1-10 exist in df_result
-    for i in range(1, 11):
-        if i not in df_result.columns:
-            df_result[i] = 0.0
+    # Ensure all buckets exist in df_result
+    for k in bucket_keys:
+        if k not in df_result.columns:
+            df_result[k] = 0.0
             
     for _, row in df_result.iterrows():
         bgg_id = int(row['BGGId'])
@@ -61,8 +53,8 @@ def main():
         
         import json
         
-        # Build the 10-bucket distribution list
-        dist = [int(row[i]) for i in range(1, 11)]
+        # Build the 19-bucket distribution list
+        dist = [int(row[k]) for k in bucket_keys]
         
         updates.append({
             'b_id': bgg_id,
