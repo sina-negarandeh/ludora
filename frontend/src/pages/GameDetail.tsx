@@ -10,6 +10,54 @@ const CATEGORY_MAP: Record<string, string> = {
   'Childrens': "Children's",
 };
 
+const ExpandableList: React.FC<{ items: string[], limit?: number }> = ({ items, limit = 3 }) => {
+  const [expanded, setExpanded] = useState(false);
+  const visibleItems = expanded ? items : items.slice(0, limit);
+  const hiddenCount = items.length - limit;
+
+  return (
+    <div className="flex flex-col gap-2">
+      {visibleItems.map(item => (
+        <span key={item} className="text-secondary-text font-medium leading-snug">
+          {item}
+        </span>
+      ))}
+      {hiddenCount > 0 && (
+        <button 
+          onClick={() => setExpanded(!expanded)} 
+          className="text-primary font-bold text-sm text-left hover:underline mt-1 w-fit transition-colors"
+        >
+          {expanded ? 'Show less' : `+ ${hiddenCount} more...`}
+        </button>
+      )}
+    </div>
+  );
+};
+
+const ExpandableChipList: React.FC<{ items: string[], limit?: number }> = ({ items, limit = 5 }) => {
+  const [expanded, setExpanded] = useState(false);
+  const visibleItems = expanded ? items : items.slice(0, limit);
+  const hiddenCount = items.length - limit;
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {visibleItems.map(item => (
+        <span key={item} className="px-3 py-1.5 bg-surface border border-neutral rounded-lg text-sm text-secondary-text font-medium">
+          {item}
+        </span>
+      ))}
+      {hiddenCount > 0 && (
+        <button 
+          onClick={() => setExpanded(!expanded)} 
+          className="px-3 py-1.5 text-primary text-sm font-bold hover:bg-neutral/10 rounded-lg transition-colors"
+        >
+          {expanded ? 'Show less' : `+ ${hiddenCount} more...`}
+        </button>
+      )}
+    </div>
+  );
+};
+
 export const GameDetail: React.FC = () => {
   const { bgg_id } = useParams<{ bgg_id: string }>();
   const [game, setGame] = useState<Game | null>(null);
@@ -143,35 +191,35 @@ export const GameDetail: React.FC = () => {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-16">
         {game.rank && (
           <div className="bg-surface border border-neutral rounded-2xl p-5 flex flex-col items-center justify-center text-center shadow-sm hover:-translate-y-1 transition-transform">
-            <TrophyIcon className="w-8 h-8 text-yellow-500 mb-2" />
+            <TrophyIcon className="w-8 h-8 text-primary mb-2 opacity-80" />
             <span className="text-sm text-secondary-text font-bold mb-1">Rank</span>
             <span className="text-2xl font-bold text-text">#{game.rank}</span>
           </div>
         )}
         <div className="bg-surface border border-neutral rounded-2xl p-5 flex flex-col items-center justify-center text-center shadow-sm hover:-translate-y-1 transition-transform">
-          <StarIcon className="w-8 h-8 text-yellow-400 mb-2" />
+          <StarIcon className="w-8 h-8 text-primary mb-2 opacity-80" />
           <span className="text-sm text-secondary-text font-bold mb-1">Rating</span>
-          <span className="text-2xl font-bold text-text">{game.avg_rating.toFixed(1)}</span>
+          <span className="text-xl font-bold text-text">{game.avg_rating.toFixed(1)} / 10</span>
         </div>
         <div className="bg-surface border border-neutral rounded-2xl p-5 flex flex-col items-center justify-center text-center shadow-sm hover:-translate-y-1 transition-transform">
-          <ClockIcon className="w-8 h-8 text-blue-500 mb-2" />
+          <ClockIcon className="w-8 h-8 text-primary mb-2 opacity-80" />
           <span className="text-sm text-secondary-text font-bold mb-1">Playtime</span>
           <span className="text-xl font-bold text-text">{game.mfg_playtime > 0 ? `${game.mfg_playtime} min` : '—'}</span>
         </div>
         <div className="bg-surface border border-neutral rounded-2xl p-5 flex flex-col items-center justify-center text-center shadow-sm hover:-translate-y-1 transition-transform">
-          <UserGroupIcon className="w-8 h-8 text-green-500 mb-2" />
+          <UserGroupIcon className="w-8 h-8 text-primary mb-2 opacity-80" />
           <span className="text-sm text-secondary-text font-bold mb-1">Players</span>
           <span className="text-xl font-bold text-text">
             {game.min_players === game.max_players ? game.min_players : `${game.min_players}-${game.max_players}`}
           </span>
         </div>
         <div className="bg-surface border border-neutral rounded-2xl p-5 flex flex-col items-center justify-center text-center shadow-sm hover:-translate-y-1 transition-transform">
-          <AcademicCapIcon className="w-8 h-8 text-purple-500 mb-2" />
+          <AcademicCapIcon className="w-8 h-8 text-primary mb-2 opacity-80" />
           <span className="text-sm text-secondary-text font-bold mb-1">Complexity</span>
           <span className="text-xl font-bold text-text">{game.game_weight.toFixed(2)} / 5</span>
         </div>
         <div className="bg-surface border border-neutral rounded-2xl p-5 flex flex-col items-center justify-center text-center shadow-sm hover:-translate-y-1 transition-transform">
-          <UserIcon className="w-8 h-8 text-orange-500 mb-2" />
+          <UserIcon className="w-8 h-8 text-primary mb-2 opacity-80" />
           <span className="text-sm text-secondary-text font-bold mb-1">Min Age</span>
           <span className="text-xl font-bold text-text">{game.min_age > 0 ? `${game.min_age}+` : '—'}</span>
         </div>
@@ -193,52 +241,28 @@ export const GameDetail: React.FC = () => {
           {game.mechanics && game.mechanics.length > 0 && (
             <div>
               <h3 className="text-2xl font-serif text-text mb-4">Mechanics</h3>
-              <div className="flex flex-wrap gap-2">
-                {game.mechanics.map(mech => (
-                  <span key={mech} className="px-3 py-1.5 bg-surface border border-neutral rounded-lg text-sm text-secondary-text font-medium">
-                    {mech}
-                  </span>
-                ))}
-              </div>
+              <ExpandableChipList items={game.mechanics} limit={6} />
             </div>
           )}
 
           {game.designers && game.designers.length > 0 && (
             <div>
               <h3 className="text-2xl font-serif text-text mb-4">Designers</h3>
-              <div className="flex flex-col gap-2">
-                {game.designers.map(des => (
-                  <span key={des} className="text-secondary-text font-medium">
-                    {des}
-                  </span>
-                ))}
-              </div>
+              <ExpandableList items={game.designers} limit={3} />
             </div>
           )}
 
           {game.artists && game.artists.length > 0 && (
             <div>
               <h3 className="text-2xl font-serif text-text mb-4">Artists</h3>
-              <div className="flex flex-col gap-2">
-                {game.artists.map(art => (
-                  <span key={art} className="text-secondary-text font-medium">
-                    {art}
-                  </span>
-                ))}
-              </div>
+              <ExpandableList items={game.artists} limit={3} />
             </div>
           )}
 
           {game.publishers && game.publishers.length > 0 && (
             <div>
               <h3 className="text-2xl font-serif text-text mb-4">Publishers</h3>
-              <div className="flex flex-col gap-2">
-                {game.publishers.map(pub => (
-                  <span key={pub} className="text-secondary-text font-medium">
-                    {pub}
-                  </span>
-                ))}
-              </div>
+              <ExpandableList items={game.publishers} limit={3} />
             </div>
           )}
         </div>
