@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { fetchGames, fetchCategories, fetchMechanics, fetchSearch } from '../api/games';
 import type { GameQuery, SearchQueryPayload } from '../api/games';
@@ -10,6 +10,17 @@ export const GamesList: React.FC = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [showAdvancedPlayers, setShowAdvancedPlayers] = useState(false);
   const [searchMode, setSearchMode] = useState<'lexical' | 'semantic' | 'hybrid'>('hybrid');
+  const [openDropdown, setOpenDropdown] = useState<'searchMode' | 'sort' | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!(event.target as Element).closest('.dropdown-container')) {
+        setOpenDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
   
   const [query, setQuery] = useState<GameQuery>({
     sort_by: 'rank',
@@ -440,19 +451,37 @@ export const GamesList: React.FC = () => {
             
             <div className="w-px h-6 bg-neutral/20 hidden sm:block"></div>
             
-            <div className="relative hidden sm:flex items-center pr-2">
-              <select
-                value={searchMode}
-                onChange={(e) => setSearchMode(e.target.value as any)}
-                className="bg-transparent border-none text-primary font-bold text-sm focus:ring-0 cursor-pointer py-2 pl-3 pr-8 appearance-none outline-none hover:bg-neutral/5 transition-colors rounded-full"
+            <div className="relative hidden sm:flex items-center pr-2 dropdown-container">
+              <button
+                onClick={() => setOpenDropdown(openDropdown === 'searchMode' ? null : 'searchMode')}
+                className="bg-transparent border-none text-primary font-bold text-sm focus:ring-0 cursor-pointer py-2 pl-3 pr-8 outline-none hover:bg-neutral/5 transition-colors rounded-full text-left flex items-center relative"
               >
-                <option value="lexical">Lexical</option>
-                <option value="semantic">Semantic</option>
-                <option value="hybrid">Hybrid</option>
-              </select>
+                {searchMode.charAt(0).toUpperCase() + searchMode.slice(1)}
+              </button>
               <div className="absolute right-3 pointer-events-none text-primary">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className={`w-3.5 h-3.5 transition-transform ${openDropdown === 'searchMode' ? 'rotate-180' : ''}`}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
               </div>
+              
+              {openDropdown === 'searchMode' && (
+                <div className="absolute top-[calc(100%+16px)] right-0 w-36 bg-white/95 backdrop-blur-md border border-neutral/20 rounded-2xl shadow-xl z-50 overflow-hidden text-sm flex flex-col ring-1 ring-black/5 p-1">
+                  {['lexical', 'semantic', 'hybrid'].map(mode => (
+                    <button
+                      key={mode}
+                      onClick={() => {
+                        setSearchMode(mode as any);
+                        setOpenDropdown(null);
+                      }}
+                      className={`text-left px-4 py-2.5 rounded-xl font-medium transition-colors ${
+                        searchMode === mode 
+                          ? 'bg-primary/10 text-primary font-bold' 
+                          : 'text-text hover:bg-neutral/5'
+                      }`}
+                    >
+                      {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -463,45 +492,70 @@ export const GamesList: React.FC = () => {
           )}
           
           {query.query ? (
-            <div className="pointer-events-auto flex items-stretch bg-white/80 backdrop-blur-md border border-neutral/20 rounded-full shadow-lg overflow-hidden h-11 shrink-0">
+            <div className="pointer-events-auto flex items-stretch bg-white/80 backdrop-blur-md border border-neutral/20 rounded-full shadow-lg h-11 shrink-0 relative">
               <div className="relative flex items-center h-full">
-                <div className="py-0 pl-5 pr-9 text-primary font-bold text-sm h-full flex items-center w-[160px]">
+                <div className="py-0 pl-5 pr-9 text-primary font-bold text-sm h-full flex items-center w-[160px] rounded-l-full">
                   Relevance
                 </div>
               </div>
               
               <div className="w-px bg-neutral/20 my-2"></div>
               
-              <div className="px-4 text-primary flex items-center justify-center h-full">
+              <div className="px-4 text-primary flex items-center justify-center h-full rounded-r-full">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
                 </svg>
               </div>
             </div>
           ) : (
-            <div className="pointer-events-auto flex items-stretch bg-white/80 backdrop-blur-md border border-neutral/20 rounded-full shadow-lg overflow-hidden h-11 shrink-0">
+            <div className="pointer-events-auto flex items-stretch bg-white/80 backdrop-blur-md border border-neutral/20 rounded-full shadow-lg h-11 shrink-0 relative dropdown-container">
               <div className="relative flex items-center h-full">
-                <select 
-                  value={query.sort_by || 'rank'}
-                  onChange={(e) => handleFilterChange('sort_by', e.target.value)}
-                  className="bg-transparent border-none text-text font-bold text-sm focus:ring-0 cursor-pointer py-0 pl-5 pr-9 appearance-none outline-none hover:bg-neutral/5 transition-colors h-full flex items-center w-[160px]"
+                <button 
+                  onClick={() => setOpenDropdown(openDropdown === 'sort' ? null : 'sort')}
+                  className="bg-transparent border-none text-text font-bold text-sm focus:ring-0 cursor-pointer py-0 pl-5 pr-9 outline-none hover:bg-neutral/5 transition-colors h-full flex items-center w-[160px] text-left rounded-l-full"
                 >
-                  <option value="rank">Rank</option>
-                  <option value="rating">Rating</option>
-                  <option value="year">Year Published</option>
-                  <option value="complexity">Complexity</option>
-                  <option value="name">Name</option>
-                </select>
+                  {query.sort_by === 'rating' ? 'Rating' : 
+                   query.sort_by === 'year' ? 'Year Published' :
+                   query.sort_by === 'complexity' ? 'Complexity' :
+                   query.sort_by === 'name' ? 'Name' : 'Rank'}
+                </button>
                 <div className="absolute right-3 flex items-center pointer-events-none text-secondary-text">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className={`w-4 h-4 transition-transform ${openDropdown === 'sort' ? 'rotate-180' : ''}`}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
                 </div>
+                
+                {openDropdown === 'sort' && (
+                  <div className="absolute top-[calc(100%+8px)] left-0 w-48 bg-white/95 backdrop-blur-md border border-neutral/20 rounded-2xl shadow-xl z-50 overflow-hidden text-sm flex flex-col ring-1 ring-black/5 p-1">
+                    {[
+                      { id: 'rank', label: 'Rank' },
+                      { id: 'rating', label: 'Rating' },
+                      { id: 'year', label: 'Year Published' },
+                      { id: 'complexity', label: 'Complexity' },
+                      { id: 'name', label: 'Name' }
+                    ].map(opt => (
+                      <button
+                        key={opt.id}
+                        onClick={() => {
+                          handleFilterChange('sort_by', opt.id);
+                          setOpenDropdown(null);
+                        }}
+                        className={`text-left px-4 py-2.5 rounded-xl font-medium transition-colors ${
+                          (query.sort_by || 'rank') === opt.id 
+                            ? 'bg-primary/10 text-primary font-bold' 
+                            : 'text-text hover:bg-neutral/5'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               
               <div className="w-px bg-neutral/20 my-2"></div>
               
               <button 
                 onClick={() => handleFilterChange('order', query.order === 'asc' ? 'desc' : 'asc')}
-                className="px-4 text-primary hover:bg-neutral/5 transition-colors flex items-center justify-center h-full"
+                className="px-4 text-primary hover:bg-neutral/5 transition-colors flex items-center justify-center h-full rounded-r-full"
                 title={`Sort ${query.order === 'asc' ? 'Descending' : 'Ascending'}`}
               >
                 {query.order === 'asc' ? (
