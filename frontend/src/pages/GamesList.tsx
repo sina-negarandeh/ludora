@@ -399,55 +399,58 @@ export const GamesList: React.FC = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 min-w-0 transition-all duration-300">
+        {/* Floating Glass Sort Pill */}
+        <div className="fixed top-24 right-4 lg:right-8 z-40 pointer-events-none flex flex-col sm:flex-row items-end sm:items-center gap-4">
+          {data && (
+            <div className="text-sm text-text font-bold hidden xl:block bg-white/80 backdrop-blur-md px-5 py-2.5 rounded-full border border-neutral/20 shadow-lg pointer-events-auto">
+              Showing {page * pageSize + 1} - {Math.min((page + 1) * pageSize, data.total)} of {data.total}
+            </div>
+          )}
+          
+          <div className="pointer-events-auto flex items-stretch bg-white/80 backdrop-blur-md border border-neutral/20 rounded-full shadow-lg overflow-hidden h-full">
+            <div className="relative flex items-center">
+              <select 
+                value={query.sort_by || 'rank'}
+                onChange={(e) => handleFilterChange('sort_by', e.target.value)}
+                className="bg-transparent border-none text-text font-bold text-sm focus:ring-0 cursor-pointer py-2.5 pl-5 pr-9 appearance-none outline-none hover:bg-neutral/5 transition-colors h-full"
+              >
+                <option value="rank">Rank</option>
+                <option value="rating">Rating</option>
+                <option value="year">Year Published</option>
+                <option value="complexity">Complexity</option>
+                <option value="name">Name</option>
+              </select>
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-secondary-text">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+              </div>
+            </div>
+            
+            <div className="w-px bg-neutral/20 my-2"></div>
+            
+            <button 
+              onClick={() => handleFilterChange('order', query.order === 'asc' ? 'desc' : 'asc')}
+              className="px-4 py-2.5 text-primary hover:bg-neutral/5 transition-colors flex items-center justify-center h-full"
+              title={`Sort ${query.order === 'asc' ? 'Descending' : 'Ascending'}`}
+            >
+              {query.order === 'asc' ? (
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 4.5h14.25M3 9h9.75M3 13.5h9.75m4.5-4.5v12m0 0l-3.75-3.75M17.25 21L21 17.25" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 4.5h14.25M3 9h9.75M3 13.5h5.25m5.25-.75L17.25 9m0 0L21 12.75M17.25 9v12" />
+                </svg>
+              )}
+            </button>
+          </div>
+        </div>
+
         <header className="mb-8 flex flex-col lg:flex-row lg:items-end justify-between gap-6">
           <div className="flex items-center gap-4">
              <div>
                <h2 className="text-5xl sm:text-6xl font-serif text-text mb-2">All Games</h2>
                <p className="text-lg text-secondary-text">Browse and discover new board games.</p>
              </div>
-          </div>
-          
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            {data && (
-              <div className="text-sm text-secondary-text font-medium hidden xl:block mr-2">
-                Showing {page * pageSize + 1} - {Math.min((page + 1) * pageSize, data.total)} of {data.total}
-              </div>
-            )}
-            
-            <div className="flex items-center gap-2 bg-surface border border-neutral/30 rounded-xl p-1 shadow-sm">
-              <div className="relative">
-                <select 
-                  value={query.sort_by || 'rank'}
-                  onChange={(e) => handleFilterChange('sort_by', e.target.value)}
-                  className="bg-transparent border-none text-text font-medium text-sm focus:ring-0 cursor-pointer py-1.5 pl-3 pr-8 appearance-none outline-none"
-                >
-                  <option value="rank">Rank</option>
-                  <option value="rating">Rating</option>
-                  <option value="year">Year Published</option>
-                  <option value="complexity">Complexity</option>
-                  <option value="name">Name</option>
-                </select>
-                <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none text-secondary-text">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
-                </div>
-              </div>
-              
-              <button 
-                onClick={() => handleFilterChange('order', query.order === 'asc' ? 'desc' : 'asc')}
-                className="p-1.5 bg-neutral/10 hover:bg-neutral/20 rounded-lg text-secondary-text transition-colors"
-                title={`Sort ${query.order === 'asc' ? 'Descending' : 'Ascending'}`}
-              >
-                {query.order === 'asc' ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4.5h14.25M3 9h9.75M3 13.5h9.75m4.5-4.5v12m0 0l-3.75-3.75M17.25 21L21 17.25" />
-                  </svg>
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4.5h14.25M3 9h9.75M3 13.5h5.25m5.25-.75L17.25 9m0 0L21 12.75M17.25 9v12" />
-                  </svg>
-                )}
-              </button>
-            </div>
           </div>
         </header>
 
