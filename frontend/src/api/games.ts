@@ -96,3 +96,47 @@ export const fetchPublishers = async (): Promise<string[]> => {
   const { data } = await apiClient.get<string[]>('/api/games/publishers');
   return data;
 };
+
+export interface SearchQueryPayload {
+  q: string;
+  mode: 'lexical' | 'semantic' | 'hybrid';
+  filters?: {
+    categories?: string[];
+    mechanics?: string[];
+    exact_players?: number;
+    min_players?: number;
+    max_players?: number;
+    min_weight?: number;
+    max_weight?: number;
+  };
+}
+
+export interface SearchDebug {
+  lexical_rank?: number;
+  semantic_rank?: number;
+  rrf_score: number;
+}
+
+export interface SearchResult {
+  game: Game;
+  score: number;
+  debug: SearchDebug;
+}
+
+export interface PaginatedSearchResults {
+  total: number;
+  items: SearchResult[];
+}
+
+export const fetchSearch = async (
+  query: SearchQueryPayload,
+  skip: number = 0,
+  limit: number = 24
+): Promise<PaginatedSearchResults> => {
+  const { data } = await apiClient.post<PaginatedSearchResults>(
+    '/api/search',
+    query,
+    { params: { skip, limit } }
+  );
+  return data;
+};

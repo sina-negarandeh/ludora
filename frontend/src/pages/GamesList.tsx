@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { fetchGames, fetchCategories, fetchMechanics } from '../api/games';
-import type { GameQuery } from '../api/games';
+import { fetchGames, fetchCategories, fetchMechanics, fetchSearch } from '../api/games';
+import type { GameQuery, SearchQueryPayload } from '../api/games';
 import { GameCard } from '../components/GameCard';
 import { MultiSelectDropdown } from '../components/MultiSelectDropdown';
 import { SearchableCombobox } from '../components/SearchableCombobox';
@@ -9,6 +9,7 @@ import { SearchableCombobox } from '../components/SearchableCombobox';
 export const GamesList: React.FC = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [showAdvancedPlayers, setShowAdvancedPlayers] = useState(false);
+  const [searchMode, setSearchMode] = useState<'lexical' | 'semantic' | 'hybrid'>('hybrid');
   
   const [query, setQuery] = useState<GameQuery>({
     sort_by: 'rank',
@@ -24,8 +25,26 @@ export const GamesList: React.FC = () => {
   const { data: mechanics } = useQuery({ queryKey: ['mechanics'], queryFn: fetchMechanics, staleTime: Infinity });
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['games', query],
-    queryFn: () => fetchGames(query),
+    queryKey: ['games', query, searchMode],
+    queryFn: () => {
+      if (query.query) {
+        const searchPayload: SearchQueryPayload = {
+          q: query.query,
+          mode: searchMode,
+          filters: {
+            categories: query.categories,
+            mechanics: query.mechanics,
+            exact_players: query.exact_players,
+            min_players: query.min_players,
+            max_players: query.max_players,
+            min_weight: query.min_weight,
+            max_weight: query.max_weight,
+          }
+        };
+        return fetchSearch(searchPayload, query.skip, query.limit);
+      }
+      return fetchGames(query);
+    },
     staleTime: 60000,
   });
 
@@ -75,18 +94,6 @@ export const GamesList: React.FC = () => {
 
             <div className="flex-1 overflow-y-auto pr-2 space-y-6 custom-scrollbar">
               
-              {/* Search */}
-              <div>
-                <label className="block text-sm font-bold text-secondary-text mb-2">Search</label>
-                <input 
-                  type="text" 
-                  placeholder="e.g. Gloomhaven..."
-                  value={query.query || ''}
-                  onChange={(e) => handleFilterChange('query', e.target.value)}
-                  className="w-full bg-neutral/10 border-none rounded-xl px-4 py-2.5 text-text focus:ring-2 focus:ring-primary/50 placeholder-secondary-text/50 outline-none transition-shadow"
-                />
-              </div>
-
               {/* Category */}
               <div>
                 <label className="block text-sm font-bold text-secondary-text mb-2">Category</label>
@@ -251,18 +258,6 @@ export const GamesList: React.FC = () => {
           </div>
           
           <div className="flex-1 space-y-8">
-              {/* Search */}
-              <div>
-                <label className="block text-lg font-bold text-secondary-text mb-3">Search</label>
-                <input 
-                  type="text" 
-                  placeholder="e.g. Gloomhaven..."
-                  value={query.query || ''}
-                  onChange={(e) => handleFilterChange('query', e.target.value)}
-                  className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 text-lg text-text outline-none"
-                />
-              </div>
-
               {/* Category */}
               <div>
                 <label className="block text-lg font-bold text-secondary-text mb-3">Category</label>
@@ -402,49 +397,85 @@ export const GamesList: React.FC = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 min-w-0 transition-all duration-300">
-        {/* Floating Glass Sort Pill */}
-        <div className="fixed top-24 right-4 lg:right-8 z-40 pointer-events-none flex flex-col sm:flex-row items-end sm:items-center gap-4">
-          {data && (
-            <div className="text-sm text-text font-bold hidden xl:block bg-white/80 backdrop-blur-md px-5 py-2.5 rounded-full border border-neutral/20 shadow-lg pointer-events-auto">
-              Showing {page * pageSize + 1} - {Math.min((page + 1) * pageSize, data.total)} of {data.total}
-            </div>
-          )}
+        {/* Top Right Controls (Search & Sort) */}
+        <div className="fixed top-24 right-4 lg:right-8 z-40 pointer-events-none flex flex-col items-end gap-3 w-full max-w-[calc(100vw-32px)] sm:max-w-md lg:max-w-xl">
           
-          <div className="pointer-events-auto flex items-stretch bg-white/80 backdrop-blur-md border border-neutral/20 rounded-full shadow-lg overflow-hidden h-full">
-            <div className="relative flex items-center">
-              <select 
-                value={query.sort_by || 'rank'}
-                onChange={(e) => handleFilterChange('sort_by', e.target.value)}
-                className="bg-transparent border-none text-text font-bold text-sm focus:ring-0 cursor-pointer py-2.5 pl-5 pr-9 appearance-none outline-none hover:bg-neutral/5 transition-colors h-full"
+          {/* Search Bar */}
+          <div className="pointer-events-auto w-full bg-white/80 backdrop-blur-md border border-neutral/20 rounded-full shadow-lg flex items-center p-1.5 gap-2 transition-all focus-within:ring-2 focus-within:ring-primary/30">
+            <div className="flex-1 flex items-center pl-4">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 text-secondary-text">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search games..."
+                value={query.query || ''}
+                onChange={(e) => handleFilterChange('query', e.target.value)}
+                className="w-full bg-transparent border-none text-text font-medium px-3 py-2 outline-none placeholder-secondary-text/60"
+              />
+            </div>
+            
+            <div className="w-px h-6 bg-neutral/20 hidden sm:block"></div>
+            
+            <div className="relative hidden sm:flex items-center pr-2">
+              <select
+                value={searchMode}
+                onChange={(e) => setSearchMode(e.target.value as any)}
+                className="bg-transparent border-none text-primary font-bold text-sm focus:ring-0 cursor-pointer py-2 pl-3 pr-8 appearance-none outline-none hover:bg-neutral/5 transition-colors rounded-full"
               >
-                <option value="rank">Rank</option>
-                <option value="rating">Rating</option>
-                <option value="year">Year Published</option>
-                <option value="complexity">Complexity</option>
-                <option value="name">Name</option>
+                <option value="lexical">Lexical</option>
+                <option value="semantic">Semantic</option>
+                <option value="hybrid">Hybrid</option>
               </select>
-              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-secondary-text">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+              <div className="absolute right-3 pointer-events-none text-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
               </div>
             </div>
+          </div>
+
+          <div className="flex flex-row items-center gap-4">
+            {data && (
+              <div className="text-sm text-text font-bold hidden xl:block bg-white/80 backdrop-blur-md px-5 py-2.5 rounded-full border border-neutral/20 shadow-lg pointer-events-auto">
+                Showing {page * pageSize + 1} - {Math.min((page + 1) * pageSize, data.total)} of {data.total}
+              </div>
+            )}
             
-            <div className="w-px bg-neutral/20 my-2"></div>
-            
-            <button 
-              onClick={() => handleFilterChange('order', query.order === 'asc' ? 'desc' : 'asc')}
-              className="px-4 py-2.5 text-primary hover:bg-neutral/5 transition-colors flex items-center justify-center h-full"
-              title={`Sort ${query.order === 'asc' ? 'Descending' : 'Ascending'}`}
-            >
-              {query.order === 'asc' ? (
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 4.5h14.25M3 9h9.75M3 13.5h9.75m4.5-4.5v12m0 0l-3.75-3.75M17.25 21L21 17.25" />
-                </svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 4.5h14.25M3 9h9.75M3 13.5h5.25m5.25-.75L17.25 9m0 0L21 12.75M17.25 9v12" />
-                </svg>
-              )}
-            </button>
+            <div className="pointer-events-auto flex items-stretch bg-white/80 backdrop-blur-md border border-neutral/20 rounded-full shadow-lg overflow-hidden h-11">
+              <div className="relative flex items-center h-full">
+                <select 
+                  value={query.sort_by || 'rank'}
+                  onChange={(e) => handleFilterChange('sort_by', e.target.value)}
+                  className="bg-transparent border-none text-text font-bold text-sm focus:ring-0 cursor-pointer py-0 pl-5 pr-9 appearance-none outline-none hover:bg-neutral/5 transition-colors h-full flex items-center"
+                >
+                  <option value="rank">Rank</option>
+                  <option value="rating">Rating</option>
+                  <option value="year">Year Published</option>
+                  <option value="complexity">Complexity</option>
+                  <option value="name">Name</option>
+                </select>
+                <div className="absolute right-3 flex items-center pointer-events-none text-secondary-text">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                </div>
+              </div>
+              
+              <div className="w-px bg-neutral/20 my-2"></div>
+              
+              <button 
+                onClick={() => handleFilterChange('order', query.order === 'asc' ? 'desc' : 'asc')}
+                className="px-4 text-primary hover:bg-neutral/5 transition-colors flex items-center justify-center h-full"
+                title={`Sort ${query.order === 'asc' ? 'Descending' : 'Ascending'}`}
+              >
+                {query.order === 'asc' ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4.5h14.25M3 9h9.75M3 13.5h9.75m4.5-4.5v12m0 0l-3.75-3.75M17.25 21L21 17.25" />
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4.5h14.25M3 9h9.75M3 13.5h5.25m5.25-.75L17.25 9m0 0L21 12.75M17.25 9v12" />
+                  </svg>
+                )}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -477,9 +508,10 @@ export const GamesList: React.FC = () => {
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
-              {data?.items.map((game) => (
-                <GameCard key={game.bgg_id} game={game} />
-              ))}
+              {data?.items.map((item: any) => {
+                const gameObj = item.game || item;
+                return <GameCard key={gameObj.bgg_id} game={gameObj} />;
+              })}
             </div>
 
             <div className="h-24"></div>

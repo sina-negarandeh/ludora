@@ -1,9 +1,10 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import TSVECTOR
+from pgvector.sqlalchemy import Vector
 from app.database.session import Base
 
 # --- Join Tables ---
-
 class GameCategory(Base):
     __tablename__ = "game_categories"
     game_id = Column(Integer, ForeignKey("games.bgg_id", ondelete="CASCADE"), primary_key=True)
@@ -73,6 +74,12 @@ class Game(Base):
     min_age = Column(Integer)
     image_path = Column(String)
     rank = Column(Integer, nullable=True)
+
+    # Search and Vector Columns
+    embedding = Column(Vector(384))
+    embedding_model = Column(String)
+    embedding_updated_at = Column(DateTime)
+    search_vector = Column(TSVECTOR)
 
     # Relationships
     categories = relationship("Category", secondary="game_categories")

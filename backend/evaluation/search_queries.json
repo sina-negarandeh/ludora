@@ -1,0 +1,22 @@
+[
+  {
+    "query": "space exploration",
+    "expected_bgg_ids": [182028, 169786, 11]
+  },
+  {
+    "query": "cooperative game about diseases",
+    "expected_bgg_ids": [30549, 161936, 221107]
+  },
+  {
+    "query": "worker placement farming",
+    "expected_bgg_ids": [31260, 120677]
+  },
+  {
+    "query": "ticket to ride europe",
+    "expected_bgg_ids": [14996]
+  },
+  {
+    "query": "mars terraforming",
+    "expected_bgg_ids": [167791, 328471]
+  }
+]
