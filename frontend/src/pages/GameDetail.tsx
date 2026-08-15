@@ -210,9 +210,6 @@ const DistributionChart = ({
   const pathLine = generateSmoothPath(pts);
   const pathD = `${pathLine} L 100,100 L 0,100 Z`;
 
-  // Check if labels will overlap (within 18% of chart width)
-  const isOverlap = Math.abs(p - avgP) < 0.18;
-
   return (
     <div className="flex flex-col mb-8">
       <div className="flex justify-between items-baseline mb-2">
@@ -229,13 +226,13 @@ const DistributionChart = ({
 
         {/* Average Marker */}
         <div 
-          className="absolute top-0 bottom-0 flex flex-col items-center z-0 pointer-events-none"
+          className="absolute top-0 bottom-0 flex flex-col items-center z-20 pointer-events-none"
           style={{ left: `${avgP * 100}%`, transform: 'translateX(-50%)' }}
         >
-          <div className="w-px border-l-2 border-dashed border-neutral/30 h-full relative" />
-          <div className={`absolute top-0 bg-surface/80 backdrop-blur-sm px-1 text-secondary-text/80 text-[9px] font-bold uppercase tracking-wider whitespace-nowrap transition-transform ${isOverlap ? 'translate-y-[-220%]' : 'translate-y-[-100%]'}`}>
+          <div className="absolute bg-surface/80 backdrop-blur-sm px-1 text-secondary-text/80 text-[9px] font-bold uppercase tracking-wider whitespace-nowrap leading-none py-0.5 bottom-full">
             AVG {formatAvg(avgValue)}
           </div>
+          <div className="w-px border-l-2 border-dashed border-neutral/30 h-full relative" />
         </div>
 
         {/* This Game Marker */}
@@ -243,9 +240,10 @@ const DistributionChart = ({
           className="absolute top-0 bottom-0 flex flex-col items-center z-10 pointer-events-none"
           style={{ left: `${p * 100}%`, transform: 'translateX(-50%)' }}
         >
-          <div className="text-primary text-[10px] font-bold whitespace-nowrap mb-0.5 translate-y-[-100%] absolute top-0">
+          <div className="text-primary text-[10px] font-bold whitespace-nowrap absolute leading-none pb-1" style={{ bottom: 'calc(100% + 14px)' }}>
             This Game
           </div>
+          <div className="w-[2px] bg-primary absolute bottom-full" style={{ height: '14px' }} />
           <div className="w-[2px] bg-primary h-full relative">
             <div 
               className="absolute left-1/2 -translate-x-1/2 w-3 h-3 bg-primary rounded-full border-2 border-surface" 
