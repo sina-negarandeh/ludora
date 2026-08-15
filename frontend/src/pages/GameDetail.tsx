@@ -87,7 +87,7 @@ const UserRatings: React.FC<{ game: Game }> = ({ game }) => {
 
   return (
     <div className="mt-24 border-t border-neutral/20 pt-16">
-      <h2 className="text-4xl font-serif text-text mb-8">User Ratings</h2>
+      <h2 className="text-4xl font-serif text-text mb-8">Ratings</h2>
       
       <div className="flex flex-col md:flex-row gap-16 items-center">
         {/* Left: Bar Plot */}
