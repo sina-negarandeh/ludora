@@ -166,11 +166,62 @@ export const GamesList: React.FC = () => {
 
               {/* Complexity */}
               <div>
-                 <label className="block text-sm font-bold text-secondary-text mb-2">Complexity (1.0 - 5.0)</label>
-                 <div className="flex items-center gap-2">
-                   <input type="number" step="0.1" min="1" max="5" placeholder="Min" value={filters.min_weight || ''} onChange={(e) => handleFilterChange('min_weight', parseFloat(e.target.value))} className="w-full bg-neutral/10 border-none rounded-xl px-3 py-2 text-text focus:ring-2 focus:ring-primary/50 outline-none" />
-                   <span className="text-secondary-text">-</span>
-                   <input type="number" step="0.1" min="1" max="5" placeholder="Max" value={filters.max_weight || ''} onChange={(e) => handleFilterChange('max_weight', parseFloat(e.target.value))} className="w-full bg-neutral/10 border-none rounded-xl px-3 py-2 text-text focus:ring-2 focus:ring-primary/50 outline-none" />
+                 <label className="block text-sm font-bold text-secondary-text mb-3">Complexity (1.0 - 5.0)</label>
+                 
+                 <div className="flex flex-wrap gap-2 mb-4">
+                   {[
+                     { label: 'Light (1-2)', min: 1.0, max: 2.0 },
+                     { label: 'Medium (2-3.5)', min: 2.0, max: 3.5 },
+                     { label: 'Heavy (3.5-5)', min: 3.5, max: 5.0 },
+                   ].map(preset => (
+                     <button
+                       key={preset.label}
+                       onClick={() => {
+                         handleFilterChange('min_weight', preset.min);
+                         handleFilterChange('max_weight', preset.max);
+                       }}
+                       className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${filters.min_weight === preset.min && filters.max_weight === preset.max ? 'bg-primary text-white shadow-md' : 'bg-neutral/10 text-secondary-text hover:bg-neutral/20'}`}
+                     >
+                       {preset.label}
+                     </button>
+                   ))}
+                 </div>
+
+                 <div className="flex items-center gap-3">
+                   <span className="text-sm font-bold text-secondary-text min-w-[1.5rem] text-right">
+                     {(filters.min_weight || 1.0).toFixed(1)}
+                   </span>
+                   
+                   <div className="relative w-full h-8 flex items-center">
+                     <div className="absolute w-full h-1.5 bg-neutral/20 rounded-full" />
+                     <div 
+                       className="absolute h-1.5 bg-primary rounded-full pointer-events-none" 
+                       style={{ 
+                         left: `${(((filters.min_weight || 1.0) - 1.0) / 4.0) * 100}%`,
+                         width: `${(((filters.max_weight || 5.0) - (filters.min_weight || 1.0)) / 4.0) * 100}%` 
+                       }} 
+                     />
+                     <input 
+                       type="range" min="1.0" max="5.0" step="0.1" value={filters.min_weight || 1.0}
+                       onChange={(e) => {
+                         const val = Math.min(parseFloat(e.target.value), (filters.max_weight || 5.0));
+                         handleFilterChange('min_weight', val);
+                       }}
+                       className={`absolute w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-grab active:[&::-webkit-slider-thumb]:cursor-grabbing [&::-moz-range-thumb]:pointer-events-auto ${(filters.min_weight || 1.0) > 3.0 ? 'z-20' : 'z-10'}`}
+                     />
+                     <input 
+                       type="range" min="1.0" max="5.0" step="0.1" value={filters.max_weight || 5.0}
+                       onChange={(e) => {
+                         const val = Math.max(parseFloat(e.target.value), (filters.min_weight || 1.0));
+                         handleFilterChange('max_weight', val);
+                       }}
+                       className={`absolute w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-grab active:[&::-webkit-slider-thumb]:cursor-grabbing [&::-moz-range-thumb]:pointer-events-auto ${(filters.min_weight || 1.0) > 3.0 ? 'z-10' : 'z-20'}`}
+                     />
+                   </div>
+
+                   <span className="text-sm font-bold text-secondary-text min-w-[1.5rem]">
+                     {(filters.max_weight || 5.0).toFixed(1)}
+                   </span>
                  </div>
               </div>
 
@@ -301,11 +352,62 @@ export const GamesList: React.FC = () => {
 
               {/* Complexity */}
               <div>
-                 <label className="block text-lg font-bold text-secondary-text mb-3">Complexity (1.0 - 5.0)</label>
-                 <div className="flex items-center gap-3">
-                   <input type="number" step="0.1" min="1" max="5" placeholder="Min" value={filters.min_weight || ''} onChange={(e) => handleFilterChange('min_weight', parseFloat(e.target.value))} className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 text-lg text-text focus:ring-2 focus:ring-primary/50 outline-none" />
-                   <span className="text-secondary-text">-</span>
-                   <input type="number" step="0.1" min="1" max="5" placeholder="Max" value={filters.max_weight || ''} onChange={(e) => handleFilterChange('max_weight', parseFloat(e.target.value))} className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 text-lg text-text focus:ring-2 focus:ring-primary/50 outline-none" />
+                 <label className="block text-lg font-bold text-secondary-text mb-4">Complexity (1.0 - 5.0)</label>
+                 
+                 <div className="flex flex-wrap gap-3 mb-6">
+                   {[
+                     { label: 'Light (1-2)', min: 1.0, max: 2.0 },
+                     { label: 'Medium (2-3.5)', min: 2.0, max: 3.5 },
+                     { label: 'Heavy (3.5-5)', min: 3.5, max: 5.0 },
+                   ].map(preset => (
+                     <button
+                       key={preset.label}
+                       onClick={() => {
+                         handleFilterChange('min_weight', preset.min);
+                         handleFilterChange('max_weight', preset.max);
+                       }}
+                       className={`px-4 py-2 rounded-full text-sm font-bold transition-colors ${filters.min_weight === preset.min && filters.max_weight === preset.max ? 'bg-primary text-white shadow-md' : 'bg-neutral/10 text-secondary-text hover:bg-neutral/20'}`}
+                     >
+                       {preset.label}
+                     </button>
+                   ))}
+                 </div>
+
+                 <div className="flex items-center gap-4 px-2">
+                   <span className="text-lg font-bold text-secondary-text min-w-[2rem] text-right">
+                     {(filters.min_weight || 1.0).toFixed(1)}
+                   </span>
+                   
+                   <div className="relative w-full h-10 flex items-center">
+                     <div className="absolute w-full h-2 bg-neutral/20 rounded-full" />
+                     <div 
+                       className="absolute h-2 bg-primary rounded-full pointer-events-none" 
+                       style={{ 
+                         left: `${(((filters.min_weight || 1.0) - 1.0) / 4.0) * 100}%`,
+                         width: `${(((filters.max_weight || 5.0) - (filters.min_weight || 1.0)) / 4.0) * 100}%` 
+                       }} 
+                     />
+                     <input 
+                       type="range" min="1.0" max="5.0" step="0.1" value={filters.min_weight || 1.0}
+                       onChange={(e) => {
+                         const val = Math.min(parseFloat(e.target.value), (filters.max_weight || 5.0));
+                         handleFilterChange('min_weight', val);
+                       }}
+                       className={`absolute w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-[3px] [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:cursor-grab active:[&::-webkit-slider-thumb]:cursor-grabbing [&::-moz-range-thumb]:pointer-events-auto ${(filters.min_weight || 1.0) > 3.0 ? 'z-20' : 'z-10'}`}
+                     />
+                     <input 
+                       type="range" min="1.0" max="5.0" step="0.1" value={filters.max_weight || 5.0}
+                       onChange={(e) => {
+                         const val = Math.max(parseFloat(e.target.value), (filters.min_weight || 1.0));
+                         handleFilterChange('max_weight', val);
+                       }}
+                       className={`absolute w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-[3px] [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:cursor-grab active:[&::-webkit-slider-thumb]:cursor-grabbing [&::-moz-range-thumb]:pointer-events-auto ${(filters.min_weight || 1.0) > 3.0 ? 'z-10' : 'z-20'}`}
+                     />
+                   </div>
+
+                   <span className="text-lg font-bold text-secondary-text min-w-[2rem]">
+                     {(filters.max_weight || 5.0).toFixed(1)}
+                   </span>
                  </div>
               </div>
           </div>
