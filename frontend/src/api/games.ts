@@ -31,9 +31,14 @@ export interface PaginatedGames {
   items: Game[];
 }
 
-export const fetchGames = async (skip: number = 0, limit: number = 24): Promise<PaginatedGames> => {
+export const fetchGames = async (
+  skip: number = 0, 
+  limit: number = 24,
+  sortBy: string = 'rank',
+  order: string = 'asc'
+): Promise<PaginatedGames> => {
   const { data } = await apiClient.get<PaginatedGames>('/api/games', {
-    params: { skip, limit },
+    params: { skip, limit, sort_by: sortBy, order },
   });
   return data;
 };

@@ -13,10 +13,30 @@ router = APIRouter()
 def get_games(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
+    sort_by: str = Query("rank"),
+    order: str = Query("asc"),
     db: Session = Depends(get_db)
 ):
     total = db.query(func.count(Game.bgg_id)).scalar()
-    games = db.query(Game).offset(skip).limit(limit).all()
+    
+    query = db.query(Game)
+    
+    sort_column = getattr(Game, 'rank')
+    if sort_by == 'rating':
+        sort_column = getattr(Game, 'avg_rating')
+    elif sort_by == 'year':
+        sort_column = getattr(Game, 'year_published')
+    elif sort_by == 'complexity':
+        sort_column = getattr(Game, 'game_weight')
+    elif sort_by == 'name':
+        sort_column = getattr(Game, 'name')
+        
+    if order == 'desc':
+        query = query.order_by(sort_column.desc().nulls_last())
+    else:
+        query = query.order_by(sort_column.asc().nulls_last())
+        
+    games = query.offset(skip).limit(limit).all()
     
     return PaginatedGames(total=total, items=games)
 

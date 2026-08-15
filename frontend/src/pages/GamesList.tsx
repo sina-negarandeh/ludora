@@ -5,26 +5,65 @@ import { GameCard } from '../components/GameCard';
 
 export const GamesList: React.FC = () => {
   const [page, setPage] = useState(0);
+  const [sortBy, setSortBy] = useState('rank');
+  const [order, setOrder] = useState('asc');
   const pageSize = 24;
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['games', page],
-    queryFn: () => fetchGames(page * pageSize, pageSize),
+    queryKey: ['games', page, sortBy, order],
+    queryFn: () => fetchGames(page * pageSize, pageSize, sortBy, order),
     staleTime: 60000,
   });
 
+  React.useEffect(() => {
+    setPage(0);
+  }, [sortBy, order]);
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <header className="mb-8 flex items-center justify-between">
+      <header className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
           <h2 className="text-5xl sm:text-6xl font-serif text-text mb-3">All Games</h2>
           <p className="text-lg sm:text-xl text-secondary-text">Browse and discover new board games.</p>
         </div>
-        {data && (
-          <div className="text-sm text-secondary-text font-medium">
-            Showing {page * pageSize + 1} - {Math.min((page + 1) * pageSize, data.total)} of {data.total} games
+        
+        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4">
+          {data && (
+            <div className="text-sm text-secondary-text font-medium hidden md:block mr-2">
+              Showing {page * pageSize + 1} - {Math.min((page + 1) * pageSize, data.total)} of {data.total}
+            </div>
+          )}
+          
+          <div className="flex items-center gap-2 bg-surface border border-neutral/30 rounded-xl p-1 shadow-sm">
+            <select 
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="bg-transparent border-none text-text font-medium text-sm focus:ring-0 cursor-pointer py-1.5 pl-3 pr-8 appearance-none outline-none"
+            >
+              <option value="rank">Rank</option>
+              <option value="rating">Rating</option>
+              <option value="year">Year Published</option>
+              <option value="complexity">Complexity</option>
+              <option value="name">Name</option>
+            </select>
+            
+            <button 
+              onClick={() => setOrder(order === 'asc' ? 'desc' : 'asc')}
+              className="p-1.5 bg-neutral/10 hover:bg-neutral/20 rounded-lg text-secondary-text transition-colors"
+              title={`Sort ${order === 'asc' ? 'Descending' : 'Ascending'}`}
+            >
+              {order === 'asc' ? (
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 4.5h14.25M3 9h9.75M3 13.5h9.75m4.5-4.5v12m0 0l-3.75-3.75M17.25 21L21 17.25" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 4.5h14.25M3 9h9.75M3 13.5h5.25m5.25-.75L17.25 9m0 0L21 12.75M17.25 9v12" />
+                </svg>
+              )}
+            </button>
           </div>
-        )}
+        </div>
       </header>
 
       {isLoading ? (
