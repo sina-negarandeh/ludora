@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import { useQuery } from '@tanstack/react-query';
@@ -60,8 +60,32 @@ const ExpandableChipList: React.FC<{ items: string[], limit?: number }> = ({ ite
   );
 };
 
+const MODELS = [
+  { id: 'popularity', name: 'Popularity Baseline', coverage: null, ild: null },
+  { id: 'metadata', name: 'Content-Based: Metadata', coverage: 96.13, ild: 0.52 },
+  { id: 'tfidf', name: 'NLP-Based: TF-IDF', coverage: 95.41, ild: 0.44 },
+  { id: 'embedding', name: 'Semantic: Embedding', coverage: 93.54, ild: 0.34 },
+  { id: 'hybrid', name: 'Hybrid Ranking', coverage: 90.49, ild: 0.39 },
+  { id: 'graph_jaccard', name: 'Graph: Weighted Jaccard', coverage: 94.03, ild: 0.52 },
+  { id: 'node2vec', name: 'Graph: DeepWalk (Node2Vec)', coverage: 96.55, ild: 0.54 },
+];
+
 const GameRecommendations: React.FC<{ bgg_id: number }> = ({ bgg_id }) => {
   const [model, setModel] = useState('hybrid');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedModel = MODELS.find(m => m.id === model) || MODELS[4];
   
   const { data, isLoading } = useQuery({
     queryKey: ['recommendations', bgg_id, model],
@@ -76,24 +100,40 @@ const GameRecommendations: React.FC<{ bgg_id: number }> = ({ bgg_id }) => {
           <p className="text-secondary-text">Matches based on shared items characteristics.</p>
         </div>
         
-        <div className="flex items-center gap-3">
-          <label htmlFor="model-select" className="text-sm font-bold text-secondary-text uppercase tracking-wider">
-            Algorithm
-          </label>
-          <select
-            id="model-select"
-            value={model}
-            onChange={e => setModel(e.target.value)}
-            className="bg-surface border border-neutral text-text font-medium rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary outline-none cursor-pointer shadow-sm"
+        <div className="relative" ref={dropdownRef}>
+          <button 
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            className="flex items-center gap-2 bg-surface border border-neutral text-text font-bold rounded-full px-5 py-2.5 shadow-sm hover:border-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50"
           >
-            <option value="popularity">Popularity Baseline</option>
-            <option value="metadata">Content-Based: Metadata</option>
-            <option value="tfidf">NLP-Based: TF-IDF</option>
-            <option value="embedding">Semantic: Embedding</option>
-            <option value="hybrid">Hybrid Ranking</option>
-            <option value="graph_jaccard">Graph: Weighted Jaccard</option>
-            <option value="node2vec">Graph: DeepWalk (Node2Vec)</option>
-          </select>
+            <span className="text-secondary-text font-medium mr-1 uppercase text-sm tracking-wider">Algorithm:</span> 
+            {selectedModel.name}
+            <svg className={`w-4 h-4 ml-1 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {isDropdownOpen && (
+            <div className="absolute right-0 sm:left-0 sm:right-auto top-full mt-2 w-max min-w-[340px] bg-surface border border-neutral/50 rounded-2xl shadow-xl z-50 overflow-hidden text-sm">
+              <div className="grid grid-cols-[1fr_80px_80px] gap-4 px-4 py-3 bg-neutral/10 border-b border-neutral/20 text-xs font-bold text-secondary-text uppercase tracking-wider">
+                <div>Algorithm</div>
+                <div className="text-right" title="Is the system diverse?">Coverage</div>
+                <div className="text-right" title="Are the 10 recommendations different from each other?">ILD@10</div>
+              </div>
+              <div className="max-h-[300px] overflow-y-auto">
+                {MODELS.map(m => (
+                  <button
+                    key={m.id}
+                    onClick={() => { setModel(m.id); setIsDropdownOpen(false); }}
+                    className={`w-full grid grid-cols-[1fr_80px_80px] gap-4 px-4 py-3 items-center text-left hover:bg-neutral/10 transition-colors ${m.id === model ? 'bg-primary/5 font-bold text-primary' : 'text-text'}`}
+                  >
+                    <div>{m.name}</div>
+                    <div className="text-right text-secondary-text">{m.coverage ? `${m.coverage}%` : '—'}</div>
+                    <div className="text-right text-secondary-text">{m.ild ? m.ild.toFixed(2) : '—'}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
       
