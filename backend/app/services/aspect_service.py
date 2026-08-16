@@ -20,7 +20,7 @@ class AspectService:
     def get_game_aspects(self, game_id: int) -> List[AspectAggregateResponse]:
         aggregates = self.db.query(GameAspectAggregate).filter(
             GameAspectAggregate.game_id == game_id,
-            GameAspectAggregate.total_mentions >= 1
+            GameAspectAggregate.total_mentions >= 5
         ).order_by(GameAspectAggregate.total_mentions.desc()).all()
         
         result = []

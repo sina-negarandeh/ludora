@@ -34,6 +34,7 @@ class GameCreate(GameBase):
 
 class GameResponse(GameBase):
     bgg_id: int
+    customer_summary: Optional[str] = None
 
     @field_validator('categories', 'themes', 'mechanics', 'designers', 'publishers', 'artists', mode='before')
     @classmethod

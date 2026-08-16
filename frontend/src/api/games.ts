@@ -28,6 +28,7 @@ export interface Game {
   designers: string[];
   publishers: string[];
   artists: string[];
+  customer_summary?: string;
 }
 
 export interface Review {

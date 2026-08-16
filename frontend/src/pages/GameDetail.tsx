@@ -843,7 +843,7 @@ const GameReviews: React.FC<{ game: Game }> = ({ game }) => {
         )}
       </div>
       
-      <CommunityConsensus gameId={game.bgg_id} />
+      <CommunityConsensus gameId={game.bgg_id} summary={game.customer_summary} />
 
       <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-6 mt-4 gap-4">
         <div className="flex items-baseline gap-3">
@@ -978,7 +978,7 @@ interface AspectAggregate {
 }
 
 // --- ABSA Component ---
-const CommunityConsensus = ({ gameId }: { gameId: number }) => {
+const CommunityConsensus = ({ gameId, summary }: { gameId: number, summary?: string }) => {
   const [aspects, setAspects] = useState<AspectAggregate[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAll, setShowAll] = useState(false);
@@ -998,6 +998,9 @@ const CommunityConsensus = ({ gameId }: { gameId: number }) => {
     fetchAspects();
   }, [gameId]);
 
+  if (loading) return null;
+  if (!summary || aspects.length === 0) return null;
+
   return (
     <div className="mb-12">
       <div className="mb-6">
@@ -1006,6 +1009,12 @@ const CommunityConsensus = ({ gameId }: { gameId: number }) => {
           <SparklesIcon className="w-5 h-5 text-yellow-500" />
           <span>Generated from text of user reviews</span>
         </div>
+      </div>
+
+      <div className="bg-white border border-stone-200/60 rounded-2xl p-5 mb-8 shadow-sm">
+        <p className="text-text leading-relaxed text-sm md:text-base italic">
+          "{summary}"
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -1052,7 +1061,7 @@ const CommunityConsensus = ({ gameId }: { gameId: number }) => {
                 <div className="flex flex-col justify-center h-14">
                   <h3 className="font-bold text-[17px] text-text leading-tight group-hover:text-primary transition-colors">{agg.aspect}</h3>
                   <span className="text-[11px] font-bold text-secondary-text mt-1 uppercase tracking-wider">
-                    {isPositive ? 'Positive Feedback' : 'Negative Feedback'}
+                    {isPositive ? 'Positive Feedback' : 'Positive Feedback'}
                   </span>
                 </div>
               </div>

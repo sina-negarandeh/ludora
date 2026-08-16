@@ -184,3 +184,13 @@ class Review(Base):
     
     user = relationship("User", backref="reviews")
     game = relationship("Game", backref="reviews")
+
+class GameSummary(Base):
+    __tablename__ = "game_summaries"
+    
+    game_id = Column(Integer, ForeignKey("games.bgg_id", ondelete="CASCADE"), primary_key=True)
+    summary = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=func.now())
+    model_used = Column(String)
+    
+    game = relationship("Game", backref="summary")
