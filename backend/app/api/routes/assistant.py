@@ -13,7 +13,7 @@ class ParseRequest(BaseModel):
     message: str
     conversation_id: Optional[str] = None
 
-@router.post("/parse", response_model=ParsedIntent)
+@router.post("/parse", response_model=ParsedIntent, summary="Parse Natural Language Intent", description="Uses a local MLX LLM to parse a natural language query into structured JSON intent (e.g., 'search', 'compare', 'recommend').")
 def parse_intent(request: ParseRequest):
     service = AssistantService()
     try:
@@ -22,7 +22,7 @@ def parse_intent(request: ParseRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/chat", response_model=AssistantResponse)
+@router.post("/chat", response_model=AssistantResponse, summary="Execute Assistant Chat", description="Parses the user intent and automatically routes it to the correct backend service (e.g. executing a semantic search, fetching recommendations, or comparing games). Returns a UI-ready response.")
 def chat_endpoint(request: ParseRequest, db: Session = Depends(get_db)):
     service = AssistantService()
     orchestrator = AssistantOrchestrator(db)

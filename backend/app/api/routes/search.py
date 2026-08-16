@@ -6,7 +6,7 @@ from app.services.search_service import SearchService
 
 router = APIRouter()
 
-@router.post("/", response_model=PaginatedSearchResults)
+@router.post("/", response_model=PaginatedSearchResults, summary="Execute Hybrid Search", description="Performs a lexical, semantic, or hybrid search using pgvector and full-text search against the board games dataset.")
 def perform_search(
     query: SearchQuery,
     skip: int = Query(0, ge=0),

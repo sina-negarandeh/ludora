@@ -10,31 +10,33 @@ from app.services.recommendation_service import RecommendationService
 
 router = APIRouter(tags=["recommendations"])
 
+from pydantic import BaseModel, Field
+
 class RecommendationItemSchema(BaseModel):
-    game: GameResponse
-    score: float
-    reason: List[str]
+    game: GameResponse = Field(..., description="The recommended game.")
+    score: float = Field(..., description="The recommendation score.")
+    reason: List[str] = Field(..., description="Reasons for this recommendation.")
 
 class RecommendationResponseSchema(BaseModel):
-    source_game: GameResponse
-    model: str
-    recommendations: List[RecommendationItemSchema]
+    source_game: GameResponse = Field(..., description="The game the recommendations are based on.")
+    model: str = Field(..., description="The ID of the model used.")
+    recommendations: List[RecommendationItemSchema] = Field(..., description="List of recommended games.")
 
 class RecommendationModelSchema(BaseModel):
-    id: str
-    family: str
-    name: str
-    description: str
+    id: str = Field(..., description="The internal ID of the model.")
+    family: str = Field(..., description="The algorithmic family (e.g. 'collaborative', 'content').")
+    name: str = Field(..., description="Human-readable name of the model.")
+    description: str = Field(..., description="Detailed description of how the model works.")
 
 class ModelsResponseSchema(BaseModel):
-    models: List[RecommendationModelSchema]
+    models: List[RecommendationModelSchema] = Field(..., description="List of available recommendation models.")
 
-@router.get("/recommendation-models", response_model=ModelsResponseSchema)
+@router.get("/recommendation-models", response_model=ModelsResponseSchema, summary="Get Recommendation Models", description="Retrieve a list of all available recommendation models and algorithms.")
 def get_models(db: Session = Depends(get_db)):
     service = RecommendationService(db)
     return {"models": service.get_recommendation_models()}
 
-@router.get("/games/{game_id}/recommendations", response_model=RecommendationResponseSchema)
+@router.get("/games/{game_id}/recommendations", response_model=RecommendationResponseSchema, summary="Get Game Recommendations", description="Fetch personalized recommendations for a specific game based on the selected algorithmic model.")
 def get_recommendations(
     game_id: int, 
     model: str = Query("hybrid", description="Recommendation model to use"),

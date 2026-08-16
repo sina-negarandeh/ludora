@@ -11,7 +11,7 @@ from app.services.aspect_service import AspectService, AspectAggregateResponse
 
 router = APIRouter()
 
-@router.get("/", response_model=PaginatedGames)
+@router.get("/", response_model=PaginatedGames, summary="Search and Filter Games", description="Retrieve a paginated list of board games. Supports lexical search via the 'query' parameter, filtering by categories, mechanics, themes, player counts, and weight. Allows sorting by rank, rating, and other metrics.")
 def get_games(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
@@ -49,12 +49,12 @@ def get_games(
 class CompareRequest(BaseModel):
     game_ids: List[int]
 
-@router.post("/compare", response_model=List[GameResponse])
+@router.post("/compare", response_model=List[GameResponse], summary="Compare Board Games", description="Retrieve detailed information for a specific list of games to power side-by-side comparisons.")
 def compare_games(request: CompareRequest, db: Session = Depends(get_db)):
     service = GameService(db)
     return service.compare_games(request.game_ids)
 
-@router.get("/{bgg_id}", response_model=GameResponse)
+@router.get("/{bgg_id}", response_model=GameResponse, summary="Get Game Details", description="Fetch comprehensive metadata, including LLM-generated community consensus summaries, for a single board game by its BoardGameGeek ID.")
 def get_game(bgg_id: int, db: Session = Depends(get_db)):
     game = GameService(db).get_game(bgg_id)
     if not game:
@@ -67,7 +67,7 @@ def get_game(bgg_id: int, db: Session = Depends(get_db)):
         
     return game
 
-@router.get("/{bgg_id}/reviews", response_model=PaginatedReviews)
+@router.get("/{bgg_id}/reviews", response_model=PaginatedReviews, summary="Get Game Reviews", description="Fetch paginated user reviews for a specific game. Includes breakdown statistics for languages and star ratings.")
 def get_game_reviews(
     bgg_id: int, 
     page: int = Query(1, ge=1), 
@@ -100,6 +100,6 @@ class AspectAggregateResponse(BaseModel):
     mean_sentiment: float
     evidence_samples: List[str]
 
-@router.get("/{game_id}/aspects", response_model=List[AspectAggregateResponse])
+@router.get("/{game_id}/aspects", response_model=List[AspectAggregateResponse], summary="Get Aspect-Based Sentiment Analysis", description="Retrieve the aggregated positive/negative community sentiment towards specific game aspects (e.g., 'Rulebook', 'Downtime') extracted via zero-shot DeBERTa classification.")
 def get_game_aspects(game_id: int, db: Session = Depends(get_db)):
     return AspectService(db).get_game_aspects(game_id)
