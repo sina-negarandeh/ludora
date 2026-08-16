@@ -85,7 +85,7 @@ def get_game_reviews(
     # We want to show comments first if possible, or order by newest, or rating?
     # Let's order by those with comments first, then by date descending.
     reviews = db.query(Review).filter(Review.game_id == bgg_id)\
-        .order_by(Review.comment.is_(None), Review.created_at.desc().nullslast(), Review.rating.desc().nullslast())\
+        .order_by(Review.comment.is_(None), Review.created_at.desc().nullslast(), Review.rating.desc().nullslast(), Review.id.desc())\
         .offset(skip).limit(page_size).all()
         
     items = []

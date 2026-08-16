@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import DOMPurify from 'dompurify';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { fetchGame, fetchRecommendations, fetchReviews } from '../api/games';
 import type { Game } from '../api/games';
 import { GameCard } from '../components/GameCard';
@@ -760,10 +760,10 @@ const GameReviews: React.FC<{ game: Game }> = ({ game }) => {
   const [page, setPage] = useState(1);
   const pageSize = 4;
   
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError, error, isPlaceholderData } = useQuery({
     queryKey: ['reviews', game.bgg_id, page],
     queryFn: () => fetchReviews(game.bgg_id, page, pageSize),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   });
 
   if (!game.num_comments && !game.num_ratings) return null;
@@ -790,7 +790,7 @@ const GameReviews: React.FC<{ game: Game }> = ({ game }) => {
       ) : data?.items?.length === 0 ? (
         <div className="text-secondary-text">No reviews available for this game.</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 transition-opacity duration-300 ${isPlaceholderData ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
           {data?.items.map(review => (
             <ReviewCard key={review.id} review={review} />
           ))}
