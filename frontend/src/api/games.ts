@@ -30,6 +30,19 @@ export interface Game {
   artists: string[];
 }
 
+export interface Review {
+  id: number;
+  user: string;
+  rating?: number;
+  comment?: string;
+  created_at?: string;
+}
+
+export interface PaginatedReviews {
+  total: number;
+  items: Review[];
+}
+
 export interface PaginatedGames {
   total: number;
   items: Game[];
@@ -178,6 +191,18 @@ export const fetchRecommendations = async (
   const { data } = await apiClient.get<RecommendationResponse>(
     `/api/games/${bgg_id}/recommendations`,
     { params: { model, limit } }
+  );
+  return data;
+};
+
+export const fetchReviews = async (
+  bgg_id: number,
+  page: number = 1,
+  page_size: number = 10
+): Promise<PaginatedReviews> => {
+  const { data } = await apiClient.get<PaginatedReviews>(
+    `/api/games/${bgg_id}/reviews`,
+    { params: { page, page_size } }
   );
   return data;
 };

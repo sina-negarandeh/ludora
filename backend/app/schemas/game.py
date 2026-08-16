@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Any
+from datetime import datetime
 
 class ThemeMetadata(BaseModel):
     id: int
@@ -49,3 +50,14 @@ class GameResponse(GameBase):
 class PaginatedGames(BaseModel):
     total: int
     items: List[GameResponse]
+
+class ReviewResponse(BaseModel):
+    id: int
+    user: str
+    rating: Optional[float] = None
+    comment: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+class PaginatedReviews(BaseModel):
+    total: int
+    items: List[ReviewResponse]

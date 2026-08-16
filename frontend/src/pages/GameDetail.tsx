@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import { useQuery } from '@tanstack/react-query';
-import { fetchGame, fetchRecommendations } from '../api/games';
+import { fetchGame, fetchRecommendations, fetchReviews } from '../api/games';
 import type { Game } from '../api/games';
 import { GameCard } from '../components/GameCard';
 import { StarIcon, ClockIcon, UserGroupIcon, AcademicCapIcon, TrophyIcon, UserIcon, ArrowLeftIcon, HandThumbUpIcon } from '@heroicons/react/24/solid';
@@ -715,6 +715,114 @@ const GameRecommendations: React.FC<{ bgg_id: number }> = ({ bgg_id }) => {
   );
 };
 
+const ReviewCard: React.FC<{ review: Review }> = ({ review }) => {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = review.comment && review.comment.length > 200;
+
+  return (
+    <div className="bg-white border border-stone-100 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] p-5 rounded-2xl flex flex-col transition-all hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.08)]">
+      <div className="flex justify-between items-start mb-3">
+        <div className="flex flex-col">
+          <span className="font-bold text-text text-sm">{review.user}</span>
+          {review.created_at && (
+            <span className="text-[11px] font-medium text-secondary-text/80 uppercase tracking-wider mt-0.5">
+              {new Date(review.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+            </span>
+          )}
+        </div>
+        {review.rating !== null && review.rating !== undefined && (
+          <div className="flex items-center gap-1">
+            <StarIcon className="w-4 h-4 text-[#FFB400]" />
+            <span className="font-bold text-text text-sm">{review.rating}/10</span>
+          </div>
+        )}
+      </div>
+      {review.comment && (
+        <div className="flex-1 flex flex-col mt-1">
+          <p className={`text-secondary-text text-sm leading-relaxed whitespace-pre-wrap ${!expanded ? 'line-clamp-4' : ''}`}>
+            {review.comment}
+          </p>
+          {isLong && (
+            <button 
+              onClick={() => setExpanded(!expanded)}
+              className="text-primary text-xs font-bold self-start mt-2 hover:underline transition-colors"
+            >
+              {expanded ? 'Show less' : 'Read more'}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const GameReviews: React.FC<{ game: Game }> = ({ game }) => {
+  const [page, setPage] = useState(1);
+  const pageSize = 4;
+  
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['reviews', game.bgg_id, page],
+    queryFn: () => fetchReviews(game.bgg_id, page, pageSize),
+    keepPreviousData: true,
+  });
+
+  if (!game.num_comments && !game.num_ratings) return null;
+
+  return (
+    <div className="mt-24 border-t border-neutral/20 pt-16">
+      <div className="flex justify-between items-baseline mb-8">
+        <h2 className="text-4xl font-serif text-text">Reviews</h2>
+        {data?.total !== undefined && (
+          <span className="text-lg font-bold text-secondary-text">
+            {data.total.toLocaleString()} Reviews
+          </span>
+        )}
+      </div>
+
+      {isLoading && page === 1 ? (
+        <div className="space-y-6 animate-pulse">
+           {[1, 2, 3].map(i => (
+             <div key={i} className="bg-surface border border-neutral/20 p-6 rounded-2xl h-32" />
+           ))}
+        </div>
+      ) : isError ? (
+        <div className="text-secondary-text">Failed to load reviews.</div>
+      ) : data?.items?.length === 0 ? (
+        <div className="text-secondary-text">No reviews available for this game.</div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {data?.items.map(review => (
+            <ReviewCard key={review.id} review={review} />
+          ))}
+
+          {/* Pagination Controls */}
+          {data?.total !== undefined && data.total > pageSize && (
+            <div className="col-span-1 md:col-span-2 flex justify-center items-center gap-4 mt-6 pt-4">
+              <button
+                disabled={page === 1}
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                className="px-4 py-2 bg-white border border-stone-200 rounded-full text-xs font-bold text-text disabled:opacity-30 hover:bg-neutral/5 transition-colors shadow-sm"
+              >
+                Previous
+              </button>
+              <span className="text-xs font-medium text-secondary-text tracking-wider uppercase">
+                Page {page} of {Math.ceil(data.total / pageSize)}
+              </span>
+              <button
+                disabled={page >= Math.ceil(data.total / pageSize)}
+                onClick={() => setPage(p => p + 1)}
+                className="px-4 py-2 bg-white border border-stone-200 rounded-full text-xs font-bold text-text disabled:opacity-30 hover:bg-neutral/5 transition-colors shadow-sm"
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const GameDetail: React.FC = () => {
   const { bgg_id } = useParams<{ bgg_id: string }>();
   const [game, setGame] = useState<Game | null>(null);
@@ -939,8 +1047,8 @@ export const GameDetail: React.FC = () => {
         </div>
       </div>
 
-      {/* Recommendations */}
-      <GameRecommendations bgg_id={game.bgg_id} />
+      {/* Game Distributions (Stats) */}
+      <GameDistributions game={game} />
 
       {/* Rankings */}
       <GameRankings game={game} />
@@ -948,8 +1056,11 @@ export const GameDetail: React.FC = () => {
       {/* User Ratings */}
       <UserRatings game={game} />
 
-      {/* Game Distributions */}
-      <GameDistributions game={game} />
+      {/* Reviews */}
+      <GameReviews game={game} />
+
+      {/* Recommendations (Similar Games) */}
+      <GameRecommendations bgg_id={game.bgg_id} />
     </div>
   );
 };
