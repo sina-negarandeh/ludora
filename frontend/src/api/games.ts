@@ -98,7 +98,7 @@ export const fetchGame = async (bgg_id: number): Promise<Game> => {
 };
 
 export const fetchCategories = async (): Promise<string[]> => {
-  const { data } = await apiClient.get<string[]>('/api/games/categories');
+  const { data } = await apiClient.get<string[]>('/api/categories');
   return data;
 };
 
@@ -109,22 +109,22 @@ export interface ThemeMetadata {
 }
 
 export const fetchThemes = async (): Promise<ThemeMetadata[]> => {
-  const { data } = await apiClient.get<ThemeMetadata[]>('/api/games/themes');
+  const { data } = await apiClient.get<ThemeMetadata[]>('/api/themes');
   return data;
 };
 
 export const fetchMechanics = async (): Promise<string[]> => {
-  const { data } = await apiClient.get<string[]>('/api/games/mechanics');
+  const { data } = await apiClient.get<string[]>('/api/mechanics');
   return data;
 };
 
 export const fetchDesigners = async (): Promise<string[]> => {
-  const { data } = await apiClient.get<string[]>('/api/games/designers');
+  const { data } = await apiClient.get<string[]>('/api/designers');
   return data;
 };
 
 export const fetchPublishers = async (): Promise<string[]> => {
-  const { data } = await apiClient.get<string[]>('/api/games/publishers');
+  const { data } = await apiClient.get<string[]>('/api/publishers');
   return data;
 };
 

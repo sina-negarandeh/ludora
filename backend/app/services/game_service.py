@@ -3,7 +3,7 @@ from sqlalchemy import func
 from typing import Tuple, List, Optional
 from app.database.models import Game, Category, Theme, Mechanic, Designer, Publisher
 
-class GameQueryService:
+class GameService:
     def __init__(self, db: Session):
         self.db = db
 
@@ -79,26 +79,11 @@ class GameQueryService:
 
         return total, games
 
-    def get_categories(self) -> List[str]:
-        return [c[0] for c in self.db.query(Category.name).order_by(Category.name).all()]
-
-    def get_mechanics(self) -> List[str]:
-        return [m[0] for m in self.db.query(Mechanic.name).order_by(Mechanic.name).all()]
-
-    def get_designers(self) -> List[str]:
-        return [d[0] for d in self.db.query(Designer.name).order_by(Designer.name).all()]
-
-    def get_publishers(self) -> List[str]:
-        return [p[0] for p in self.db.query(Publisher.name).order_by(Publisher.name).all()]
-
-    def get_themes(self) -> List[dict]:
-        from app.database.models import GameTheme
-        themes = self.db.query(
-            Theme.id, 
-            Theme.name, 
-            func.count(GameTheme.game_id).label("game_count")
-        ).join(GameTheme, Theme.id == GameTheme.theme_id)\
-         .group_by(Theme.id)\
-         .order_by(Theme.name).all()
+    def get_game(self, bgg_id: int) -> Optional[Game]:
+        return self.db.query(Game).filter(Game.bgg_id == bgg_id).first()
         
-        return [{"id": t.id, "name": t.name, "game_count": t.game_count} for t in themes]
+    def compare_games(self, game_ids: List[int]) -> List[Game]:
+        games = self.db.query(Game).filter(Game.bgg_id.in_(game_ids)).all()
+        # Ensure the order matches the requested game_ids
+        game_map = {g.bgg_id: g for g in games}
+        return [game_map[gid] for gid in game_ids if gid in game_map]
