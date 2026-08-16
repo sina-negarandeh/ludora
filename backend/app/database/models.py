@@ -100,13 +100,13 @@ class Game(Base):
     embedding_updated_at = Column(DateTime)
     search_vector = Column(TSVECTOR)
 
-    # Relationships
-    categories = relationship("Category", secondary="game_categories")
-    themes = relationship("Theme", secondary="game_themes")
-    mechanics = relationship("Mechanic", secondary="game_mechanics")
-    designers = relationship("Designer", secondary="game_designers")
-    publishers = relationship("Publisher", secondary="game_publishers")
-    artists = relationship("Artist", secondary="game_artists")
+    # Relationships (Using selectin to prevent N+1 query performance issues)
+    categories = relationship("Category", secondary="game_categories", lazy="selectin")
+    themes = relationship("Theme", secondary="game_themes", lazy="selectin")
+    mechanics = relationship("Mechanic", secondary="game_mechanics", lazy="selectin")
+    designers = relationship("Designer", secondary="game_designers", lazy="selectin")
+    publishers = relationship("Publisher", secondary="game_publishers", lazy="selectin")
+    artists = relationship("Artist", secondary="game_artists", lazy="selectin")
 
 class GameRecommendation(Base):
     __tablename__ = "game_recommendations"
@@ -120,7 +120,7 @@ class GameRecommendation(Base):
     
     # Relationships
     game = relationship("Game", foreign_keys=[game_id])
-    recommended_game = relationship("Game", foreign_keys=[recommended_game_id])
+    recommended_game = relationship("Game", foreign_keys=[recommended_game_id], lazy="selectin")
 
 # --- Interactions & Users ---
 
@@ -182,7 +182,7 @@ class Review(Base):
     language = Column(String(10), index=True)
     created_at = Column(DateTime, nullable=True)
     
-    user = relationship("User", backref="reviews")
+    user = relationship("User", backref="reviews", lazy="selectin")
     game = relationship("Game", backref="reviews")
 
 class GameSummary(Base):
