@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GamesList } from './pages/GamesList';
 import { GameDetail } from './pages/GameDetail';
+import { AssistantDrawer } from './components/AssistantDrawer';
 
 const queryClient = new QueryClient();
 
@@ -21,6 +22,7 @@ function App() {
             <Route path="/games/:bgg_id" element={<GameDetail />} />
           </Routes>
         </div>
+        <AssistantDrawer />
       </BrowserRouter>
     </QueryClientProvider>
   );
