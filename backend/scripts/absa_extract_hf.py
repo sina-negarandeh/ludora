@@ -75,39 +75,56 @@ def extract_sentence(text_val, aspect):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--limit', type=int, default=20, help='Number of eligible reviews to process')
-    parser.add_argument('--game_id', type=int, default=224517, help='BGG ID for the game to test (default: Brass Birmingham)')
+    parser.add_argument('--limit', type=int, default=20, help='Number of eligible reviews to process per game')
+    parser.add_argument('--game_id', type=int, default=None, help='BGG ID for the game to test. If omitted and --sampled is used, it will process all games in the cache.')
+    parser.add_argument('--sampled', action='store_true', help='Use the stratified sample cache if available')
     args = parser.parse_args()
     
     base_dir = os.path.dirname(__file__)
-    ft_model_path = os.path.join(base_dir, '../../data/models/lid.176.ftz')
-    os.makedirs(os.path.dirname(ft_model_path), exist_ok=True)
-    download_fasttext_model(ft_model_path)
-    
-    print("Loading fastText model for quality filtering...")
-    ft_model = fasttext.load_model(ft_model_path)
     
     db = SessionLocal()
     
-    print(f"Fetching reviews for Game ID {args.game_id}...")
-    # Fetch all reviews for this game and filter locally
-    reviews = db.query(Review).filter(Review.game_id == args.game_id).yield_per(1000)
+    games_to_process = []
+    sampled_cache = {}
     
-    eligible_reviews = []
-    for r in reviews:
-        if r.comment:
-            q_score = compute_quality_score(r.comment, ft_model)
-            if q_score >= 0.6:
-                eligible_reviews.append(r)
-                if len(eligible_reviews) >= args.limit:
-                    break
-                    
-    print(f"Found {len(eligible_reviews)} highly eligible reviews out of limit {args.limit}.")
-    if not eligible_reviews:
-        print("No eligible reviews found.")
-        return
+    if args.sampled:
+        import json
+        cache_path = os.path.join(base_dir, '../../data/stratified_samples.json')
+        if os.path.exists(cache_path):
+            with open(cache_path, 'r') as f:
+                sampled_cache = json.load(f)
+                
+            if args.game_id:
+                if str(args.game_id) in sampled_cache:
+                    games_to_process = [args.game_id]
+                else:
+                    print(f"Game {args.game_id} not found in sample cache.")
+                    return
+            else:
+                games_to_process = [int(k) for k in sampled_cache.keys()]
+        else:
+            print(f"Stratified sample cache not found at {cache_path}. Falling back to default behavior.")
+            args.sampled = False
+            if not args.game_id:
+                games_to_process = [224517] # default Brass
+            else:
+                games_to_process = [args.game_id]
+    else:
+        if not args.game_id:
+            games_to_process = [224517] # default Brass
+        else:
+            games_to_process = [args.game_id]
+            
+    if not args.sampled:
+        ft_model_path = os.path.join(base_dir, '../../data/models/lid.176.ftz')
+        os.makedirs(os.path.dirname(ft_model_path), exist_ok=True)
+        download_fasttext_model(ft_model_path)
+        
+        print("Loading fastText model for quality filtering...")
+        global ft_model # needed if we refactor, but keeping it simple
+        ft_model = fasttext.load_model(ft_model_path)
 
-    # Load HF Model
+    # Load HF Model once
     device = torch.device("mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu"))
     print(f"Loading DeBERTa ABSA model on device: {device} ...")
     
@@ -116,70 +133,100 @@ def main():
     model = AutoModelForSequenceClassification.from_pretrained(model_name).to(device)
     model.eval()
 
-    # The mapping is usually: 0: Negative, 1: Neutral, 2: Positive
     label_map = {0: "negative", 1: "neutral", 2: "positive"}
 
-    print("\nStarting extraction...")
     total_aspects_found = 0
     start_time = time.time()
-    
-    with torch.no_grad():
-        for r in eligible_reviews:
-            text_val = r.comment
+
+    # Load processed games to avoid repeating work
+    processed_games = [r[0] for r in db.execute(text("SELECT DISTINCT game_id FROM review_aspects")).fetchall()]
+
+    for game_id in games_to_process:
+        if game_id in processed_games:
+            print(f"Skipping Game ID {game_id} (already processed)...")
+            continue
             
-            # Create a batch for all 22 aspects
-            texts = [text_val] * len(TAXONOMY)
-            aspects = TAXONOMY
+        print(f"\nProcessing Game ID {game_id}...")
+        eligible_reviews = []
+        
+        if args.sampled:
+            sampled_ids = sampled_cache.get(str(game_id), [])
+            if sampled_ids:
+                print(f"Using {len(sampled_ids)} sampled reviews from cache for game {game_id}.")
+                eligible_reviews = db.query(Review).filter(Review.id.in_(sampled_ids)).all()
+        else:
+            reviews = db.query(Review).filter(Review.game_id == game_id).yield_per(1000)
+            for r in reviews:
+                if r.comment:
+                    q_score = compute_quality_score(r.comment, ft_model)
+                    if q_score >= 0.6:
+                        eligible_reviews.append(r)
+                        if len(eligible_reviews) >= args.limit:
+                            break
+            print(f"Found {len(eligible_reviews)} highly eligible reviews out of limit {args.limit}.")
             
-            inputs = tokenizer(texts, aspects, return_tensors="pt", padding=True, truncation=True, max_length=512).to(device)
-            outputs = model(**inputs)
-            probs = torch.softmax(outputs.logits, dim=1)
+        if not eligible_reviews:
+            print(f"No eligible reviews found for game {game_id}.")
+            continue
             
-            batch_params = []
-            
-            for i, aspect in enumerate(TAXONOMY):
-                prob_neg = probs[i][0].item()
-                prob_neu = probs[i][1].item()
-                prob_pos = probs[i][2].item()
+        with torch.no_grad():
+            for r in eligible_reviews:
+                text_val = r.comment
                 
-                # Determine winner
-                winner_idx = probs[i].argmax().item()
-                winner_label = label_map.get(winner_idx, "neutral")
-                winner_prob = probs[i][winner_idx].item()
+                batch_params = []
+                BATCH_SIZE = 11
                 
-                # We only want to save positive or negative
-                if winner_label in ["positive", "negative"] and winner_prob > 0.5:
-                    # Is the aspect actually mentioned in the text?
-                    # HF ABSA sometimes predicts strongly even if the aspect is implicitly mentioned.
-                    # We will enforce explicit mention to avoid hallucination, or we can rely on sentence extraction.
-                    evidence = extract_sentence(text_val, aspect)
-                    if not evidence:
-                        continue # If the word isn't explicitly there, we drop it to maintain quality.
+                # Process the 22 aspects in small chunks to avoid Out-Of-Memory (OOM) crashes
+                for chunk_start in range(0, len(TAXONOMY), BATCH_SIZE):
+                    aspect_chunk = TAXONOMY[chunk_start:chunk_start + BATCH_SIZE]
+                    texts_chunk = [text_val] * len(aspect_chunk)
+                    
+                    inputs = tokenizer(texts_chunk, aspect_chunk, return_tensors="pt", padding=True, truncation=True, max_length=256).to(device)
+                    outputs = model(**inputs)
+                    probs_chunk = torch.softmax(outputs.logits, dim=1)
+                    
+                    for idx, aspect in enumerate(aspect_chunk):
+                        prob_neg = probs_chunk[idx][0].item()
+                        prob_neu = probs_chunk[idx][1].item()
+                        prob_pos = probs_chunk[idx][2].item()
                         
-                    sentiment_score = prob_pos - prob_neg
+                        # Determine winner
+                        winner_idx = probs_chunk[idx].argmax().item()
+                        winner_label = label_map.get(winner_idx, "neutral")
+                        winner_prob = probs_chunk[idx][winner_idx].item()
+                        
+                        # We only want to save positive or negative
+                        if winner_label in ["positive", "negative"] and winner_prob > 0.5:
+                            evidence = extract_sentence(text_val, aspect)
+                            if not evidence:
+                                continue 
+                                
+                            sentiment_score = prob_pos - prob_neg
+                            
+                            batch_params.append({
+                                "game_id": r.game_id,
+                                "aspect": aspect,
+                                "sentiment": winner_label,
+                                "sentiment_score": sentiment_score,
+                                "confidence": winner_prob,
+                                "evidence": evidence,
+                                "model_used": "deberta-v3-large-absa",
+                                "prompt_version": "hf_zero_shot",
+                                "extracted_at": datetime.utcnow()
+                            })
+                        
+                if batch_params:
+                    db.execute(text("""
+                        INSERT INTO review_aspects (game_id, aspect, sentiment, sentiment_score, confidence, evidence, model_used, prompt_version, extracted_at)
+                        VALUES (:game_id, :aspect, :sentiment, :sentiment_score, :confidence, :evidence, :model_used, :prompt_version, :extracted_at)
+                    """), batch_params)
+                    db.commit()
+                    total_aspects_found += len(batch_params)
                     
-                    batch_params.append({
-                        "game_id": r.game_id,
-                        "aspect": aspect,
-                        "sentiment": winner_label,
-                        "sentiment_score": sentiment_score,
-                        "confidence": winner_prob,
-                        "evidence": evidence,
-                        "model_used": "deberta-v3-large-absa",
-                        "prompt_version": "hf_zero_shot",
-                        "extracted_at": datetime.utcnow()
-                    })
-                    
-            if batch_params:
-                db.execute(text("""
-                    INSERT INTO review_aspects (game_id, aspect, sentiment, sentiment_score, confidence, evidence, model_used, prompt_version, extracted_at)
-                    VALUES (:game_id, :aspect, :sentiment, :sentiment_score, :confidence, :evidence, :model_used, :prompt_version, :extracted_at)
-                """), batch_params)
-                db.commit()
-                total_aspects_found += len(batch_params)
-                
     elapsed = time.time() - start_time
-    time_per_review = elapsed / len(eligible_reviews)
+    total_reviews_processed = sum([len(sampled_cache.get(str(g), [])) if args.sampled else args.limit for g in games_to_process])
+    if total_reviews_processed == 0: total_reviews_processed = 1
+    time_per_review = elapsed / total_reviews_processed
     
     print("\n--- Extraction Complete ---")
     print(f"Processed {len(eligible_reviews)} reviews in {elapsed:.2f} seconds.")
