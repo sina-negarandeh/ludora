@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useChatMutation } from '../api/assistant';
+import { useChatMutation, type AssistantData } from '../api/assistant';
 import { AssistantMessageBubble } from './AssistantMessageBubble';
 import { ChatBubbleLeftRightIcon, XMarkIcon, PaperAirplaneIcon, SparklesIcon } from '@heroicons/react/24/solid';
 

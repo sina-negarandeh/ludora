@@ -463,7 +463,7 @@ const UserRatings: React.FC<{ game: Game }> = ({ game }) => {
                 </div>
               </div>
               <span className="block text-secondary-text font-medium text-xs mt-3 w-full text-center md:text-left">
-                Based on {game.num_ratings.toLocaleString()} total reviews
+                Based on {game.num_ratings.toLocaleString()} total ratings
               </span>
             </div>
 
@@ -989,8 +989,8 @@ const CommunityConsensus = ({ gameId, summary }: { gameId: number, summary?: str
         const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
         const response = await axios.get(`${baseUrl}/api/games/${gameId}/aspects`);
         setAspects(response.data);
-      } catch (error) {
-        console.error("Failed to fetch community consensus:", error);
+      } catch (err) {
+        console.error("Failed to fetch ABSA stats:", err);
       } finally {
         setLoading(false);
       }

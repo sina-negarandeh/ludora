@@ -74,7 +74,7 @@ export const GamesList: React.FC = () => {
     placeholderData: keepPreviousData,
   });
 
-  const handleFilterChange = (key: keyof GameQuery, value: any) => {
+  const handleFilterChange = (key: keyof GameQuery, value: string | number | string[] | undefined) => {
     setQuery(prev => {
       const newQuery = { ...prev, skip: 0 };
       if (value === '' || value === undefined || (typeof value === 'number' && isNaN(value)) || (Array.isArray(value) && value.length === 0)) {
@@ -659,7 +659,7 @@ export const GamesList: React.FC = () => {
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
-              {data?.items.map((item: any) => {
+              {data?.items.map((item: Game | any) => {
                 const gameObj = item.game || item;
                 return <GameCard key={gameObj.bgg_id} game={gameObj} />;
               })}

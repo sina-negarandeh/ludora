@@ -1,11 +1,27 @@
 import { useMutation } from '@tanstack/react-query';
 
+import type { Game, GameQuery } from './games';
+
+export interface ClarificationMatch {
+  id: number;
+  name: string;
+  year: number;
+}
+
+export interface AssistantData {
+  games?: Game[];
+  results?: { game: Game }[];
+  recommendations?: { game: Game; reason: string[] }[];
+  ambiguous_matches?: ClarificationMatch[];
+  game?: Game;
+}
+
 export interface ParsedIntent {
   intent: string;
   query?: string;
   game_name?: string;
   game_names?: string[];
-  filters?: any;
+  filters?: GameQuery;
   needs_clarification?: boolean;
   clarification_question?: string;
 }
@@ -14,7 +30,7 @@ export interface AssistantResponse {
   message: string;
   type: string; // 'search_results', 'recommendations', 'comparison', 'clarification', 'game_detail', 'error'
   parsed_intent: ParsedIntent;
-  data: any;
+  data?: AssistantData;
 }
 
 export interface ChatRequest {
