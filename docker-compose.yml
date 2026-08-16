@@ -24,6 +24,7 @@ services:
     container_name: ludora_backend
     environment:
       - DATABASE_URL=postgresql+psycopg://ludora:ludorapassword@db:5432/ludoradb
+      - OPENAI_BASE_URL=http://host.docker.internal:8080/v1
     ports:
       - "8000:8000"
     volumes:

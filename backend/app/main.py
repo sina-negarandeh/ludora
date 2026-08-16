@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import games, search, recommendations, metadata
+from app.api.routes import games, search, recommendations, metadata, assistant
 
 app = FastAPI(title="Ludora API", version="0.1.0")
 
@@ -17,6 +17,7 @@ app.include_router(games.router, prefix="/api/games", tags=["games"])
 app.include_router(search.router, prefix="/api/search", tags=["search"])
 app.include_router(metadata.router, prefix="/api", tags=["metadata"])
 app.include_router(recommendations.router, prefix="/api", tags=["recommendations"])
+app.include_router(assistant.router, prefix="/api/assistant", tags=["assistant"])
 @app.get("/health")
 def health_check():
     return {"status": "ok"}

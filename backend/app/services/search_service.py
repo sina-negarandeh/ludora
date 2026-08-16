@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from app.database.models import Game, Category, Mechanic
+from app.database.models import Game, Category, Mechanic, Theme
 from app.schemas.search import SearchQuery, PaginatedSearchResults, SearchResult, SearchDebug
 from app.schemas.game_query import GameFilter
 from typing import Dict, List
@@ -26,10 +26,18 @@ def apply_game_filters(query, filters: GameFilter):
         query = query.filter(Game.game_weight >= filters.min_weight)
     if filters.max_weight is not None:
         query = query.filter(Game.game_weight <= filters.max_weight)
+        
+    if filters.min_year is not None:
+        query = query.filter(Game.year_published >= filters.min_year)
+    if filters.max_year is not None:
+        query = query.filter(Game.year_published <= filters.max_year)
 
     if filters.categories:
         for cat in filters.categories:
             query = query.filter(Game.categories.any(Category.name == cat))
+    if filters.themes:
+        for theme in filters.themes:
+            query = query.filter(Game.themes.any(Theme.name == theme))
     if filters.mechanics:
         for mech in filters.mechanics:
             query = query.filter(Game.mechanics.any(Mechanic.name == mech))

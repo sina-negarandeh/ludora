@@ -10,3 +10,5 @@ class GameFilter(BaseModel):
     max_players: Optional[int] = None
     min_weight: Optional[float] = None
     max_weight: Optional[float] = None
+    min_year: Optional[int] = None
+    max_year: Optional[int] = None

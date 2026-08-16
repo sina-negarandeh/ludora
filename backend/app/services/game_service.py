@@ -21,7 +21,9 @@ class GameService:
         min_players: Optional[int] = None,
         max_players: Optional[int] = None,
         min_weight: Optional[float] = None,
-        max_weight: Optional[float] = None
+        max_weight: Optional[float] = None,
+        min_year: Optional[int] = None,
+        max_year: Optional[int] = None
     ) -> Tuple[int, List[Game]]:
         
         query = self.db.query(Game)
@@ -42,6 +44,11 @@ class GameService:
             query = query.filter(Game.game_weight >= min_weight)
         if max_weight is not None:
             query = query.filter(Game.game_weight <= max_weight)
+            
+        if min_year is not None:
+            query = query.filter(Game.year_published >= min_year)
+        if max_year is not None:
+            query = query.filter(Game.year_published <= max_year)
 
         # Joins (Multi-select AND matching)
         if categories:
