@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+import pickle
+import os
 from scipy.sparse import csr_matrix
 from sklearn.decomposition import TruncatedSVD
 from sklearn.metrics.pairwise import cosine_similarity
@@ -71,3 +73,24 @@ class SVDRecommender(BaseRecommender):
 
     def get_model_name(self) -> str:
         return 'cf_svd'
+
+    def save(self, filepath: str) -> None:
+        if self.item_embeddings is None:
+            raise ValueError("Cannot save an unfitted model.")
+        with open(filepath, 'wb') as f:
+            pickle.dump({
+                'n_factors': self.n_factors,
+                'item_embeddings': self.item_embeddings,
+                'item_idx_to_id': self.item_idx_to_id,
+                'item_id_to_idx': self.item_id_to_idx
+            }, f)
+
+    def load(self, filepath: str) -> None:
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"Model file {filepath} not found.")
+        with open(filepath, 'rb') as f:
+            data = pickle.load(f)
+            self.n_factors = data['n_factors']
+            self.item_embeddings = data['item_embeddings']
+            self.item_idx_to_id = data['item_idx_to_id']
+            self.item_id_to_idx = data['item_id_to_idx']

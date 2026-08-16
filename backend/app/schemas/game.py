@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Dict
 from datetime import datetime
 
 class ThemeMetadata(BaseModel):
@@ -60,4 +60,6 @@ class ReviewResponse(BaseModel):
 
 class PaginatedReviews(BaseModel):
     total: int
+    language_breakdown: Optional[Dict[str, float]] = None
+    rating_breakdown: Optional[Dict[str, float]] = None
     items: List[ReviewResponse]

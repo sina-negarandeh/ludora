@@ -1,11 +1,12 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import axios from 'axios';
 import { fetchGame, fetchRecommendations, fetchReviews } from '../api/games';
 import type { Game } from '../api/games';
 import { GameCard } from '../components/GameCard';
-import { StarIcon, ClockIcon, UserGroupIcon, AcademicCapIcon, TrophyIcon, UserIcon, ArrowLeftIcon, HandThumbUpIcon } from '@heroicons/react/24/solid';
+import { StarIcon, ClockIcon, UserGroupIcon, AcademicCapIcon, TrophyIcon, UserIcon, ArrowLeftIcon, HandThumbUpIcon, HandThumbDownIcon, SparklesIcon, ChatBubbleLeftRightIcon, CheckCircleIcon, XCircleIcon, MinusCircleIcon, QuestionMarkCircleIcon, LanguageIcon } from '@heroicons/react/24/solid';
 
 const CATEGORY_MAP: Record<string, string> = {
   'CGS': 'Collectible Game System',
@@ -758,25 +759,166 @@ const ReviewCard: React.FC<{ review: Review }> = ({ review }) => {
 
 const GameReviews: React.FC<{ game: Game }> = ({ game }) => {
   const [page, setPage] = useState(1);
+  const [ratingFilter, setRatingFilter] = useState<'all' | 'positive' | 'mixed' | 'negative'>('all');
+  const [languageFilter, setLanguageFilter] = useState<string>('en');
+  const [isLangOpen, setIsLangOpen] = useState(false);
+  const [isRatingOpen, setIsRatingOpen] = useState(false);
+  
+  const langRef = useRef<HTMLDivElement>(null);
+  const ratingRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (langRef.current && !langRef.current.contains(event.target as Node)) setIsLangOpen(false);
+      if (ratingRef.current && !ratingRef.current.contains(event.target as Node)) setIsRatingOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const pageSize = 4;
   
+  // Calculate min/max based on filter
+  let minRating: number | undefined;
+  let maxRating: number | undefined;
+  if (ratingFilter === 'positive') { minRating = 7; maxRating = 10; }
+  else if (ratingFilter === 'mixed') { minRating = 4; maxRating = 6.99; }
+  else if (ratingFilter === 'negative') { minRating = 0; maxRating = 3.99; }
+  
+  const language = languageFilter === 'all' ? undefined : languageFilter;
+  
   const { data, isLoading, isError, error, isPlaceholderData } = useQuery({
-    queryKey: ['reviews', game.bgg_id, page],
-    queryFn: () => fetchReviews(game.bgg_id, page, pageSize),
+    queryKey: ['reviews', game.bgg_id, page, ratingFilter, languageFilter],
+    queryFn: () => fetchReviews(game.bgg_id, page, pageSize, minRating, maxRating, language),
     placeholderData: keepPreviousData,
   });
+
+  const handleRatingChange = (filter: 'all' | 'positive' | 'mixed' | 'negative') => {
+    setRatingFilter(filter);
+    setPage(1);
+  };
+
+  const handleLanguageChange = (filter: string) => {
+    setLanguageFilter(filter);
+    setPage(1);
+  };
+
+  const languageOptions = useMemo(() => {
+    if (!data?.language_breakdown) return [{ id: 'all', label: 'All Languages', pct: undefined }];
+    
+    const languageNames = new Intl.DisplayNames(['en'], { type: 'language' });
+    
+    const langs = Object.entries(data.language_breakdown)
+      .sort((a, b) => b[1] - a[1])
+      .map(([code, pct]) => {
+        let label = code;
+        try { label = languageNames.of(code) || code; } catch (e) {}
+        return { id: code, label, pct };
+      });
+      
+    return [{ id: 'all', label: 'All Languages', pct: undefined }, ...langs];
+  }, [data?.language_breakdown]);
+
+  const currentLangLabel = languageOptions.find(o => o.id === languageFilter)?.label || 'All Languages';
+
+  const ratingOptions = useMemo(() => {
+    return [
+      { id: 'all', label: 'All Ratings', min: '', max: '', pct: 100 },
+      { id: 'positive', label: 'Positive', min: '7.0', max: '10.0', pct: data?.rating_breakdown?.positive ?? 0 },
+      { id: 'mixed', label: 'Mixed', min: '4.0', max: '6.9', pct: data?.rating_breakdown?.mixed ?? 0 },
+      { id: 'negative', label: 'Negative', min: '1.0', max: '3.9', pct: data?.rating_breakdown?.negative ?? 0 }
+    ];
+  }, [data?.rating_breakdown]);
 
   if (!game.num_comments && !game.num_ratings) return null;
 
   return (
     <div className="mt-24 border-t border-neutral/20 pt-16">
-      <div className="flex justify-between items-baseline mb-8">
-        <h2 className="text-4xl font-serif text-text">Reviews</h2>
+      <div className="flex flex-col mb-8">
+        <h2 className="text-4xl font-serif text-text mb-2">Reviews</h2>
         {data?.total !== undefined && (
           <span className="text-lg font-bold text-secondary-text">
-            {data.total.toLocaleString()} Reviews
+            {data.total.toLocaleString()} reviews
           </span>
         )}
+      </div>
+      
+      <CommunityConsensus gameId={game.bgg_id} />
+
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-6 mt-4 gap-4">
+        <div className="flex items-baseline gap-3">
+          <h3 className="text-2xl font-serif text-text">User Reviews</h3>
+        </div>
+        
+        <div className="flex flex-col sm:flex-row gap-3">
+          {/* Language Filter */}
+          <div className="relative" ref={langRef}>
+            <button 
+              onClick={() => { setIsLangOpen(!isLangOpen); setIsRatingOpen(false); }}
+              className="flex items-center justify-between w-full sm:w-auto gap-1.5 bg-surface border border-neutral/50 text-text font-bold rounded-full px-3 py-2 shadow-sm hover:border-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50 text-[13px]"
+            >
+              <LanguageIcon className="w-4 h-4 text-secondary-text mr-1" />
+              <span className="tracking-wide">{languageFilter.toUpperCase()}</span>
+              <svg className={`w-3.5 h-3.5 ml-1 transition-transform ${isLangOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {isLangOpen && (
+              <div className="absolute left-0 sm:right-0 sm:left-auto top-full mt-2 w-full sm:w-64 bg-surface border border-neutral/30 rounded-2xl shadow-xl z-50 overflow-hidden text-sm flex flex-col ring-1 ring-black/5 py-1 max-h-80 overflow-y-auto">
+                {languageOptions.map((opt) => (
+                  <button
+                    key={opt.id}
+                    onClick={() => { handleLanguageChange(opt.id); setIsLangOpen(false); }}
+                    className={`text-left px-4 py-2.5 hover:bg-neutral/5 transition-colors font-semibold flex justify-between items-center ${languageFilter === opt.id ? 'text-primary bg-primary/5' : 'text-text'}`}
+                  >
+                    <span>{opt.label}</span>
+                    {opt.pct !== undefined && (
+                      <span className="text-secondary-text text-[12px] font-medium ml-4">{opt.pct}%</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Rating Filter */}
+          <div className="relative" ref={ratingRef}>
+            <button 
+              onClick={() => { setIsRatingOpen(!isRatingOpen); setIsLangOpen(false); }}
+              className="flex items-center justify-between w-full sm:w-auto gap-1.5 bg-surface border border-neutral/50 text-text font-bold rounded-full px-3 py-2 shadow-sm hover:border-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50 text-[13px]"
+            >
+              <StarIcon className="w-4 h-4 text-secondary-text mr-1" />
+              <span className="capitalize tracking-wide">
+                {ratingFilter === 'all' ? 'All Ratings' : ratingFilter}
+              </span>
+              <svg className={`w-3.5 h-3.5 ml-1 transition-transform ${isRatingOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {isRatingOpen && (
+              <div className="absolute right-0 sm:left-auto top-full mt-2 w-full sm:w-[340px] bg-surface border border-neutral/30 rounded-2xl shadow-xl z-50 overflow-hidden text-sm flex flex-col ring-1 ring-black/5 py-2">
+                <div className="grid grid-cols-[3fr_1fr_1fr_1.5fr] gap-2 px-4 py-1.5 text-[11px] font-bold text-secondary-text uppercase tracking-wider border-b border-neutral/10 mb-1">
+                  <span>Rating</span>
+                  <span className="text-center">Min</span>
+                  <span className="text-center">Max</span>
+                  <span className="text-right">Reviews</span>
+                </div>
+                {ratingOptions.map((opt) => (
+                  <button
+                    key={opt.id}
+                    onClick={() => { handleRatingChange(opt.id as any); setIsRatingOpen(false); }}
+                    className={`grid grid-cols-[3fr_1fr_1fr_1.5fr] gap-2 items-center text-left px-4 py-2.5 hover:bg-neutral/5 transition-colors font-semibold ${ratingFilter === opt.id ? 'text-primary bg-primary/5' : 'text-text'}`}
+                  >
+                    <span>{opt.label}</span>
+                    <span className="text-center text-secondary-text">{opt.min || '-'}</span>
+                    <span className="text-center text-secondary-text">{opt.max || '-'}</span>
+                    <span className="text-right font-medium text-secondary-text">{opt.pct}%</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {isLoading && page === 1 ? (
@@ -817,6 +959,128 @@ const GameReviews: React.FC<{ game: Game }> = ({ game }) => {
               </button>
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// --- Types for ABSA ---
+interface AspectAggregate {
+  aspect: string;
+  positive_count: number;
+  negative_count: number;
+  mixed_count: number;
+  neutral_count: number;
+  total_mentions: number;
+  mean_sentiment: number;
+  evidence_samples: string[];
+}
+
+// --- ABSA Component ---
+const CommunityConsensus = ({ gameId }: { gameId: number }) => {
+  const [aspects, setAspects] = useState<AspectAggregate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAll, setShowAll] = useState(false);
+
+  useEffect(() => {
+    const fetchAspects = async () => {
+      try {
+        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const response = await axios.get(`${baseUrl}/api/games/${gameId}/aspects`);
+        setAspects(response.data);
+      } catch (error) {
+        console.error("Failed to fetch community consensus:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAspects();
+  }, [gameId]);
+
+  return (
+    <div className="mb-12">
+      <div className="mb-6">
+        <h3 className="text-2xl font-serif text-text mb-2">Community Consensus</h3>
+        <div className="flex items-center gap-2 text-sm font-medium text-secondary-text">
+          <SparklesIcon className="w-5 h-5 text-yellow-500" />
+          <span>Generated from text of user reviews</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        {(showAll ? aspects : aspects.slice(0, 6)).map((agg, idx) => {
+          // Determine sentiment class
+          const posRatio = agg.positive_count / Math.max(1, agg.total_mentions);
+          const isPositive = posRatio >= 0.5;
+          const Icon = isPositive ? HandThumbUpIcon : HandThumbDownIcon;
+
+          const gaugeRadius = 24;
+          const gaugeCircumference = 2 * Math.PI * gaugeRadius;
+          const gaugeArcLength = gaugeCircumference * 0.75;
+          const progressLength = posRatio * gaugeArcLength;
+
+          return (
+            <div key={idx} className="bg-white border border-stone-200/60 rounded-2xl p-5 shadow-sm hover:shadow-md hover:border-primary/30 transition-all relative group">
+              <div className="flex items-start gap-4 mb-3">
+                {/* Mini Gauge Chart */}
+                <div className="relative w-14 h-14 flex items-center justify-center shrink-0">
+                  <svg className="w-full h-full absolute inset-0 transform rotate-[135deg]">
+                    <circle
+                      cx="28" cy="28" r={gaugeRadius} stroke="currentColor" strokeWidth="4" fill="transparent"
+                      strokeDasharray={`${gaugeArcLength} ${gaugeCircumference}`}
+                      className="text-stone-100" strokeLinecap="round"
+                    />
+                    <circle
+                      cx="28" cy="28" r={gaugeRadius} stroke="currentColor" strokeWidth="4" fill="transparent"
+                      strokeDasharray={`${progressLength} ${gaugeCircumference}`}
+                      className={`${isPositive ? 'text-[#00C853]' : 'text-red-500'} transition-all duration-1000 ease-out`}
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center pt-0.5">
+                    <span className={`text-[13px] font-bold ${isPositive ? 'text-[#00C853]' : 'text-red-500'} leading-none`}>
+                      {Math.round(posRatio * 100)}%
+                    </span>
+                  </div>
+                  {/* Thumb Icon in the gap */}
+                  <div className="absolute left-1/2 -translate-x-1/2 top-[44px]">
+                    <Icon className={`w-[14px] h-[14px] ${isPositive ? 'text-[#00C853]' : 'text-red-500'}`} />
+                  </div>
+                </div>
+
+                <div className="flex flex-col justify-center h-14">
+                  <h3 className="font-bold text-[17px] text-text leading-tight group-hover:text-primary transition-colors">{agg.aspect}</h3>
+                  <span className="text-[11px] font-bold text-secondary-text mt-1 uppercase tracking-wider">
+                    {isPositive ? 'Positive Feedback' : 'Negative Feedback'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5 mt-2">
+                <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider pl-1.5">
+                  Based on {agg.total_mentions} {agg.total_mentions === 1 ? 'mention' : 'mentions'}
+                </div>
+                <div className="relative bg-stone-50/80 rounded-xl p-3 border border-stone-100">
+                  <ChatBubbleLeftRightIcon className="w-4 h-4 text-stone-300 absolute top-3 left-3" />
+                  <p className="text-[13px] text-text italic leading-relaxed pl-6 line-clamp-3">
+                    "{agg.evidence_samples[0] || 'Various feedback.'}"
+                  </p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {aspects.length > 6 && (
+        <div className="mt-8 flex justify-center">
+          <button
+            onClick={() => setShowAll(!showAll)}
+            className="px-6 py-2.5 bg-white border border-stone-200 rounded-full text-sm font-bold text-text hover:bg-stone-50 transition-colors shadow-sm flex items-center gap-2"
+          >
+            {showAll ? 'Show less' : `Show more consensus (${aspects.length - 6} more)`}
+          </button>
         </div>
       )}
     </div>
@@ -1056,7 +1320,7 @@ export const GameDetail: React.FC = () => {
       {/* User Ratings */}
       <UserRatings game={game} />
 
-      {/* Reviews */}
+      {/* Reviews (Includes Community Consensus) */}
       <GameReviews game={game} />
 
       {/* Recommendations (Similar Games) */}

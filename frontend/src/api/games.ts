@@ -40,6 +40,8 @@ export interface Review {
 
 export interface PaginatedReviews {
   total: number;
+  language_breakdown?: Record<string, number>;
+  rating_breakdown?: { positive: number; mixed: number; negative: number };
   items: Review[];
 }
 
@@ -198,11 +200,14 @@ export const fetchRecommendations = async (
 export const fetchReviews = async (
   bgg_id: number,
   page: number = 1,
-  page_size: number = 10
+  page_size: number = 10,
+  min_rating?: number,
+  max_rating?: number,
+  language?: string
 ): Promise<PaginatedReviews> => {
   const { data } = await apiClient.get<PaginatedReviews>(
     `/api/games/${bgg_id}/reviews`,
-    { params: { page, page_size } }
+    { params: { page, page_size, min_rating, max_rating, language } }
   );
   return data;
 };

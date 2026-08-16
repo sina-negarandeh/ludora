@@ -45,6 +45,31 @@ def get_recommendations(
             recommendations=recs
         )
 
+    # Alias frontend dummy content-based models to our new semantic embedding model
+    if model in ["embedding", "metadata", "tfidf", "hybrid"]:
+        # Semantic search on the fly via pgvector
+        if source_game.embedding is None:
+            return RecommendationResponseSchema(source_game=source_game, model="embedding", recommendations=[])
+            
+        similar_games = db.query(Game).filter(
+            Game.bgg_id != game_id,
+            Game.embedding.isnot(None)
+        ).order_by(Game.embedding.cosine_distance(source_game.embedding)).limit(limit).all()
+        
+        recs = []
+        for g in similar_games:
+            recs.append(RecommendationItemSchema(
+                game=g,
+                score=1.0, # Could compute 1 - dist but pgvector handles the ordering
+                reason=["Semantically similar based on rich metadata"]
+            ))
+            
+        return RecommendationResponseSchema(
+            source_game=source_game,
+            model="embedding",
+            recommendations=recs
+        )
+
     # Fetch from precomputed table
     db_recs = db.query(GameRecommendation).filter(
         GameRecommendation.game_id == game_id,

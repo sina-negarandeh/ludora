@@ -22,16 +22,16 @@ def calculate_ndcg(recommended_list, test_set, k):
     return dcg / idcg if idcg > 0 else 0.0
 
 def main():
-    csv_path = os.path.join(os.path.dirname(__file__), '../../data/raw/user_ratings.csv')
+    csv_path = os.path.join(os.path.dirname(__file__), '../../data/processed/master_ratings.csv')
     print(f"Loading data from {csv_path}...")
     
     # Load sample to speed up evaluation (e.g. 1M rows if large)
     df = pd.read_csv(
         csv_path, 
-        usecols=['BGGId', 'Rating', 'Username'],
-        dtype={'BGGId': 'int32', 'Rating': 'float32', 'Username': 'category'}
+        usecols=['game_id', 'rating', 'user_id'],
+        dtype={'game_id': 'int32', 'rating': 'float32', 'user_id': 'int32'}
     )
-    df.rename(columns={'BGGId': 'item', 'Rating': 'rating', 'Username': 'user'}, inplace=True)
+    df.rename(columns={'game_id': 'item', 'rating': 'rating', 'user_id': 'user'}, inplace=True)
     
     # Take a smaller sample of users for faster evaluation, or filter active users
     user_counts = df['user'].value_counts()

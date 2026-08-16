@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, JSON, Text
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, JSON, Text, func
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from pgvector.sqlalchemy import Vector
@@ -135,9 +135,42 @@ class Rating(Base):
     game_id = Column(Integer, ForeignKey("games.bgg_id", ondelete="CASCADE"), primary_key=True)
     rating = Column(Float, nullable=False)
     timestamp = Column(DateTime, nullable=True)
-    
-    user = relationship("User", backref="ratings")
     game = relationship("Game", backref="ratings")
+    user = relationship("User", backref="ratings")
+
+# --- Aspect-Based Sentiment Analysis (ABSA) ---
+
+class ReviewAspect(Base):
+    __tablename__ = "review_aspects"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    review_id = Column(Integer, index=True) # Optional link to a reviews table if one exists
+    game_id = Column(Integer, ForeignKey("games.bgg_id", ondelete="CASCADE"), index=True)
+    aspect = Column(String, nullable=False, index=True)
+    sentiment = Column(String, nullable=False) # 'positive', 'negative', 'mixed', 'neutral'
+    sentiment_score = Column(Float)
+    confidence = Column(Float)
+    evidence = Column(Text)
+    model_used = Column(String)
+    prompt_version = Column(String)
+    extracted_at = Column(DateTime, default=func.now())
+    
+    game = relationship("Game")
+
+class GameAspectAggregate(Base):
+    __tablename__ = "game_aspect_aggregates"
+    
+    game_id = Column(Integer, ForeignKey("games.bgg_id", ondelete="CASCADE"), primary_key=True)
+    aspect = Column(String, primary_key=True)
+    
+    positive_count = Column(Integer, default=0)
+    negative_count = Column(Integer, default=0)
+    mixed_count = Column(Integer, default=0)
+    neutral_count = Column(Integer, default=0)
+    total_mentions = Column(Integer, default=0)
+    mean_sentiment = Column(Float)
+    
+    game = relationship("Game")
 
 class Review(Base):
     __tablename__ = "reviews"
@@ -146,6 +179,7 @@ class Review(Base):
     game_id = Column(Integer, ForeignKey("games.bgg_id", ondelete="CASCADE"), index=True)
     rating = Column(Float)
     comment = Column(Text)
+    language = Column(String(10), index=True)
     created_at = Column(DateTime, nullable=True)
     
     user = relationship("User", backref="reviews")
