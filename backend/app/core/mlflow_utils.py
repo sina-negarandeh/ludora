@@ -7,7 +7,16 @@ filesystem tracking backend in favor of a SQLite-backed local store — this
 is still fully local and server-free, just a single `.db` file instead of a
 directory tree. Run history, params, and metrics land in `mlruns/mlflow.db`;
 artifacts land under `mlruns/artifacts/<experiment>/` (both gitignored —
-browse everything with `uv run --project backend mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db`).
+browse everything with `uv run --project backend mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db --port 5001`).
+Port 5001, not MLflow's default 5000 -- on macOS (Monterey+), port 5000 is
+bound by the system AirPlay Receiver, so `mlflow ui` on its default port
+either fails to start or gets silently shadowed by that instead.
+
+In the UI, click "Model training" (top-left, next to "GenAI") before
+looking for runs -- the default "GenAI" view only shows Traces/Sessions
+(MLflow's newer LLM-tracing API, `mlflow.trace()`), which this project
+doesn't use, so it looks empty even when "Model training" > an
+experiment > Runs shows everything logged via log_params()/log_metrics().
 """
 import json
 import os
