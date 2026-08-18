@@ -34,13 +34,13 @@ Exact dataset provenance and the category/subdomain/theme sourcing logic: [docs/
 
 ## Stage 4 — ABSA chain (sequential; each step depends on the previous one's output)
 
-1. `scripts/absa_filter.py` → `data/processed/pilot_absa_filtered.csv` (CSV-based quality filter over `master_reviews.csv`; earlier/pilot path)
-2. `scripts/generate_stratified_sample.py` → `data/stratified_samples.json` (DB-based; per-game, per-sentiment-bucket sample cache, 100 reviews × 100 top-ranked games = 10,000 review IDs)
-3. `scripts/absa_extract_hf.py --sampled` → `review_aspects` table (production 22-aspect DeBERTa zero-shot classifier, consumes the sample cache from step 2)
-4. `scripts/absa_aggregate.py` → `game_aspect_aggregates` table (`INSERT ... ON CONFLICT DO UPDATE`, grouped by `game_id, aspect`)
+1. `scripts/build_review_quality_vocab.py` → `data/review_quality_vocab_candidates.txt` (human-curation input, feeds `ABSAConfig.DOMAIN_VOCABULARY`) + `data/boilerplate_ngrams.json` (auto-applied, no curation) — one-time corpus-statistics pass, only needs rerunning if the review corpus changes substantially.
+2. `scripts/filter_eligible_reviews.py` → `reviews.is_absa_eligible`/`quality_score` columns (DB-persisted, not a JSON cache) — streams the **entire** ~4.2M-review corpus once, applies `app.core.review_quality`'s language/hard-filter/dedup/score pipeline, no per-game cap or pre-restriction to top-ranked games. Measured: 267,950 eligible.
+3. `scripts/absa_extract_hf.py` → `review_aspects` table (production 17-aspect DeBERTa zero-shot classifier, `deberta-v3-base-absa-v1.1`; reads `is_absa_eligible` directly, resumable via `reviews.absa_processed_at`; run in bounded chunks via `--minutes N` rather than one sitting — 39,484/267,950 eligible reviews attempted as of this writing)
+4. `scripts/absa_aggregate.py` → `game_aspect_aggregates` table (`INSERT ... ON CONFLICT DO UPDATE`, grouped by `game_id, aspect`; rerun after each extraction chunk so newly-processed games show up in the UI)
 5. `scripts/generate_summaries.py` → `game_summaries` table (calls the local LLM through `SummarizationService`; **hardcodes a single game, "Brass: Birmingham" — there is no batch/loop-over-all-games invocation in the repo**)
 
-`scripts/absa_extract.py` is an **earlier, abandoned** approach (Ollama + `qwen2.5:7b`, prompted JSON extraction rather than a discriminative classifier) — see [docs/ml/absa.md](../ml/absa.md) for the two-implementation history. It is not part of the current chain. `scripts/count_eligible.py`, `count_clusters.py`, and `count_stratified.py` are one-off exploration/estimation scripts that write nothing to disk or DB.
+`scripts/absa_extract.py` is an **earlier, abandoned** approach (Ollama + `qwen2.5:7b`, prompted JSON extraction rather than a discriminative classifier) — see [docs/ml/absa.md](../ml/absa.md) for the two-implementation history. It is not part of the current chain. `scripts/absa_filter.py` is a separate, earlier/pilot CSV-based quality filter (over `master_reviews.csv`, not DB-based) — frozen, not wired into the current chain, kept for historical reference. `scripts/count_eligible.py` and `count_clusters.py` are one-off exploration/estimation scripts that write nothing to disk or DB (`count_stratified.py`, a similar script for the old sampling scheme, was deleted along with `generate_stratified_sample.py`).
 
 ## Stage 5 — Recommendation precompute (each model ID independent, all require Stage 2 complete)
 

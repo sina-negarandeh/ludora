@@ -14,13 +14,16 @@ A visitor wants to scan ~28K games and narrow them by concrete criteria rather t
 
 The catalog renders as a paginated, responsive grid of game cards (box art, rating/rank badge, subdomain tags, complexity dots), with a collapsible filter sidebar and a sort control (Rank, Rating, Year Published, Complexity, Name, either direction). A search bar at the top switches between Lexical, Semantic, and Hybrid modes — this is the primary entry point; nearly everything else in the app is reached from here.
 
-The sidebar is organized into three groups:
+The sidebar is organized into four groups:
 
 - **Classification** — Subdomain (multi-select), Category (multi-select), and Family. Family is the one genuinely two-level filter: pick a namespace (Animals, Mechanism, Setting, Crowdfunding, ...) first, then the specific values inside it, since the raw BGG Family field spans 72 namespaces and ~4,200 values and a flat list of that size isn't browsable.
-- **Gameplay** — Mechanic (searchable combobox) and Players (quick-pick chips or an explicit min/max range).
-- **Experience** — Complexity (dual-thumb range slider with Light/Medium/Heavy presets) and Playtime (quick-pick buckets or an explicit min/max range).
+- **Gameplay** — Players (quick-pick chips or an explicit min/max range) and Mechanic (searchable combobox).
+- **Experience** — Playtime (quick-pick buckets or an explicit min/max range) and Complexity (dual-thumb range slider with Light/Medium/Heavy presets).
+- **Production** — Designer, Artist, and Publisher (each a searchable combobox), and Year Published (explicit min/max range).
 
-`frontend/src/pages/GamesList.tsx` (817 lines) drives a single React Query against either `GET /api/games` (browse) or `POST /api/search` (when a query is typed), keeping the prior page's results visible during refetch (`keepPreviousData`) so the grid doesn't flicker on every keystroke. Every filter maps directly to a `GameService.get_games()` / `SearchService.apply_game_filters()` parameter on the backend — nothing is filtered client-side. The Semantic and Hybrid search modes call the ML search pipeline; see [Hybrid search](#9-hybrid-search-lexical--semantic--rrf) below.
+`frontend/src/pages/GamesList.tsx` drives a single React Query against either `GET /api/games` (browse) or `POST /api/search` (when a query is typed), keeping the prior page's results visible during refetch (`keepPreviousData`) so the grid doesn't flicker on every keystroke. Every filter maps directly to a `GameService.get_games()` / `SearchService.apply_game_filters()` parameter on the backend — nothing is filtered client-side. The Semantic and Hybrid search modes call the ML search pipeline; see [Hybrid search](#9-hybrid-search-lexical--semantic--rrf) below.
+
+Designer/Artist/Publisher/Year Published filtering (and, while adding it, `min_year`/`max_year`) were only ever wired into the semantic/hybrid search path (`GameFilter`/`apply_game_filters`) — the direct browse route (`GET /api/games`) silently ignored year filtering entirely until this pass added it there too, matching the pattern already used for `mechanics`. Both search modes now filter identically.
 
 **Evidence**: `frontend/src/pages/GamesList.tsx`, `backend/app/api/routes/games.py`, `backend/app/services/game_service.py`. No automated test coverage — `backend/test_routes.py` exercises the underlying endpoint without assertions ([docs/engineering/testing.md](../engineering/testing.md)).
 
@@ -100,19 +103,21 @@ Goes beyond a star rating to answer "what specifically do people like or dislike
 
 ![Game Detail Community Consensus and aspect cards for Brass: Birmingham](../assets/images/game_detail_page.reviews.community_consensus.brass_birmingham.png)
 
-A short LLM-generated paragraph synthesizing what reviewers said sits above a set of cards, one per game aspect (Rulebook, Downtime, Component Quality, ...), each with a mini arc-gauge for its positive/negative sentiment split and expandable past the initial 6.
+A short LLM-generated paragraph synthesizing what reviewers said sits above a set of cards, one per game aspect (Mechanics, Strategy, Theme, ...), each with a mini arc-gauge and expandable past the initial 6. The paragraph and the cards are independently gated — a game with aspect data but no generated paragraph still shows the cards, just without the paragraph above them.
 
-Two backend systems feed this one section. `AspectService` (`GET /api/games/{id}/aspects`) reads `game_aspect_aggregates`, rolled up from `review_aspects` — the output of a 22-aspect DeBERTa zero-shot classifier (`scripts/absa_extract_hf.py`). The paragraph comes from `game_summaries`, generated offline by `SummarizationService`, which calls a local LLM twice (per-aspect mini-summaries, then a final synthesis) under an explicit anti-hallucination prompt instruction. Full design: [docs/ml/absa.md](../ml/absa.md).
+Each card reads as **Positive**, **Negative**, or **Mixed** — not a naive positive-vs-negative split. An aspect only claims a confident Positive/Negative label if that share of mentions clears 60% (`ABSAConfig.CARD_DOMINANCE_THRESHOLD`); a genuinely divided aspect (e.g. 45% positive / 45% negative) falls back to a Mixed state (amber ring, scale icon) instead of an arbitrary plurality pick. Mixed cards show a paired positive + negative quote so the split is legible, not just asserted; confident cards show up to 3 quotes from the dominant side.
 
-**Evidence**: `data/processed/pilot_absa_filtered.csv` (pilot artifact), `data/stratified_samples.json` (10,000-review sample cache). No classification-accuracy evaluation exists.
+Two backend systems feed this one section. `AspectService` (`GET /api/games/{id}/aspects`) reads `game_aspect_aggregates`, rolled up from `review_aspects` — the output of a 17-aspect DeBERTa zero-shot classifier (`scripts/absa_extract_hf.py`), filtered to aspects with 5+ mentions (`ABSAConfig.MIN_MENTIONS_FOR_DISPLAY`). The paragraph comes from `game_summaries`, generated offline by `SummarizationService`, which calls a local LLM twice (per-aspect mini-summaries, then a final synthesis) under an explicit anti-hallucination prompt instruction. Full design: [docs/ml/absa.md](../ml/absa.md).
 
-**Known limitations**: coverage is 100 games / 10,000 sampled reviews, not catalog-wide — [docs/ml/absa.md](../ml/absa.md#coverage-sampled-not-exhaustive). LLM summaries have only ever been generated for one manually-specified game at a time; no batch run exists.
+**Evidence**: end-to-end verified against 5 real games spanning different genres and review volumes (Brass: Birmingham, Pandemic Legacy: Season 1, Ark Nova, Gloomhaven, Twilight Imperium: Fourth Edition) before the full-corpus run began — confirmed live via `GET /api/games/{id}/aspects` and in the rendered page (screenshot above), including genuine Mixed-state cards (e.g. a 50/50 positive/negative split surfacing both quotes). No classification-accuracy evaluation exists.
+
+**Known limitations**: the quality/eligibility filter has run over the full ~4.2M-review corpus (267,950 eligible); DeBERTa classification is running in resumable, time-boxed chunks and has attempted 39,484 of those so far (~14.7%), not the full corpus yet — [docs/ml/absa.md](../ml/absa.md#coverage-full-corpus-filtered-not-sampled). LLM summaries have only ever been generated for one manually-specified game at a time; no batch run exists.
 
 ---
 
 ## 8. Review language & quality filtering
 
-Reviews are automatically language-tagged and, upstream, scored for ABSA eligibility with a combined language-confidence / length / spam-heuristic score. `scripts/detect_languages.py` uses fastText's compressed `lid.176.ftz` model (~1MB, bundled at `data/models/`) to backfill `reviews.language` and `reviews.language_confidence` across the corpus. A separate, more detailed `compute_quality_score()` — used only for ABSA eligibility, not the language filter dropdown — combines language confidence, review length, a repeated-character spam penalty, and a game-domain keyword bonus into one score, thresholded at `0.6`. Full formula: [docs/data/README.md](../data/README.md#data-quality-rules-as-implemented-not-as-a-policy-document).
+Reviews are automatically language-tagged and, upstream, scored for ABSA eligibility with a cheap, model-free pipeline. `scripts/detect_languages.py` uses fastText's compressed `lid.176.ftz` model (~1MB, bundled at `data/models/`) to backfill `reviews.language` and `reviews.language_confidence` across the corpus. A separate quality/eligibility filter (`backend/app/core/review_quality.py`, run at full-corpus scale by `scripts/filter_eligible_reviews.py`) — used only for ABSA eligibility, not the language filter dropdown — combines a language-confidence gate, hard filters (min length, valid Unicode, a VADER zero-sentiment check), exact/near-duplicate removal, and a weighted density/diversity/specificity/boilerplate score, thresholded at `0.6`. Full formula: [docs/data/README.md](../data/README.md#data-quality-rules-as-implemented-not-as-a-policy-document).
 
 This isn't a user-facing feature with its own screen; it's listed here because it's a real, evidenced ML component feeding features 6 and 7 above.
 

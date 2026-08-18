@@ -19,13 +19,13 @@ With the exception of live search and 5 of the 10 recommendation model IDs, ever
 
 - **Hybrid search via Reciprocal Rank Fusion** (`k=60`) combining Postgres full-text search and pgvector semantic search in one request-time code path.
 - **Three real collaborative-filtering implementations** (Item-Item Cosine, SVD, ALS) following a consistent `BaseRecommender` ABC — the only part of the recommendation engine built as reusable classes rather than one-off scripts.
-- **A 22-aspect zero-shot ABSA classifier** (`yangheng/deberta-v3-large-absa-v1.1`) with a purpose-built fastText quality/language filter and stratified per-game, per-sentiment sampling — a real NLP pipeline, evidenced by two superseded implementation attempts visible in git history (see [absa.md](absa.md)).
+- **A 17-aspect zero-shot ABSA classifier** (`yangheng/deberta-v3-base-absa-v1.1`) with a cheap, model-free quality/eligibility filter (`app.core.review_quality` — language reuse, hard filters including a VADER sentiment check, SimHash dedup, a weighted density/diversity/specificity/boilerplate score) that runs over the full ~4.2M-review corpus rather than a pre-restricted sample — a real NLP pipeline, evidenced by two superseded implementation attempts visible in git history (see [absa.md](absa.md)).
 - **Structured LLM output** (JSON-schema-constrained, Pydantic-validated) used for two different jobs — intent parsing and review summarization — against a local, OpenAI-compatible MLX server, with no cloud LLM dependency.
 
 ## What's honestly missing
 
 - No persisted evaluation results for any of the four systems ([evaluation.md](evaluation.md)).
-- ABSA coverage is 100 games / 10,000 reviews, not catalog-wide ([absa.md](absa.md)).
+- ABSA classification is running in resumable chunks and has attempted 39,484 of 267,950 eligible reviews so far (~14.7%), not the full corpus yet ([absa.md](absa.md#coverage-full-corpus-filtered-not-sampled)).
 - Four of ten recommendation model IDs are computed offline but never served — see [recommenders.md](recommenders.md#known-issue-four-model-ids-silently-serve-embedding-results).
 - The AI Assistant has no multi-turn memory despite an accepted `conversation_id` field ([assistant.md](assistant.md#known-limitation-no-multi-turn-memory)).
 

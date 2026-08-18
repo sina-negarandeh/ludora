@@ -12,7 +12,7 @@ flowchart LR
         RAW["Raw CSVs\ndata/raw/**"] --> MERGE["build_master_dataset.py\nbuild_interactions_dataset.py"]
         MERGE --> INGEST["ingest_master.py\nCOPY into Postgres"]
         INGEST --> ENRICH["Enrichment scripts\nsubdomain ranks · rating distributions\nembeddings · search vectors · language ID"]
-        ENRICH --> ABSA["ABSA chain\nabsa_filter -> generate_stratified_sample\n-> absa_extract_hf -> absa_aggregate"]
+        ENRICH --> ABSA["ABSA chain\nbuild_review_quality_vocab -> filter_eligible_reviews\n-> absa_extract_hf -> absa_aggregate"]
         ENRICH --> RECS["Recommendation precompute\ntrain_svd · precompute_recommendations\nprecompute_cf_recommendations\nprecompute_graph_recommendations"]
         ABSA --> SUMM["generate_summaries.py\ncalls local LLM"]
     end
