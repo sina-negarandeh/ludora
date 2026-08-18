@@ -1,7 +1,7 @@
 import time
 import argparse
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 import mlflow
 
 import torch
@@ -133,7 +133,7 @@ def main():
                             "evidence": evidence,
                             "model_used": ABSAConfig.MODEL_NAME,
                             "prompt_version": "hf_zero_shot",
-                            "extracted_at": datetime.utcnow()
+                            "extracted_at": datetime.now(timezone.utc).replace(tzinfo=None)
                         })
 
             if batch_params:
@@ -148,7 +148,7 @@ def main():
             # not "not yet processed" (see the resume-logic comment above).
             write_db.execute(
                 text("UPDATE reviews SET absa_processed_at = :ts WHERE id = :rid"),
-                {"ts": datetime.utcnow(), "rid": r.id}
+                {"ts": datetime.now(timezone.utc).replace(tzinfo=None), "rid": r.id}
             )
             write_db.commit()
 
