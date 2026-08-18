@@ -133,17 +133,15 @@ See [feature 1](#1-game-catalog-browse-filter-sort-search) for the UI. This entr
 
 ## 10. Recommendation engine & model selector
 
-"What else might I like, given this game" — and, for a technical audience, a rare chance to compare 10 recommendation algorithms side by side on the same game.
+"What else might I like, given this game" — and, for a technical audience, a rare chance to compare 9 recommendation algorithms side by side on the same game.
 
 ![Recommendation engine model selector for Brass: Birmingham](../assets/images/game_detail_page.recommendation_engine.model_selector.brass_birmingham.png)
 
-A tabbed model picker (Popularity-Based, Content-Based Filtering, Collaborative Filtering, and a disabled "Hybrid" tab) lists every model under the active tab with its Coverage and ILD@10 diversity metrics where available, and a live-refetched recommendation list for whichever model is selected. This is the most ambitious single engineering surface in the app: 10 named strategies across popularity, content-based, graph-based, and collaborative filtering, exposed for direct comparison.
+A tabbed model picker (Popularity-Based, Content-Based Filtering, Collaborative Filtering, and Hybrid) lists every model under the active tab, fetched live from `GET /api/recommendation-models` rather than hardcoded in the frontend, with a live-refetched recommendation list for whichever model is selected. This is the most ambitious single engineering surface in the app: 9 named strategies across popularity, content-based, graph-based, collaborative filtering, and a cross-paradigm hybrid blend, exposed for direct comparison.
 
-`GameRecommendations` defaults to the `hybrid` model id and refetches `GET /api/games/{id}/recommendations?model=...` on selection. See [docs/ml/recommenders.md](../ml/recommenders.md) for exactly which model IDs compute live versus read from a precomputed table — including a disclosed routing bug where 4 of the 10 model IDs currently return identical results.
+`GameRecommendations` defaults to the `hybrid` model id and refetches `GET /api/games/{id}/recommendations?model=...` on selection. See [docs/ml/recommenders.md](../ml/recommenders.md) for exactly which model IDs compute live versus read from a precomputed table.
 
-**Evidence**: Coverage/ILD numbers are shown for 6 models, labeled "Observed" rather than "Measured" since no results file exists — [docs/ml/evaluation.md](../ml/evaluation.md).
-
-**Known limitations**: the routing bug above; `cf_item_cosine`, `cf_svd`, `cf_als`, and `popularity` show no Coverage/ILD numbers in the UI (`—`).
+**Evidence**: Coverage/ILD diversity metrics for 6 of the 9 models are computed by `backend/evaluation/evaluate_recommenders.py` but not shown in this UI and not persisted to a results file — labeled "Observed" rather than "Measured" — [docs/ml/evaluation.md](../ml/evaluation.md).
 
 ---
 

@@ -4,12 +4,14 @@
 
 ## Data
 
-- Source: `data/raw/user_ratings.csv`, filtered to games present in `games`.
-- Fields used: `user`, `item` (BGG ID), `rating`. Treated as implicit-feedback strength (the `implicit` library's ALS was built for confidence-weighted implicit signals, not explicit 1–10 ratings — see Known limitations).
+- Source: the `ratings` table (Postgres), read directly via `pd.read_sql("SELECT user_id AS user, game_id AS item, rating FROM ratings", ...)` in `scripts/precompute_cf_recommendations.py`, filtered to games present in `games`. `ratings` was itself loaded once from `data/processed/master_ratings.csv` by `ingest_master.py` — this script used to read a second, divergent `data/raw/user_ratings.csv` copy that didn't exist on disk (the script could never actually run); it now reads the same Postgres data every other precompute script uses.
+- Fields used: `user`, `item` (BGG ID), `rating`.
+- Real scale: 26.2M ratings, 555,432 distinct users, 27,825 distinct rated games.
+- Ratings are converted to Hu/Koren/Volinsky (2008) confidence weights before fitting — `implicit`'s ALS is built for confidence-weighted implicit signals, not explicit 1–10 preference values fed straight through (see Model / Architecture).
 
 ## Model / Architecture
 
-`implicit.als.AlternatingLeastSquares` (`backend/app/recommenders/collaborative/als.py`, `ALSRecommender`) fit on a sparse user-item matrix. Recommendations are cosine-similarity nearest neighbors over the resulting item factors.
+`implicit.als.AlternatingLeastSquares` (`backend/app/recommenders/collaborative/als.py`, `ALSRecommender`) fit on a sparse user-item **confidence** matrix, not a raw-rating matrix. Each rating is converted via `confidence = 1.0 + CF_ALS_CONFIDENCE_ALPHA * rating` (Hu, Koren & Volinsky, 2008, "Collaborative Filtering for Implicit Feedback Datasets") before being placed in the matrix `implicit.als.AlternatingLeastSquares.fit()` consumes. Previously the raw 1–10 rating was passed directly as the confidence value — `implicit`'s ALS has no concept of a negative observation, so a 2/10 rating was read as "low-confidence positive" rather than "confident dislike"; the confidence transform fixes that by making every observed rating a strictly positive confidence weight, scaled by how strong the underlying preference actually was. Recommendations are cosine-similarity nearest neighbors over the resulting item factors.
 
 ## Hyperparameters
 
@@ -20,15 +22,16 @@ Source of truth: `backend/app/core/ml_config.py::RecommenderConfig` / `RANDOM_SE
 | `CF_ALS_FACTORS` | 50 |
 | `CF_ALS_ITERATIONS` | 15 |
 | `CF_ALS_REGULARIZATION` | 0.1 |
+| `CF_ALS_CONFIDENCE_ALPHA` (confidence = `1.0 + alpha * rating`) | 40 — the Hu/Koren/Volinsky paper's own default, not tuned against this dataset specifically |
 | `RANDOM_SEED` (→ `AlternatingLeastSquares(random_state=...)`) | 42 |
 
 ## Training
 
-Real `fit()` step: `implicit`'s ALS solver, 15 iterations.
+Real `fit()` step: `implicit`'s ALS solver, 15 iterations. Measured on the real 26.2M-rating/555K-user dataset: the fit itself took ~77 seconds (15 iterations at ~5.19s/it).
 
-- Script: `scripts/precompute_cf_recommendations.py` (fits fresh each run alongside `cf_item_cosine` and a duplicate `cf_svd` — see that model's card), writes top-10 rows per game to `game_recommendations`.
+- Script: `scripts/precompute_cf_recommendations.py` (fits fresh each run alongside `cf_item_cosine`), writes top-10 rows per game to `game_recommendations`.
 - Command: `uv run --project backend python scripts/precompute_cf_recommendations.py`
-- MLflow experiment: `recommender/collaborative` (run name `cf_als_precompute`) — logs `factors`, `iterations`, `regularization`, `n_ratings`, `n_valid_games`, and result metrics. Same experiment as `cf_item_cosine`/`cf_svd` so all three are directly comparable as runs.
+- MLflow experiment: `recommender/collaborative` (run name `cf_als_precompute`) — logs `factors`, `iterations`, `regularization`, `confidence_alpha`, `n_ratings`, `n_valid_games`, and result metrics. Same experiment as `cf_item_cosine` so both are directly comparable as runs.
 
 ## Artifact
 
@@ -43,5 +46,6 @@ None persisted to disk. Same reasoning as `cf_item_cosine` — the fit is cheap 
 
 ## Known limitations
 
-- ALS is designed for implicit feedback (confidence weights derived from interaction counts), but this pipeline feeds it explicit 1–10 star ratings directly as the confidence signal — a reasonable practical shortcut, not a textbook-correct use of the algorithm.
+- `CF_ALS_CONFIDENCE_ALPHA = 40` is the Hu/Koren/Volinsky paper's own default, not empirically tuned against this dataset.
+- Full catalog coverage confirmed live: 27,825/27,825 rated games have precomputed rows (278,250 total rows — the full 10 recs/game, no sparsity threshold on this model, unlike `cf_item_cosine`'s `min_shared_users`).
 - No re-fit trigger tied to new ratings arriving — manual, whole-catalog rerun.

@@ -2,7 +2,7 @@
 
 # Ludora
 
-Ludora is a board-game discovery web app built on two merged Kaggle BoardGameGeek datasets (~28K games, ~26M ratings, ~4.2M reviews). It's a full-stack, ML-heavy portfolio project: hybrid search, a 10-algorithm recommendation engine you can compare side by side, aspect-based sentiment analysis over community reviews, and a conversational AI assistant — all built and documented with an explicit goal of not overclaiming what's actually implemented, tested, or measured.
+Ludora is a board-game discovery web app built on two merged Kaggle BoardGameGeek datasets (~28K games, ~26M ratings, ~4.2M reviews). It's a full-stack, ML-heavy portfolio project: hybrid search, a 9-algorithm recommendation engine you can compare side by side, aspect-based sentiment analysis over community reviews, and a conversational AI assistant — all built and documented with an explicit goal of not overclaiming what's actually implemented, tested, or measured.
 
 **Start here:** [Case study](docs/case-study.md) (problem → architecture → data → ML → results, ~10 min read) · [Feature catalogue](docs/product/features.md) (every feature, with real screenshots) · [Known limitations](docs/limitations.md) (what's genuinely missing, stated plainly)
 
@@ -12,7 +12,7 @@ Ludora is a board-game discovery web app built on two merged Kaggle BoardGameGee
 
 - **Catalog & discovery** — filterable (subdomain, category, BGG family, mechanic, players, complexity, playtime) and sortable grid of ~28K games, with custom SVG statistics (density distributions, rating histograms, recommendation gauges).
 - **Hybrid search** — lexical (Postgres full-text), semantic ("vibe" search via `Qwen3-Embedding-0.6B` + pgvector), and a fused mode combining both with Reciprocal Rank Fusion.
-- **Recommendation engine** — 10 model IDs across popularity, content-based (TF-IDF, metadata blend, semantic embedding, weighted hybrid), graph-based (Jaccard, DeepWalk), and collaborative filtering (Item-Item Cosine, SVD, ALS), with a UI to compare Coverage/diversity across all of them. **Not all 10 are fully wired end-to-end** — see [docs/ml/recommenders.md](docs/ml/recommenders.md) for exactly which.
+- **Recommendation engine** — 9 model IDs across 4 paradigms: popularity, content-based (TF-IDF, metadata blend, semantic embedding, graph-based Jaccard, DeepWalk), collaborative filtering (Item-Item Cosine, ALS), and a live cross-paradigm hybrid blend, with a UI to compare Coverage/diversity across all of them. See [docs/ml/recommenders.md](docs/ml/recommenders.md) for exactly which models compute live versus read from a precomputed table.
 - **Aspect-Based Sentiment Analysis** — a 17-aspect zero-shot classifier (`yangheng/deberta-v3-base-absa-v1.1`) extracts what reviewers actually said (Mechanics, Strategy, Theme, etc.), shown as per-aspect cards and, once generated, synthesized into an LLM-written "Community Consensus" paragraph per game.
 - **AI Assistant** — a chat sidebar that parses natural language into a typed intent (browse/search/compare/recommend/get a game) via a locally-hosted LLM (Apple MLX, OpenAI-compatible), and renders results as inline cards, not free text.
 
@@ -33,7 +33,7 @@ No user accounts or personalization (every visitor sees the same catalog). No mu
 
 - **Hybrid search** fuses Postgres full-text search and pgvector semantic search at request time with Reciprocal Rank Fusion (`k=60`) — not a toy demo, a real fused-ranking implementation.
 - **The system is architecturally split in two**: an offline Python ETL/ML pipeline (~20 scripts) that populates Postgres, and a stateless FastAPI layer that mostly reads what the pipeline already computed. That split, and exactly where it breaks down, is documented in [docs/architecture/README.md](docs/architecture/README.md).
-- **A real integration bug is documented, not hidden.** Digging into the recommendation engine's routing code during this documentation pass surfaced that 4 of the 10 model IDs currently serve identical results, despite genuinely distinct offline computation existing for three of them. That's disclosed with full detail in [docs/ml/recommenders.md](docs/ml/recommenders.md) rather than papered over — the kind of finding a careful code reviewer would want to know about either way.
+- **The collaborative recommenders use published algorithms, not naive defaults.** `cf_item_cosine` uses adjusted (mean-centered) cosine similarity (Sarwar et al. 2001) instead of raw ratings, and `cf_als` converts ratings into Hu/Koren/Volinsky (2008) confidence weights before fitting — `implicit`'s ALS expects implicit-feedback confidence weights, not explicit preference values fed straight through. Detail: [docs/ml/recommenders.md](docs/ml/recommenders.md).
 - **Every quantitative claim is labeled by how it was obtained** — Measured (a committed result), Observed (a plausible-but-unverified number), or Not Evaluated — see [docs/ml/evaluation.md](docs/ml/evaluation.md).
 
 ## Screenshots

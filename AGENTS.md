@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Ludora is a board-game discovery web app — FastAPI + PostgreSQL/pgvector backend, React 19 + TypeScript frontend, offline Python ETL/ML pipeline — built on two merged Kaggle BoardGameGeek datasets, with hybrid search, a 10-model recommendation engine, aspect-based sentiment analysis, and a local-LLM assistant.
+Ludora is a board-game discovery web app — FastAPI + PostgreSQL/pgvector backend, React 19 + TypeScript frontend, offline Python ETL/ML pipeline — built on two merged Kaggle BoardGameGeek datasets, with hybrid search, a 9-model recommendation engine, aspect-based sentiment analysis, and a local-LLM assistant.
 
 This file covers what's true across the whole repo. Also read the nested file for whichever side you're touching:
 
@@ -44,14 +44,14 @@ The database starts empty — nothing here seeds it. Populate it via the pipelin
 
 ## Known debt
 
-No CI, no automated test suite (backend or frontend), and a recommendation-routing bug that makes 4 of 10 model ids return identical results. This is tracked debt, not steady state — full list and priority in `docs/roadmap.md`. Don't add to it; see the standards below for the bar on new work.
+No CI and no automated test suite (backend or frontend). This is tracked debt, not steady state — full list and priority in `docs/roadmap.md`. Don't add to it; see the standards below for the bar on new work.
 
 ## Standards for new work
 
 - Grep for a filename across the whole repo before adding a script — do not create a second file with a name that already exists elsewhere.
-- Don't claim a recommendation model id is served without checking `RecommendationService.get_recommendations()` against `docs/ml/recommenders.md` — four ids currently collapse into one query.
+- Don't claim a recommendation model id is served without checking `RecommendationService.get_recommendations()` against `docs/ml/recommenders.md` — each of the 9 ids routes to its own live query or its own precomputed `game_recommendations` rows.
 - New backend routes and new pipeline/recommender scripts need a way to verify they work — a request check, a rerunnable script, a before/after diff. See "Verify your work."
-- Match existing terminology exactly — `docs/data/README.md#glossary` (two source datasets, ten recommendation model ids, "Community Consensus").
+- Match existing terminology exactly — `docs/data/README.md#glossary` (two source datasets, nine recommendation model ids, "Community Consensus").
 - If a change alters a capability's status or behavior, check `docs/maintenance/coverage-map.md` for every doc that claims something about it and update them together — don't fix the first doc you find and stop.
 - Don't extend the no-auth / open-CORS / hardcoded-local-credential pattern to new code, and don't change it without asking — auth and deploy hardening are a larger decision this file doesn't own.
 

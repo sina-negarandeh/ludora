@@ -4,7 +4,7 @@
 
 ## Data
 
-- Source: a heterogeneous graph built in-memory from `games` (via ORM) — one node per game, plus one node per mechanic/category/designer/publisher/artist, with an edge from a game to every tag it has. Not persisted to disk; rebuilt fresh each run from live ORM objects.
+- Source: a heterogeneous graph built in-memory from `games` (via ORM) — one node per game, plus one node per mechanic/category/subdomain/family/designer/publisher/artist (node prefixes `G_`/`M_`/`C_`/`SD_`/`SF_`/`D_`/`P_`/`A_` respectively), with an edge from a game to every tag it has. `subdomains` (`SD_`) and `families` (`SF_`) edges were just added, so the graph DeepWalk walks over is richer than before. Not persisted to disk; rebuilt fresh each run from live ORM objects.
 
 ## Model / Architecture
 
@@ -48,5 +48,6 @@ None persisted — the Word2Vec model and graph are rebuilt from scratch each ru
 
 ## Known limitations
 
-- 1 training epoch is very light for Word2Vec — chosen for speed over the full catalog, not tuned against a quality metric.
+- 1 training epoch is very light for Word2Vec (its own default is 5) — chosen for speed over the full catalog, not tuned against a quality metric. A legitimate future improvement, not yet changed in code.
 - `data/processed/node2vec_graph.gpickle` (13.2 MB), a leftover artifact from the removed node2vec-package attempt, is still present on disk pending a decision on whether to delete it.
+- Full catalog coverage confirmed live: 28,208/28,208 games have precomputed rows.

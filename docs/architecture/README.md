@@ -1,6 +1,6 @@
 # Architecture
 
-Ludora is two systems joined by PostgreSQL: an **offline Python pipeline** (27 scripts) that turns raw CSVs into populated tables and precomputed recommendation/ABSA rows, and a **stateless FastAPI service** that reads those tables at request time. Almost nothing is computed live except lexical/semantic search and four of the ten recommendation model IDs (see [Known limitation](#known-limitation-four-recommendation-ids-collapse-to-one-query) below).
+Ludora is two systems joined by PostgreSQL: an **offline Python pipeline** (27 scripts) that turns raw CSVs into populated tables and precomputed recommendation/ABSA rows, and a **stateless FastAPI service** that reads those tables at request time. Almost nothing is computed live except lexical/semantic search and three of the nine recommendation model IDs — `popularity`, `embedding`, and `hybrid` (see [Recommendation routing](#recommendation-routing-live-vs-precomputed) below).
 
 For the step-by-step data pipeline (what runs in what order, what each script reads/writes), see [data-pipeline.md](data-pipeline.md). For dataset provenance and schema, see [docs/data/README.md](../data/README.md).
 
@@ -13,7 +13,7 @@ flowchart LR
         MERGE --> INGEST["ingest_master.py\nCOPY into Postgres"]
         INGEST --> ENRICH["Enrichment scripts\nsubdomain ranks · rating distributions\nembeddings · search vectors · language ID"]
         ENRICH --> ABSA["ABSA chain\nbuild_review_quality_vocab -> filter_eligible_reviews\n-> absa_extract_hf -> absa_aggregate"]
-        ENRICH --> RECS["Recommendation precompute\ntrain_svd · precompute_recommendations\nprecompute_cf_recommendations\nprecompute_graph_recommendations"]
+        ENRICH --> RECS["Recommendation precompute\nprecompute_content_recommendations\nprecompute_cf_recommendations\nprecompute_graph_recommendations"]
         ABSA --> SUMM["generate_summaries.py\ncalls local LLM"]
     end
 
@@ -66,7 +66,7 @@ Full request/response shapes are in the live Swagger UI (`http://localhost:8000/
 |---|---|---|
 | `GameService` | Catalog list/detail/compare | `routes/games.py`, `AssistantOrchestrator` |
 | `SearchService` | Lexical, semantic, hybrid (RRF) search + shared filter logic | `routes/search.py`, `AssistantOrchestrator`, `EntityResolver` |
-| `RecommendationService` | Routes 10 model IDs to either a live pgvector query or a precomputed-table read | `routes/recommendations.py`, `AssistantOrchestrator` |
+| `RecommendationService` | Routes 9 model IDs across 4 paradigms — `popularity` and `embedding` to a live query, `hybrid` to a live cross-paradigm blend, the remaining 6 to a precomputed-table read | `routes/recommendations.py`, `AssistantOrchestrator` |
 | `ReviewService` | Paginated review browsing, language/rating filters | `routes/games.py` |
 | `AspectService` | ABSA aggregate lookup per game | `routes/games.py` |
 | `MetadataService` | Subdomain/category/theme/family/mechanic/designer/publisher/artist lookups | `routes/metadata.py` |
@@ -89,9 +89,9 @@ Full detail on the ML-relevant services (`SearchService`, `RecommendationService
 
 **Offline pipeline** — see [data-pipeline.md](data-pipeline.md) for the full script-by-script trace and run order.
 
-## Known limitation: four recommendation IDs collapse to one query
+## Recommendation routing: live vs. precomputed
 
-`RecommendationService.get_recommendations()` has a single branch — `if model in ["embedding", "metadata", "tfidf", "hybrid"]` — that routes **all four** of those model IDs to the identical live query: `GameEmbedding.embedding.cosine_distance(source_embedding.embedding)` (filtered to the currently-configured model). Offline scripts (`scripts/precompute_content_recommendations.py`) do compute genuinely distinct TF-IDF, metadata-similarity, and weighted-hybrid scores and write them to `game_recommendations`, but the service's `if` branch intercepts those four model IDs before the code path that would read those precomputed rows is ever reached — so those rows are written but never served. Only `popularity` (live rank query) and the five collaborative/graph model IDs (`cf_item_cosine`, `cf_svd`, `cf_als`, `graph_jaccard`, `deepwalk`) actually read from the precomputed `game_recommendations` table. Full detail is in [docs/ml/recommenders.md](../ml/recommenders.md).
+`RecommendationService.get_recommendations()` routes each of the 9 model IDs across 4 paradigms: `popularity` runs a live rank query; `embedding` runs a live pgvector `cosine_distance` query (filtered to the currently-configured model); `hybrid` is computed live as a 0.5/0.5 blend of `cf_item_cosine`'s and `metadata`'s normalized precomputed scores and is never written to `game_recommendations`. The remaining 6 model IDs (`metadata`, `tfidf`, `graph_jaccard`, `deepwalk`, `cf_item_cosine`, `cf_als`) read directly from the precomputed `game_recommendations` table. Full detail is in [docs/ml/recommenders.md](../ml/recommenders.md).
 
 ## Configuration and security posture
 

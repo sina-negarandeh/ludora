@@ -7,12 +7,10 @@ Grouped by area. Each item links to the doc with full evidence and detail — th
 - **No user accounts, no authentication, no personalization.** Every visitor sees the same catalog and the same non-personalized recommendation baselines. Frame Ludora as a discovery/exploration tool, not a personalized app.
 - **The AI Assistant has no memory across turns** — every message is parsed independently, even though a `conversation_id` field exists in the request schema. Detail: [docs/ml/assistant.md](ml/assistant.md#known-limitation-no-multi-turn-memory).
 - **Two assistant intents (`get_reviews`, `get_aspects`) silently degrade** to a generic game-detail response instead of doing what their name implies. Detail: [docs/roadmap.md](roadmap.md).
-- **The "Hybrid" recommendation UI tab is permanently disabled** ("Soon" badge, no models filed under it) — separate from the `hybrid` model id issue below. Detail: [docs/ml/recommenders.md](ml/recommenders.md).
 
 ## Machine learning
 
-- **4 of 10 recommendation model IDs (`embedding`, `metadata`, `tfidf`, `hybrid`) all serve identical results** — a single live pgvector query, regardless of which is selected — even though `metadata`, `tfidf`, and `hybrid` have genuinely distinct offline-computed scores sitting unused in the database. Detail: [docs/ml/recommenders.md](ml/recommenders.md#known-issue-four-model-ids-silently-serve-embedding-results).
-- **No evaluation results are persisted anywhere.** All three evaluation scripts (search, recommender diversity, CF ranking quality) compute real metrics and only print them — no results file exists in the repo. The Coverage/ILD numbers shown in the product UI are plausible but not traceable to a committed artifact. Detail: [docs/ml/evaluation.md](ml/evaluation.md).
+- **No evaluation results are persisted anywhere.** All three evaluation scripts (search, recommender diversity, CF ranking quality) compute real metrics and only print them — no results file exists in the repo. The Coverage/ILD numbers aren't shown in the product UI at all; they only exist as script output. Detail: [docs/ml/evaluation.md](ml/evaluation.md).
 - **ABSA classification is running in resumable chunks, not catalog-wide yet** — 39,484 of 267,950 eligible reviews attempted (~14.7%). Detail: [docs/ml/absa.md](ml/absa.md#coverage-full-corpus-filtered-not-sampled).
 - **No accuracy evaluation exists for ABSA, summarization, or assistant intent parsing** — no ground-truth annotation set, no human rating, no benchmark.
 - **LLM summarization has only been run for one example game** — no batch invocation over the catalog exists. Detail: [docs/ml/absa.md](ml/absa.md#downstream-llm-summarization-community-consensus-paragraph).

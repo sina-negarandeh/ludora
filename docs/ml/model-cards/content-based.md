@@ -1,20 +1,22 @@
-# Content-based: Metadata, TF-IDF, Embedding, Hybrid
+# Content-based: Metadata, TF-IDF, Embedding
 
-**Model IDs:** `metadata`, `tfidf`, `embedding`, `hybrid` · **Category:** Content-Based Filtering · **Status:** Computed offline; only `embedding` is actually served — see Known limitations
+**Model IDs:** `metadata`, `tfidf`, `embedding` · **Category:** Content-Based Filtering · **Status:** Computed offline, all three served — see Known limitations
+
+`hybrid` is a **different, cross-paradigm** model (a live blend of `cf_item_cosine` + `metadata`, computed at request time, never stored) and is out of scope for this content-paradigm card — see [docs/ml/recommenders.md](../recommenders.md) and [cf-item-cosine.md](cf-item-cosine.md). An earlier model, also called `ensemble` (and briefly, confusingly, also `hybrid` before a rename) — a weighted blend of `embedding`+`metadata`+`tfidf`+a quality score — has been **removed entirely**, along with its supporting code (`compute_quality_scores()` in `app/recommenders/utils.py`, `RecommenderConfig.ENSEMBLE_WEIGHTS`, `QUALITY_RANK_WEIGHT`, `QUALITY_RATING_WEIGHT`).
 
 ## Data
 
-- Source: `games` table (via ORM) — categories, mechanics, designers, publishers, `game_weight`, `mfg_playtime`, `min_players`, `max_players`, `description`, `name`, `rank`, `avg_rating` — plus `game_embeddings`, filtered to the currently-configured model (produced separately — see [search-semantic.md](search-semantic.md)).
-- No held-out split — all four are unsupervised similarity computations, not fit against a labeled objective.
+- Source: `games` table (via ORM) — categories, mechanics, subdomains, families, designers, publishers, `game_weight`, `mfg_playtime`, `min_players`, `max_players`, `description`, `name` — plus `game_embeddings`, filtered to the currently-configured model (produced separately — see [search-semantic.md](search-semantic.md)).
+- `subdomains` and `families` were just added to both `metadata`'s categorical TF-IDF features and `tfidf`'s text blob — previously both only used `categories`+`mechanics` (`tfidf` also had designers/publishers). Deliberately **not** `themes`: BGG's `Theme:` namespace is already one of `families`'s 72 namespaces (`scripts/build_master_dataset.py:302-304`), so adding both would double-count the same tags.
+- No held-out split — all three are unsupervised similarity computations, not fit against a labeled objective.
 
 ## Model / Architecture
 
-All four computed by one script, inline `sklearn` (no `BaseRecommender` subclass):
+Both computed by one script (`scripts/precompute_content_recommendations.py`), inline `sklearn` (no `BaseRecommender` subclass):
 
-- **`metadata`**: `TfidfVectorizer` over categories+mechanics text, cosine similarity, blended with min-max-scaled numeric features (`game_weight`, `mfg_playtime`, `min_players`, `max_players`) also via cosine similarity.
-- **`tfidf`**: `TfidfVectorizer(stop_words='english', max_features=10000)` over name + description + categories + mechanics + designers + publishers text, cosine similarity.
-- **`embedding`**: cosine similarity directly on `game_embeddings` (the same vectors used by semantic search, filtered to the currently-configured model).
-- **`hybrid`**: a weighted blend of the three similarities above plus a quality score, each row-normalized to 0–1 first.
+- **`metadata`**: `0.7 * cosine(TF-IDF over categories+mechanics+subdomains+families) + 0.3 * cosine(min-max-scaled game_weight/mfg_playtime/min_players/max_players)`.
+- **`tfidf`**: `TfidfVectorizer(stop_words='english', max_features=10000)` over `name + description + categories + mechanics + subdomains + families + designers + publishers` text, cosine similarity.
+- **`embedding`**: cosine similarity directly on `game_embeddings` (the same vectors used by semantic search, filtered to the currently-configured model) — computed live at request time, not by this script (see Known limitations).
 
 ## Hyperparameters
 
@@ -24,15 +26,13 @@ Source of truth: `backend/app/core/ml_config.py::RecommenderConfig`.
 |---|---|
 | `METADATA_CATEGORICAL_WEIGHT` / `METADATA_NUMERIC_WEIGHT` | 0.7 / 0.3 |
 | `TFIDF_MAX_FEATURES` | 10,000 |
-| `HYBRID_WEIGHTS` | `{embedding: 0.45, metadata: 0.25, tfidf: 0.15, quality: 0.15}` |
-| `QUALITY_RANK_WEIGHT` / `QUALITY_RATING_WEIGHT` (quality score blend) | 0.5 / 0.5 |
 | `RECS_PER_MODEL_LIMIT` | 10 |
 
 No random seed needed — every step is deterministic (TF-IDF fit + cosine similarity, no sampling or iterative optimization).
 
 ## Training
 
-Not gradient training — deterministic vectorization + similarity computation, batched over the catalog (100 games per batch to bound memory).
+Not gradient training — deterministic vectorization + similarity computation, batched over the catalog (100 games per batch to bound memory). This script owns and writes only `metadata` and `tfidf` (`OWNED_MODELS = ['metadata', 'tfidf']` — scopes both the pre-run delete and MLflow logging so it never touches other models' rows); `embedding` is never written here, it's computed live (see Model / Architecture).
 
 - Script: `scripts/precompute_content_recommendations.py`
 - Command: `uv run --project backend python scripts/precompute_content_recommendations.py`
@@ -44,11 +44,12 @@ None persisted — TF-IDF vectorizers and similarity matrices are rebuilt from s
 
 ## Evaluation
 
-- Diagnostic only (no ranking-quality eval exists for these four — no held-out relevance labels to evaluate against): `backend/evaluation/evaluate_recommenders.py` computes Catalog Coverage and Intra-List Diversity @10 for `metadata`, `tfidf`, `embedding`, `hybrid`.
+- Diagnostic only (no ranking-quality eval exists for these — no held-out relevance labels to evaluate against): `backend/evaluation/evaluate_recommenders.py` computes Catalog Coverage and Intra-List Diversity @10 for `metadata` and `tfidf` (`embedding` is excluded from this script — it has no precomputed rows in `game_recommendations` to iterate over, since it's served live from `game_embeddings` instead).
 - MLflow experiment: `recommender/content_based` (run name `<model_id>_eval_coverage_ild`), one run per model — same experiment as the precompute step above.
 - Results file: `backend/evaluation/results/recommenders_coverage_ild_latest.json`.
+- Full catalog coverage confirmed live: `metadata` and `tfidf` both have precomputed rows for 28,207-28,208 of 28,208 games.
 
 ## Known limitations
 
-- **Only `embedding` is actually served.** `RecommendationService.get_recommendations()` routes `embedding`, `metadata`, `tfidf`, and `hybrid` all to the identical live pgvector query — `metadata`, `tfidf`, and `hybrid`'s genuinely distinct precomputed rows above are written to `game_recommendations` but never read by the API. This is a real, disclosed serving bug, not a documentation gap — see `docs/ml/recommenders.md#known-issue-four-model-ids-silently-serve-embedding-results`. Deliberately **not** fixed in this pass (flagged as a separate follow-up, distinct from this session's reproducibility-foundation work).
-- No ranking-quality evaluation exists for any of the four (Coverage/ILD measure diversity and catalog reach, not whether the recommendations are actually *good*).
+- No ranking-quality evaluation exists for any of the three (Coverage/ILD measure diversity and catalog reach, not whether the recommendations are actually *good*).
+- No evaluation coverage exists for `embedding` specifically, since it's served live rather than from stored rows (see Evaluation above).

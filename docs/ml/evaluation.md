@@ -17,26 +17,15 @@ uv run python evaluation/evaluate_search.py
 
 ## Recommender diversity evaluation (Coverage, ILD@10)
 
-**Script**: `backend/evaluation/evaluate_recommenders.py`. **Metrics**: Catalog Coverage (share of the catalog that appears in any top-10 list for a model) and Intra-List Diversity @10 (mean pairwise cosine distance among a game's own recommended list, using `game_embeddings` for the currently-configured model). **Models evaluated**: `metadata, tfidf, embedding, hybrid, graph_jaccard, deepwalk, cf_item_cosine, cf_svd, cf_als` — 9 of the 10 UI model IDs (`popularity` is excluded from this script, since a fixed popularity ranking has no natural per-game "list" to compute diversity over).
+**Script**: `backend/evaluation/evaluate_recommenders.py`. **Metrics**: Catalog Coverage (share of the catalog that appears in any top-10 list for a model) and Intra-List Diversity @10 (mean pairwise cosine distance among a game's own recommended list, using `game_embeddings` for the currently-configured model). **Models evaluated**: `metadata, tfidf, graph_jaccard, deepwalk, cf_item_cosine, cf_als` — 6 of the 9 UI model IDs. `popularity` is excluded since a fixed popularity ranking has no natural per-game "list" to compute diversity over; `embedding` and `hybrid` are excluded because both are computed live and never written to `game_recommendations`, so a coverage/ILD query for either would always read 0 rows.
 
 **Status: code exists and runs; results are not persisted to a file.** Like the search evaluator, this script only prints.
 
-### The numbers shown in the UI
+### Where these numbers live
 
-`frontend/src/pages/GameDetail.tsx` (`MODELS` array, lines 64-75) hardcodes Coverage/ILD for **6 of the 9** models this script covers:
+The UI no longer shows Coverage/ILD at all. `frontend/src/pages/GameDetail.tsx` used to hardcode a `MODELS` array with its own fabricated Coverage/ILD figures; it now fetches the model list live from `GET /api/recommendation-models` (`RecommendationService.get_recommendation_models()`, backed by `RECOMMENDATION_MODELS` in `backend/app/core/ml_config.py`), which returns id/name/paradigm/description only — no diversity metrics. Coverage/ILD numbers exist only as the printed output of a manual run of `evaluate_recommenders.py`.
 
-| Model | Coverage | ILD@10 |
-|---|---|---|
-| Metadata Similarity | 96.13% | 0.52 |
-| TF-IDF Vectorization | 95.41% | 0.44 |
-| Semantic Embedding | 93.54% | 0.34 |
-| Hybrid System | 90.49% | 0.39 |
-| Graph Jaccard | 94.03% | 0.52 |
-| Graph DeepWalk (`deepwalk`) | 96.55% | 0.54 |
-
-`cf_item_cosine`, `cf_svd`, `cf_als`, and `popularity` show `—`/`—` (nulled out) in the UI.
-
-**These 6 numbers cannot be traced to a committed artifact.** `evaluate_recommenders.py` has no file-write call anywhere in its source, and a repository-wide search for a matching results file (`*eval*result*`, `*results*.json`, `*results*.csv`) found nothing. The values are plausible outputs of a real run of this script — the metric definitions match exactly, the model set and category groupings match exactly — but as documentation, the correct label is: **Observed** (consistent with a real run of this exact code) rather than **Measured** (independently reproducible from a committed result). If you need reproducible numbers, rerun the script yourself:
+**These numbers cannot be traced to a committed artifact.** `evaluate_recommenders.py` has no file-write call anywhere in its source, and a repository-wide search for a matching results file (`*eval*result*`, `*results*.json`, `*results*.csv`) found nothing. If you want numbers, rerun the script yourself — its output would be **Observed** (consistent with a real run of this exact code) rather than **Measured** (independently reproducible from a committed result):
 
 ```bash
 cd backend
@@ -45,7 +34,7 @@ uv run python evaluation/evaluate_recommenders.py
 
 ## Collaborative filtering evaluation (Precision, Recall, NDCG)
 
-**Script**: `backend/evaluation/cf_split.py`. **Metrics**: Precision@10, Recall@10, NDCG@10 (binary relevance, `rating ≥ 8.0` = "liked"). **Models**: `cf_item_cosine`, `cf_svd`, `cf_als` only.
+**Script**: `backend/evaluation/cf_split.py`. **Metrics**: Precision@10, Recall@10, NDCG@10 (binary relevance, `rating ≥ 8.0` = "liked"). **Models**: `cf_item_cosine`, `cf_als` only.
 
 **Split**: per-user 80/20 (`sklearn.model_selection.train_test_split(group, test_size=0.2, random_state=42)`, grouped by user), evaluated on 1,000 users sampled (`np.random.seed(42)`) from those with 10-100 ratings. Users outside that range, or not sampled, are entirely in the training set.
 
@@ -73,7 +62,7 @@ uv run python evaluation/cf_split.py
 | System | Metric(s) defined in code | Results file committed | Numbers reportable here |
 |---|---|---|---|
 | Search | MRR@10, NDCG@10, Recall@100 | ❌ | None |
-| Recommenders — diversity | Coverage, ILD@10 | ❌ | 6 values, UI-hardcoded, labeled "Observed" not "Measured" |
+| Recommenders — diversity | Coverage, ILD@10 | ❌ | 6 values obtainable by rerunning the script; not shown in the UI, labeled "Observed" not "Measured" |
 | Recommenders — CF ranking quality | Precision@10, Recall@10, NDCG@10 | ❌ | None |
 | ABSA | — (no ground truth exists) | — | None |
 | LLM summarization | — (no rubric exists) | — | None |

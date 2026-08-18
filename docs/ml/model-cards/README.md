@@ -4,18 +4,17 @@ One file per model/pipeline component, each following the same structure: **Data
 
 This is the reproducibility layer: given a model card, you should be able to answer "what data, what processing, what model, what hyperparameters, how was it trained, how is it evaluated, where's the artifact" without reading source code. The narrative docs ([search.md](../search.md), [recommenders.md](../recommenders.md), [absa.md](../absa.md), [assistant.md](../assistant.md)) explain *why* a system is built the way it is; these cards are the *exact spec* for one model within it.
 
-## Recommenders (10 model IDs)
+## Recommenders (9 model IDs)
 
 | Card | Model ID(s) |
 |---|---|
 | [cf-item-cosine.md](cf-item-cosine.md) | `cf_item_cosine` |
-| [cf-svd.md](cf-svd.md) | `cf_svd` |
 | [cf-als.md](cf-als.md) | `cf_als` |
-| [content-based.md](content-based.md) | `metadata`, `tfidf`, `embedding`, `hybrid` |
+| [content-based.md](content-based.md) | `metadata`, `tfidf`, `embedding` |
 | [graph-jaccard.md](graph-jaccard.md) | `graph_jaccard` |
 | [deepwalk.md](deepwalk.md) | `deepwalk` |
 
-`popularity` has no model card — it's a live `ORDER BY rank` query, nothing is computed or trained.
+`popularity` has no model card — it's a live `ORDER BY rank` query, nothing is computed or trained. `hybrid` also has no card — it's a live, request-time blend of `cf_item_cosine` + `metadata` computed in `RecommendationService.get_recommendations()`, never precomputed or stored; see [docs/ml/recommenders.md](../recommenders.md). `cf_svd` (TruncatedSVD) was removed entirely — it was redundant with `cf_als`, both dense 50-dim latent-factor decompositions of the same ratings matrix.
 
 ## Search
 

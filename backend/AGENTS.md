@@ -22,7 +22,7 @@ uv run python evaluation/evaluate_search.py      # evaluation scripts (print-onl
 
 Routes never touch SQLAlchemy directly: `app/api/routes/*.py` → `app/services/*.py` → ORM (`app/database/models.py`) or a recommender (`app/recommenders/`). Every new route needs a `response_model` and an OpenAPI `summary`/`description`.
 
-Only three recommender classes exist, under `app/recommenders/collaborative/` (`ItemCosineRecommender`, `SVDRecommender`, `ALSRecommender`, subclassing `BaseRecommender`). The other model ids — popularity, TF-IDF, metadata, embedding, hybrid, graph Jaccard, DeepWalk — are procedural script logic, not classes. Detail: `docs/ml/recommenders.md`.
+Only two recommender classes exist, under `app/recommenders/collaborative/` (`ItemCosineRecommender`, `ALSRecommender`, subclassing `BaseRecommender`). The other model ids — popularity, TF-IDF, metadata, embedding, hybrid, graph Jaccard, DeepWalk — are procedural script logic, not classes. Detail: `docs/ml/recommenders.md`.
 
 ## Offline pipeline
 

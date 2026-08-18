@@ -1,104 +1,113 @@
 # Recommendation engine
 
-**Status: mixed — see per-model table.** The UI exposes 10 model IDs. Their implementations range from a live database query, to genuinely distinct offline-computed algorithms that get served, to offline-computed algorithms that are computed and stored but **never actually served** by the API. This document exists specifically to make that distinction legible, since it is not visible from the UI alone.
+**Status: all 9 model IDs are correctly wired and served.** Implementations range from a live database query, to genuinely distinct offline-precomputed algorithms served from `game_recommendations`, to a live cross-paradigm blend computed at request time. This document exists to make that distinction legible, since it is not visible from the UI alone.
 
 ## Problem
 
 Given a game a user is looking at, suggest other games they might like, and let a technical visitor compare recommendation algorithms side by side (this is the explicit purpose of the model-selector UI — see [docs/product/features.md](../product/features.md)).
 
-## The 10 model IDs
+## The 9 model IDs
 
-Source of truth: `MODELS` array, `frontend/src/pages/GameDetail.tsx:64-75`.
+Source of truth: `RECOMMENDATION_MODELS`, `backend/app/core/ml_config.py:374-393` — served via `GET /api/recommendation-models` (`RecommendationService.get_recommendation_models()`) and consumed live by the frontend (`fetchRecommendationModels()` in `frontend/src/api/games.ts`, called from `frontend/src/pages/GameDetail.tsx`). There is no separate hardcoded frontend model list anymore.
 
-| id | UI name | UI category | Computed | Served from |
+| id | Name | Paradigm | Computed | Served from |
 |---|---|---|---|---|
-| `popularity` | Popularity Baseline | Popularity-Based | Live | `games` table, `ORDER BY rank` |
-| `metadata` | Metadata Similarity | Content-Based Filtering | Offline (script exists) | **Not served** — see [Known issue](#known-issue-four-model-ids-silently-serve-embedding-results) |
-| `tfidf` | TF-IDF Vectorization | Content-Based Filtering | Offline (script exists) | **Not served** |
-| `embedding` | Semantic Embedding | Content-Based Filtering | Live | `game_embeddings` pgvector cosine query |
-| `hybrid` | Hybrid System | Content-Based Filtering | Offline (script exists) | **Not served** — silently returns `embedding` results instead |
-| `graph_jaccard` | Graph Jaccard | Content-Based Filtering | Offline | `game_recommendations` table |
-| `deepwalk` | Graph DeepWalk | Content-Based Filtering | Offline | `game_recommendations` table |
-| `cf_item_cosine` | Item-Item Cosine | Collaborative Filtering | Offline | `game_recommendations` table |
-| `cf_svd` | Matrix Factorization (SVD) | Collaborative Filtering | Offline | `game_recommendations` table |
-| `cf_als` | Alternating Least Squares (ALS) | Collaborative Filtering | Offline | `game_recommendations` table |
+| `popularity` | Popularity Ranking | Popularity | Live | `games` table, `ORDER BY rank ASC` |
+| `metadata` | Metadata Similarity | Content | Offline | `game_recommendations` |
+| `tfidf` | TF-IDF Similarity | Content | Offline | `game_recommendations` |
+| `embedding` | Semantic Embedding Similarity | Content | Live | pgvector cosine-distance query on `game_embeddings` |
+| `graph_jaccard` | Graph Jaccard | Content | Offline | `game_recommendations` |
+| `deepwalk` | Graph Embedding (DeepWalk) | Content | Offline | `game_recommendations` |
+| `cf_item_cosine` | Item-Item Similarity | Collaborative | Offline | `game_recommendations` |
+| `cf_als` | Matrix Factorization (ALS) | Collaborative | Offline | `game_recommendations` |
+| `hybrid` | Weighted Hybrid | Hybrid | Live | blends `cf_item_cosine` + `metadata` rows from `game_recommendations` at request time |
 
-There is also a fourth UI tab, **"Hybrid"** (`RECSYS_TYPES`, distinct from the `hybrid` *model id* above), permanently disabled with a "Soon" badge and no models filed under it — a planned fourth category that was never built out, separate from the `hybrid` model id issue below.
+Four paradigms: popularity, content, collaborative, hybrid. Graph-based models (`graph_jaccard`, `deepwalk`) are classified under **content**, not collaborative — despite the word "graph," both build their graph purely from item metadata (mechanics/categories/subdomains/families/designers/publishers/artists) and never read the `ratings` table.
 
-The default selected model in the UI is `hybrid`.
+The "Hybrid" tab in the UI, previously permanently disabled with a "Soon" badge, is now enabled and functional — it maps to the `hybrid` model id.
 
-## Known issue: four model IDs silently serve embedding results
+## Routing: `RecommendationService.get_recommendations()`
 
-`RecommendationService.get_recommendations()` (`backend/app/services/recommendation_service.py`) contains:
+`backend/app/services/recommendation_service.py` routes each model id to one of three paths:
 
-```python
-if model in ["embedding", "metadata", "tfidf", "hybrid"]:
-    similar = self.db.query(GameEmbedding).filter(...).order_by(
-        GameEmbedding.embedding.cosine_distance(source_embedding.embedding)
-    ).limit(limit).all()
-    ...
-    reasons = ["Semantically similar based on rich metadata"]
-```
+- **`popularity`** — live query, `games` table ordered by `rank ASC`, same global top-N regardless of the source game. This is by design: it's the non-personalized baseline every other model is implicitly compared against. Score is a real value now — min-max normalized inverse rank among the returned candidates, via `minmax_normalize_scores()` in `backend/app/recommenders/utils.py` — not the hardcoded `1.0` it used to return for every result.
+- **`hybrid`** — live blend, computed at request time (see [Hybrid](#hybrid-hybrid) below). Never written to `game_recommendations`.
+- **`embedding`** — live pgvector cosine-distance query against `GameEmbedding` rows, the only content model computed at request time rather than precomputed. Score is `round(1.0 - cosine_distance, 4)`.
+- **Everything else** (`metadata`, `tfidf`, `graph_jaccard`, `deepwalk`, `cf_item_cosine`, `cf_als`) — a generic lookup: each reads its own precomputed rows from `game_recommendations` filtered by `model`, ordered by `score DESC`.
 
-All four of `embedding`, `metadata`, `tfidf`, and `hybrid` hit this exact branch and return **identical rankings** — pure semantic-embedding nearest neighbors — differing only in the label attached to the response. This is not a partial implementation gap: `scripts/precompute_content_recommendations.py` genuinely computes distinct TF-IDF cosine similarity, a metadata-feature blend, and a weighted hybrid ensemble (`0.45·embedding + 0.25·metadata + 0.15·TF-IDF + 0.15·quality_score`), and writes all of it to `game_recommendations` — but the `if` branch above intercepts those four model IDs before the code path that would read those precomputed rows is ever reached. The offline computation is real; the online serving of it is not wired up.
-
-**Portfolio framing**: if asked "does Ludora have a real hybrid recommender," the honest answer is: the algorithm exists, is implemented correctly, and produces real precomputed output — but a routing bug means the live API never serves it. That is a defensible, common kind of real-world integration bug, and disclosing it here is more credible than letting the UI's Coverage/ILD table imply otherwise.
-
-## Graph models: history of the `deepwalk` id
-
-`scripts/precompute_graph_recommendations.py` produces two outputs. `graph_jaccard` is a genuine weighted multi-relation Jaccard similarity over mechanics/categories/designers/publishers/artists (weights 0.4/0.3/0.05/0.025/0.025, renormalized to sum to 1.0). The other builds a graph from live ORM objects, runs uniform random walks (`num_walks=10, walk_length=10`), and embeds it with `gensim.Word2Vec(..., sg=1)` — that's DeepWalk (uniform random walks), not the `node2vec` PyPI package's algorithm (biased walks controlled by `p`/`q`), so its model id is `deepwalk`.
-
-It wasn't always: this id was previously `node2vec`, a holdover from a separate, disconnected attempt (`scripts/build_node2vec_graph.py` + `scripts/train_node2vec.py`) to use the actual `node2vec` package against a heterogeneous graph pickle. That attempt was scaffolded but never completed — no trained model artifact ever existed — and has been removed; the id was renamed to `deepwalk` to match what the served algorithm actually is. `data/processed/node2vec_graph.gpickle` (13.2 MB), that path's leftover graph pickle, is still present on disk pending a decision on whether to delete it (`data/` is gitignored in full, so this was never tracked in git).
+Previously, `embedding`, `metadata`, `tfidf`, and the now-removed `ensemble`/`hybrid` content blend all silently collapsed into the same live pgvector branch, so four model ids returned identical rankings regardless of their distinct precomputed scores. That routing bug is fixed — each model id now reads its own data, live or precomputed as appropriate. This is resolved, not an open issue.
 
 ## Per-model implementation
 
 ### Popularity (`popularity`)
 
-Live query, `games` table ordered by `rank ascending`. No personalization, no offline computation.
+Live query, `games` table ordered by `rank ASC`. No personalization, no offline computation. Score is normalized inverse rank (see routing above), not a flat constant.
 
-### Content-based: Metadata, TF-IDF, Embedding, Hybrid (`metadata`, `tfidf`, `embedding`, `hybrid`)
+### Content paradigm: Metadata, TF-IDF, Embedding, Graph Jaccard, DeepWalk
 
-All four are computed offline by `scripts/precompute_content_recommendations.py` (inline sklearn, no `BaseRecommender` subclass used for any of these):
+Five models. `metadata`, `tfidf`, `graph_jaccard`, and `deepwalk` are precomputed offline; `embedding` is live (see routing above).
 
-- **Metadata**: `TfidfVectorizer` over categories+mechanics text (weight 0.7) blended with min-max-scaled numeric features (`game_weight`, `mfg_playtime`, `min_players`, `max_players`, weight 0.3), both via cosine similarity.
-- **TF-IDF**: `TfidfVectorizer(stop_words='english', max_features=10000)` over name + description + categories + mechanics + designers + publishers text, cosine similarity.
-- **Embedding**: cosine similarity directly on `game_embeddings` (the same vectors used by semantic search, filtered to the currently-configured model).
-- **Hybrid**: `0.45·embedding_norm + 0.25·metadata_norm + 0.15·tfidf_norm + 0.15·quality_score_norm`, each component row-normalized to 0–1 first. `quality_score = 0.5·norm(inverse rank) + 0.5·norm(avg_rating)`.
+- **Metadata Similarity** (`metadata`) — `scripts/precompute_content_recommendations.py`. `0.7 * cosine(TF-IDF over categories+mechanics+subdomains+families tokens) + 0.3 * cosine(min-max-scaled [game_weight, mfg_playtime, min_players, max_players])`. Weights are `RecommenderConfig.METADATA_CATEGORICAL_WEIGHT` / `METADATA_NUMERIC_WEIGHT` in `backend/app/core/ml_config.py`. `subdomains` and `families` were just added to the categorical text blob — previously it was categories+mechanics only.
+- **TF-IDF Similarity** (`tfidf`) — same script. `TfidfVectorizer(stop_words='english', max_features=10000)` over one blob per game: `name + description + categories + mechanics + subdomains + families + designers + publishers`, cosine similarity. `subdomains` and `families` were also just added here.
+- **Semantic Embedding Similarity** (`embedding`) — live pgvector cosine-distance search against `GameEmbedding` rows (Qwen3-Embedding-0.6B via MLX, `SearchConfig.EMBEDDING_MODEL`). The only content model computed at request time; always reflects current `game_embeddings` state.
+- **Graph Jaccard** (`graph_jaccard`) — `scripts/precompute_graph_recommendations.py::run_jaccard`. Weighted multi-relation Jaccard over **7 relations**: mechanics, categories, subdomains, families, designers, publishers, artists. Weights (`RecommenderConfig.GRAPH_JACCARD_WEIGHTS`, renormalized to sum to 1 at use time): `mechanics=0.35, categories=0.25, subdomains=0.15, families=0.1, designers=0.05, publishers=0.025, artists=0.025`. Previously only 5 relations (no subdomains/families) at weights 0.4/0.3/0.05/0.025/0.025.
+- **Graph Embedding (DeepWalk)** (`deepwalk`) — same script, `run_deepwalk`. Same 7-relation item-metadata graph as `graph_jaccard` (game nodes connected to mechanic/category/subdomain/family/designer/publisher/artist nodes). Uniform random walks (`DEEPWALK_NUM_WALKS=10`, `DEEPWALK_WALK_LENGTH=10`, seeded via `RANDOM_SEED=42`), then `gensim.Word2Vec(sg=1, vector_size=64, window=5, epochs=1, min_count=1)`, cosine similarity on the resulting embeddings. This is DeepWalk (uniform random walks), explicitly not node2vec (biased walks controlled by `p`/`q`) — the id was renamed from a dead `node2vec` PyPI-package attempt in an earlier pass, unrelated to the changes in this doc.
 
-Only `embedding` is actually served live (via a separate, simpler direct pgvector query in `RecommendationService`, not by reading these precomputed rows). See the known issue above.
+**Why not `themes` as a separate feature**: BGG's `Theme:` namespace is already one of `families`'s 72 namespaces (`scripts/build_master_dataset.py` lines ~302-304), so adding both `themes` and `families` as separate relations/tokens would double-count the same tag values. Only `subdomains` + `families` were added, never `themes`.
 
-### Graph-based (`graph_jaccard`, `deepwalk`)
+**Removed**: the old `ensemble` model (formerly the in-paradigm content blend, itself formerly called `hybrid` before an earlier rename) has been deleted entirely. It was structurally just a weighted recombination of embedding+metadata+tfidf+a quality score — not an independent signal — and duplicated the new cross-paradigm `hybrid` model below. It no longer exists anywhere: not in `RECOMMENDATION_MODELS`, not in the precompute script, not served.
 
-See [Graph models: history of the `deepwalk` id](#graph-models-history-of-the-deepwalk-id) above.
+### Collaborative paradigm (`cf_item_cosine`, `cf_als`)
 
-### Collaborative filtering (`cf_item_cosine`, `cf_svd`, `cf_als`)
+Two model ids, both real `BaseRecommender` subclasses under `backend/app/recommenders/collaborative/` (ABC at `backend/app/recommenders/base.py`), fit against the `ratings` table (26.2M rows, 555K distinct users, 27,825 distinct rated games) via `scripts/precompute_cf_recommendations.py`.
 
-The only three model IDs with real `BaseRecommender` subclasses (`backend/app/recommenders/collaborative/`, ABC at `backend/app/recommenders/base.py`):
-
-| Class | Model id | Hyperparameters | Library |
+| Class | Model id | Key hyperparameters | Library |
 |---|---|---|---|
-| `ItemCosineRecommender` | `cf_item_cosine` | `min_shared_users=50` | `sklearn.metrics.pairwise.cosine_similarity` on a co-occurrence-masked item-item matrix |
-| `SVDRecommender` | `cf_svd` | `n_factors=50` | `sklearn.decomposition.TruncatedSVD(random_state=42)` on the transposed (item × user) ratings matrix |
-| `ALSRecommender` | `cf_als` | `factors=50, iterations=15, regularization=0.1` | `implicit.als.AlternatingLeastSquares(random_state=42)`; similarity computed manually via sklearn cosine on `item_factors` rather than the `implicit` library's own `similar_items` |
+| `ItemCosineRecommender` (`backend/app/recommenders/collaborative/item_cosine.py`) | `cf_item_cosine` | `min_shared_users=50` (`RecommenderConfig.CF_ITEM_COSINE_MIN_SHARED_USERS`) | `sklearn.metrics.pairwise.cosine_similarity` on a co-occurrence-masked item-item matrix |
+| `ALSRecommender` (`backend/app/recommenders/collaborative/als.py`) | `cf_als` | `factors=50, iterations=15, regularization=0.1` | `implicit.als.AlternatingLeastSquares(random_state=42)`; similarity computed manually via sklearn cosine on `item_factors` |
 
-Two independent scripts can populate these: `scripts/precompute_cf_recommendations.py` (fits all three directly from `data/raw/user_ratings.csv`, writes top-10 each) and, for `cf_svd` specifically, `scripts/train_svd.py` (trains + pickles to `data/models/cf_svd.pkl`, the only recommender with a saved model artifact) followed by `scripts/precompute_svd_recommendations.py`, which loads that pickle and writes top-20 rows. All three CF model IDs are read correctly by `RecommendationService` at request time (they fall through to the `game_recommendations` SELECT).
+- **`cf_item_cosine`** now uses **adjusted (mean-centered) cosine similarity** (Sarwar et al. 2001, "Item-Based Collaborative Filtering Recommendation Algorithms"): each user's ratings are centered by subtracting that user's own mean rating before building the user×item matrix, correcting for individual rating-scale bias (someone who rates everything 8-10 vs. someone who uses the full 1-10 range). Centering only touches actually-rated entries — an unrated item stays absent, never becomes an implicit zero. This replaces the previous behavior of using raw ratings directly.
+- **`cf_als`** now converts ratings to Hu/Koren/Volinsky (2008) confidence weights before fitting: `confidence = 1.0 + CF_ALS_CONFIDENCE_ALPHA * rating`, with `CF_ALS_CONFIDENCE_ALPHA = 40` (the paper's own default, not tuned against this dataset). `implicit`'s ALS is designed for implicit-feedback confidence weights, not raw explicit ratings — feeding raw ratings directly (the previous behavior) conflated "confidence this interaction is positive" with the rating's own polarity, so a rating of 2/10 was read as a weak-but-positive signal instead of a dislike.
+
+**Removed**: `cf_svd` (`SVDRecommender`, `scripts/train_svd.py`, `scripts/precompute_svd_recommendations.py`, `data/models/cf_svd.pkl`) is deleted entirely. `TruncatedSVD` was redundant with ALS — both are dense 50-dim latent-factor decompositions of the same ratings matrix, likely to correlate more with each other than either does with `cf_item_cosine`. There is no longer a second CF pipeline and no "two independent CF pipelines" duplication concern — that problem no longer exists, not merely still-open.
+
+### Hybrid (`hybrid`)
+
+The only cross-paradigm model, and the only model in the **hybrid** paradigm. Computed **live** at request time in `RecommendationService.get_recommendations()` — never precomputed, never written to `game_recommendations`.
+
+Formula: `0.5 * collaborative_norm + 0.5 * content_norm`, where:
+- collaborative = `cf_item_cosine`'s precomputed top-N rows for the source game
+- content = `metadata`'s precomputed top-N rows for the source game
+- each is independently min-max normalized via `minmax_normalize_scores()` (dict-based, `backend/app/recommenders/utils.py`), then blended
+
+Configured via `RecommenderConfig.HYBRID_ENGINE_WEIGHTS = {"collaborative": 0.5, "content": 0.5}`, `HYBRID_COLLABORATIVE_MODEL = "cf_item_cosine"`, `HYBRID_CONTENT_MODEL = "metadata"` (`backend/app/core/ml_config.py`) — an even 0.5/0.5 split and those two specific representative models are a disclosed starting point, not tuned against any evaluation.
+
+**Why live, not precomputed**: both inputs are already-precomputed top-10 lists, so combining them is a few dozen floats and a sort, not an O(n²) similarity matrix — the same "cheap and freshness-sensitive stays live" reasoning applied to `embedding`. A `computed_at` column exists on `game_recommendations` for freshness tracking on models that *are* precomputed, but `hybrid` never gets a row there at all — it has no precomputed state to go stale.
+
+## Data coverage
+
+All 9 model ids that get precomputed now have full catalog coverage — 27,825 to 28,208 games (out of 28,208 total games), not a partial 10,000-game subset. This has been run for real and verified against a live database.
 
 ## Evaluation
 
-See [docs/ml/evaluation.md](evaluation.md) for the full picture. In short: Coverage and ILD@10 numbers are hardcoded in the frontend for 6 of the 10 models (not sourced from any file the evaluation scripts write, since none of them persist output); `cf_item_cosine`, `cf_svd`, `cf_als`, and `popularity` show `—` in the UI even though `backend/evaluation/evaluate_recommenders.py` computes Coverage/ILD for the first three (it explicitly excludes `popularity`); Precision@10/Recall@10/NDCG@10 for the three CF models exist only as `print()` output from `backend/evaluation/cf_split.py`, never captured to a file.
+See [docs/ml/evaluation.md](evaluation.md) for the full picture. In short:
+
+- `backend/evaluation/evaluate_recommenders.py` computes catalog Coverage and ILD@10 for the 6 models that persist rows to `game_recommendations`: `['metadata', 'tfidf', 'graph_jaccard', 'deepwalk', 'cf_item_cosine', 'cf_als']`. It explicitly excludes `embedding` and `hybrid` — both are live/never stored, so a `game_recommendations` query for either would always read 0 rows.
+- `backend/evaluation/cf_split.py` computes Precision@10/Recall@10/NDCG@10 for the two CF recommenders: `ItemCosineRecommender` and `ALSRecommender`. `SVDRecommender` is no longer in its recommenders list, since `cf_svd` was removed.
+- `popularity` is not included in either evaluation script.
 
 ## Known limitations
 
-- **Whether the DB currently contains rows for every model ID has not been verified by this documentation pass** — the code paths exist and are traceable, but confirming live row counts requires a running, seeded database.
 - No online feedback loop — nothing in the app records which recommendations a user clicked, so there is no way to close the loop with implicit signal.
-- No model versioning — a rerun of any precompute script overwrites prior rows for that model id with no history.
-- `get_recommendation_models()` (a separate endpoint, `GET /api/recommendation-models`) only returns 3 hardcoded entries and is not called by the frontend at all — it does not reflect the 10 model IDs actually usable via `GET /api/games/{id}/recommendations?model=...`.
+- No model versioning — a rerun of any precompute script overwrites prior rows for that model id; `computed_at` records *when* a row was last written but not a history of prior values.
+- `HYBRID_ENGINE_WEIGHTS` (0.5/0.5) and `GRAPH_JACCARD_WEIGHTS` are disclosed starting points, not empirically tuned against any evaluation metric.
 
 ## Related code
 
 - `backend/app/services/recommendation_service.py`
-- `backend/app/recommenders/base.py`, `backend/app/recommenders/collaborative/{item_cosine,svd,als}.py`
-- `scripts/precompute_content_recommendations.py`, `scripts/precompute_svd_recommendations.py`, `scripts/precompute_cf_recommendations.py`, `scripts/precompute_graph_recommendations.py`
-- `scripts/train_svd.py`
+- `backend/app/recommenders/base.py`, `backend/app/recommenders/collaborative/{item_cosine,als}.py`
+- `backend/app/recommenders/utils.py` (`minmax_normalize_scores`)
+- `backend/app/core/ml_config.py` (`RecommenderConfig`, `RECOMMENDATION_MODELS`)
+- `scripts/precompute_content_recommendations.py`, `scripts/precompute_graph_recommendations.py`, `scripts/precompute_cf_recommendations.py`
 - `backend/evaluation/cf_split.py`, `backend/evaluation/evaluate_recommenders.py`
-- `frontend/src/pages/GameDetail.tsx` (`MODELS`, `RECSYS_TYPES`, `GameRecommendations` component)
+- `frontend/src/pages/GameDetail.tsx`, `frontend/src/api/games.ts` (`fetchRecommendationModels`)
