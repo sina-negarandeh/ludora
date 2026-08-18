@@ -23,7 +23,7 @@ class RecommendationResponseSchema(BaseModel):
 
 class RecommendationModelSchema(BaseModel):
     id: str = Field(..., description="The internal ID of the model.")
-    family: str = Field(..., description="The algorithmic family (e.g. 'collaborative', 'content').")
+    paradigm: str = Field(..., description="The recommendation paradigm (popularity, content, collaborative, or hybrid).")
     name: str = Field(..., description="Human-readable name of the model.")
     description: str = Field(..., description="Detailed description of how the model works.")
 

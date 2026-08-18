@@ -53,12 +53,12 @@ def tracked_run(experiment: str, run_name: str = None):
     experiment — MLflow's run-comparison table only compares runs within the
     same experiment, and "compare these algorithms side by side" is the
     whole point here (e.g. `recommender/collaborative` holds one run each
-    for cf_item_cosine/cf_svd/cf_als, rather than three separate experiments).
+    for cf_item_cosine/cf_als, rather than two separate experiments).
     See docs/ml/model-cards/ for the full experiment-per-model map.
 
     Usage:
-        with tracked_run("recommender/collaborative", run_name="cf_svd_train"):
-            mlflow.log_params({"n_factors": RecommenderConfig.CF_SVD_N_FACTORS})
+        with tracked_run("recommender/collaborative", run_name="cf_als_train"):
+            mlflow.log_params({"factors": RecommenderConfig.CF_ALS_FACTORS})
             ...
             mlflow.log_metrics({"precision_at_10": 0.12})
             mlflow.log_artifact(model_path)

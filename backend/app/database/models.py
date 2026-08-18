@@ -221,7 +221,11 @@ class GameRecommendation(Base):
     
     score = Column(Float, nullable=False)
     reasons = Column(JSON)
-    
+    # When this row was (re)computed -- lets a reader tell fresh precomputed
+    # data from stale rows left over from a prior run, which the table
+    # previously had no way to express at all.
+    computed_at = Column(DateTime, nullable=True)
+
     # Relationships
     game = relationship("Game", foreign_keys=[game_id])
     recommended_game = relationship("Game", foreign_keys=[recommended_game_id], lazy="selectin")

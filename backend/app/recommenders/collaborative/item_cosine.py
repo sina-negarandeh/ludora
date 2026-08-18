@@ -26,14 +26,25 @@ class ItemCosineRecommender(BaseRecommender):
 
         row_indices = user_ids.cat.codes
         col_indices = item_ids.cat.codes
-        ratings = df['rating'].values
+
+        # Adjusted cosine similarity (Sarwar et al. 2001, "Item-Based
+        # Collaborative Filtering Recommendation Algorithms"): mean-center
+        # each user's ratings before computing item-item cosine, so a
+        # user's personal rating scale (someone who only ever rates 8-10
+        # vs. someone who uses the full range) doesn't distort similarity
+        # -- two games both loved by the same users should look similar
+        # regardless of each user's baseline generosity. Centering only
+        # touches actually-rated entries, preserving the sparse structure
+        # -- an unrated item stays absent, never becomes an implicit zero.
+        user_means = df.groupby('user')['rating'].transform('mean')
+        centered_ratings = (df['rating'] - user_means).values
 
         n_users = len(user_ids.cat.categories)
         n_items = len(item_ids.cat.categories)
 
-        # User-Item Sparse Matrix
+        # User-Item Sparse Matrix (mean-centered ratings)
         # shape: (n_users, n_items)
-        ui_matrix = csr_matrix((ratings, (row_indices, col_indices)), shape=(n_users, n_items))
+        ui_matrix = csr_matrix((centered_ratings, (row_indices, col_indices)), shape=(n_users, n_items))
 
         # To enforce minimum shared users, we can compute the dot product of a binary occurrence matrix.
         # This gives us the count of users who rated both item i and item j.

@@ -288,31 +288,48 @@ class SummarizationConfig:
 
 
 class RecommenderConfig:
-    """Content-based, collaborative, and graph recommenders (10 model IDs)."""
+    """Popularity, content-based, collaborative, and hybrid recommenders.
+
+    Paradigms: popularity, content, collaborative, hybrid. Graph-based
+    models (graph_jaccard, deepwalk) live inside the content paradigm --
+    they use game metadata (mechanics/categories/designers/...) as their
+    similarity substrate, same as the other content models, just via graph
+    structure instead of vector similarity.
+    """
 
     # --- Collaborative filtering (real fit() steps) ---
     CF_ITEM_COSINE_MIN_SHARED_USERS = 50
-    CF_SVD_N_FACTORS = 50
     CF_ALS_FACTORS = 50
     CF_ALS_ITERATIONS = 15
     CF_ALS_REGULARIZATION = 0.1
+    # implicit.als.AlternatingLeastSquares expects a confidence-weighted
+    # matrix (Hu/Koren/Volinsky 2008: confidence = 1 + alpha*r), not raw
+    # preference values -- feeding it raw 1-10 ratings directly as
+    # confidence (the previous behavior) conflates "how confident are we
+    # this interaction is positive" with the rating's own polarity, so a
+    # rating of 2/10 got read as a weak-but-positive signal instead of a
+    # dislike. alpha=40 is the paper's own default; not tuned against this
+    # dataset specifically.
+    CF_ALS_CONFIDENCE_ALPHA = 40
 
     # --- Content-based (similarity only, no fit step) ---
     # metadata = 0.7 * category/mechanic TF-IDF sim + 0.3 * numeric-feature sim
     METADATA_CATEGORICAL_WEIGHT = 0.7
     METADATA_NUMERIC_WEIGHT = 0.3
     TFIDF_MAX_FEATURES = 10000
-    # hybrid = weighted blend of embedding/metadata/tfidf similarity + quality
-    HYBRID_WEIGHTS = {"embedding": 0.45, "metadata": 0.25, "tfidf": 0.15, "quality": 0.15}
-    # quality score blend (rank-based + rating-based), both min-max normalized
-    QUALITY_RANK_WEIGHT = 0.5
-    QUALITY_RATING_WEIGHT = 0.5
     RECS_PER_MODEL_LIMIT = 10
 
-    # --- Graph-based ---
+    # --- Graph-based (part of the content paradigm — see class docstring) ---
+    # subdomains/families added alongside mechanics/categories -- previously
+    # missing from every content model except embedding. "themes" is
+    # deliberately NOT its own relation here: BGG's Theme: namespace is
+    # already one of families' 72 namespaces (see build_master_dataset.py),
+    # so adding both would double-count the same tags. Renormalized by
+    # run_jaccard (divides by the sum), so these don't need to sum to 1.
+    # Relative weights are a disclosed starting point, not tuned yet.
     GRAPH_JACCARD_WEIGHTS = {
-        "mechanics": 0.4, "categories": 0.3, "designers": 0.05,
-        "publishers": 0.025, "artists": 0.025,
+        "mechanics": 0.35, "categories": 0.25, "subdomains": 0.15, "families": 0.1,
+        "designers": 0.05, "publishers": 0.025, "artists": 0.025,
     }
     # DeepWalk-via-Word2Vec graph embedding (model id: "deepwalk" — this
     # replaces the real, unused node2vec PyPI-package path, which never
@@ -323,6 +340,57 @@ class RecommenderConfig:
     DEEPWALK_WINDOW = 5
     DEEPWALK_EPOCHS = 1
     DEEPWALK_MIN_COUNT = 1
+
+    # --- Hybrid (cross-paradigm combiner, model id: "hybrid") ---
+    # Combines one representative collaborative model's score with one
+    # representative content model's score -- not a recursive/arbitrary
+    # composition, one fixed formula: 0.5*collaborative + 0.5*content.
+    # Computed live at request time (RecommendationService.get_recommendations),
+    # not precomputed/stored: both inputs are already-precomputed top-N
+    # lists, so combining them is a few dozen floats and a sort, not an
+    # O(n^2) similarity matrix -- the same "cheap and freshness-sensitive
+    # stays live" reasoning already applied to the "embedding" model in that
+    # same method. An even 0.5/0.5 split is a disclosed starting point, not
+    # tuned against any evaluation yet.
+    HYBRID_ENGINE_WEIGHTS = {"collaborative": 0.5, "content": 0.5}
+    # Cheapest model per paradigm (no iterative fit / no embedding-model
+    # dependency), per the explicit "don't train everything, pick the
+    # cheapest representative" direction this was designed under. Both
+    # swappable later without changing the blending logic itself.
+    HYBRID_COLLABORATIVE_MODEL = "cf_item_cosine"
+    HYBRID_CONTENT_MODEL = "metadata"
+
+
+# Single source of truth for "what recommendation models exist" -- serves
+# GET /api/recommendation-models (RecommendationService.get_recommendation_models()),
+# which the frontend reads instead of hardcoding its own separate list.
+# 9 models across 4 paradigms, each paradigm classified by what data the
+# model actually consumes, not by algorithm family alone -- graph_jaccard
+# and deepwalk sit under content because both build their graph purely from
+# item metadata (mechanics/categories/designers/publishers/artists) and
+# never read the ratings table, even though "graph" might suggest
+# collaborative at a glance. Superseded a 3-entry backend method nobody
+# called and a disagreeing 10-entry hardcoded frontend array.
+RECOMMENDATION_MODELS = [
+    {"id": "popularity", "paradigm": "popularity", "name": "Popularity Ranking",
+     "description": "Universally popular, highly-ranked games. No personalization, no per-game computation."},
+    {"id": "metadata", "paradigm": "content", "name": "Metadata Similarity",
+     "description": "Cosine similarity over category/mechanic/subdomain/family and numeric (weight, playtime, player count) features."},
+    {"id": "tfidf", "paradigm": "content", "name": "TF-IDF Similarity",
+     "description": "Cosine similarity over TF-IDF-vectorized name, description, categories, mechanics, subdomains, families, designers, and publishers."},
+    {"id": "embedding", "paradigm": "content", "name": "Semantic Embedding Similarity",
+     "description": "Live pgvector nearest-neighbor search over Qwen3-Embedding-0.6B vectors -- the only content model computed at request time, not precomputed."},
+    {"id": "graph_jaccard", "paradigm": "content", "name": "Graph Jaccard",
+     "description": "Weighted Jaccard set-overlap across mechanics, categories, subdomains, families, designers, publishers, and artists -- item-metadata graph, not a user-item interaction graph."},
+    {"id": "deepwalk", "paradigm": "content", "name": "Graph Embedding (DeepWalk)",
+     "description": "DeepWalk graph embedding (random walks + Word2Vec) over the same item-metadata graph as Graph Jaccard."},
+    {"id": "cf_item_cosine", "paradigm": "collaborative", "name": "Item-Item Similarity",
+     "description": "Cosine similarity over the item-item co-occurrence matrix from real user ratings, masked below a minimum shared-rater threshold."},
+    {"id": "cf_als", "paradigm": "collaborative", "name": "Matrix Factorization (ALS)",
+     "description": "Alternating Least Squares over user ratings (confidence-weighted per Hu/Koren/Volinsky); item similarity in the resulting latent factor space."},
+    {"id": "hybrid", "paradigm": "hybrid", "name": "Weighted Hybrid",
+     "description": "Blends one collaborative and one content model's scores 0.5/0.5, computed live per request -- the only model that combines across paradigms rather than within one."},
+]
 
 
 class AssistantConfig:
