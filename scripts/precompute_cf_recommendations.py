@@ -1,4 +1,5 @@
-import os
+from datetime import datetime, timezone
+
 import pandas as pd
 import mlflow
 from sqlalchemy import create_engine
@@ -10,7 +11,6 @@ from app.core.config import settings
 from app.core.ml_config import RecommenderConfig
 from app.core.mlflow_utils import tracked_run
 from app.recommenders.collaborative.item_cosine import ItemCosineRecommender
-from app.recommenders.collaborative.svd import SVDRecommender
 from app.recommenders.collaborative.als import ALSRecommender
 
 def main():
@@ -28,20 +28,21 @@ def main():
         print("No games in database. Exiting.")
         return
 
-    csv_path = os.path.join(os.path.dirname(__file__), '../data/raw/user_ratings.csv')
-    print(f"Loading user ratings from {csv_path}...")
-    
-    # chunksize might be needed if memory is an issue, but we'll try loading it all
-    # using appropriate dtypes to save memory
-    df = pd.read_csv(
-        csv_path, 
-        usecols=['BGGId', 'Rating', 'Username'],
-        dtype={'BGGId': 'int32', 'Rating': 'float32', 'Username': 'category'}
+    # Reads the ratings table directly -- this used to read data/raw/user_ratings.csv,
+    # a file that doesn't exist on disk (the script could never actually run).
+    # Postgres already holds this exact interaction data post-ingest (26.2M rows,
+    # loaded once by ingest_master.py from master_ratings.csv); reading it from
+    # the DB instead of a second, divergent CSV copy is the same "ingest once,
+    # everything else reads from Postgres" pattern used everywhere else in this
+    # pipeline, and removes the missing-file failure mode entirely.
+    print("Loading ratings from the database...")
+    df = pd.read_sql(
+        "SELECT user_id AS user, game_id AS item, rating FROM ratings",
+        con=engine,
+        dtype={'user': 'int32', 'item': 'int32', 'rating': 'float32'}
     )
-    df.rename(columns={'BGGId': 'item', 'Rating': 'rating', 'Username': 'user'}, inplace=True)
+    print(f"Loaded ratings shape: {df.shape}")
 
-    print(f"Original ratings shape: {df.shape}")
-    
     # Filter to valid games only and drop NaNs
     df = df[df['item'].isin(valid_game_ids)]
     df = df.dropna(subset=['user', 'item', 'rating'])
@@ -50,7 +51,6 @@ def main():
     # Initialize models
     recommenders = [
         ItemCosineRecommender(min_shared_users=RecommenderConfig.CF_ITEM_COSINE_MIN_SHARED_USERS),
-        SVDRecommender(n_factors=RecommenderConfig.CF_SVD_N_FACTORS),
         ALSRecommender(
             factors=RecommenderConfig.CF_ALS_FACTORS,
             iterations=RecommenderConfig.CF_ALS_ITERATIONS,
@@ -80,6 +80,7 @@ def main():
             session.commit()
 
             print("Generating recommendations...")
+            computed_at = datetime.now(timezone.utc).replace(tzinfo=None)
             recs_to_insert = []
             batch_size = 5000
             count = 0
@@ -94,7 +95,8 @@ def main():
                         'recommended_game_id': rec['item_id'],
                         'model': model_name,
                         'score': rec['score'],
-                        'reasons': []  # User requested to leave reasons empty for now
+                        'reasons': [],  # User requested to leave reasons empty for now
+                        'computed_at': computed_at,
                     })
 
                 count += 1

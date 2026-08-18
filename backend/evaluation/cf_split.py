@@ -9,7 +9,6 @@ import math
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../'))
 from app.recommenders.collaborative.item_cosine import ItemCosineRecommender
-from app.recommenders.collaborative.svd import SVDRecommender
 from app.recommenders.collaborative.als import ALSRecommender
 from app.core.ml_config import RANDOM_SEED, RecommenderConfig
 from app.core.mlflow_utils import tracked_run, write_results_json
@@ -84,7 +83,6 @@ def main():
 
     recommenders = [
         ItemCosineRecommender(min_shared_users=RecommenderConfig.CF_ITEM_COSINE_MIN_SHARED_USERS),
-        SVDRecommender(n_factors=RecommenderConfig.CF_SVD_N_FACTORS),
         ALSRecommender(
             factors=RecommenderConfig.CF_ALS_FACTORS,
             iterations=RecommenderConfig.CF_ALS_ITERATIONS,

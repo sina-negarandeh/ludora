@@ -20,15 +20,18 @@ def main():
     Session = sessionmaker(bind=engine)
     session = Session()
 
-    models = ['metadata', 'tfidf', 'embedding', 'hybrid', 'graph_jaccard', 'deepwalk', 'cf_item_cosine', 'cf_svd', 'cf_als']
+    # "embedding" and "hybrid" are deliberately excluded: both are served
+    # live (RecommendationService.get_recommendations), never written to
+    # game_recommendations, so a coverage/ILD query against this table would
+    # always read zero rows for them -- there's nothing here for those two
+    # to evaluate.
+    models = ['metadata', 'tfidf', 'graph_jaccard', 'deepwalk', 'cf_item_cosine', 'cf_als']
     # Technique-family grouping, matching the precompute/training-side experiments —
     # so a model's eval run lands in the same MLflow experiment as its training run.
     MODEL_EXPERIMENT = {
         'metadata': 'recommender/content_based', 'tfidf': 'recommender/content_based',
-        'embedding': 'recommender/content_based', 'hybrid': 'recommender/content_based',
         'graph_jaccard': 'recommender/graph', 'deepwalk': 'recommender/graph',
-        'cf_item_cosine': 'recommender/collaborative', 'cf_svd': 'recommender/collaborative',
-        'cf_als': 'recommender/collaborative',
+        'cf_item_cosine': 'recommender/collaborative', 'cf_als': 'recommender/collaborative',
     }
 
     print("Loading game embeddings for diversity calculation...")

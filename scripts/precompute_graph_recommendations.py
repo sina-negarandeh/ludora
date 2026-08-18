@@ -1,4 +1,5 @@
 import random
+from datetime import datetime, timezone
 
 import numpy as np
 import networkx as nx
@@ -30,12 +31,14 @@ def sparse_jaccard(X_batch, X_all):
     jaccard[np.isnan(jaccard)] = 0.0
     return jaccard
 
-def run_jaccard(session, games, bgg_ids, batch_size=200):
+def run_jaccard(session, games, bgg_ids, computed_at, batch_size=200):
     """Weighted multi-relation Jaccard similarity (model id: 'graph_jaccard')."""
     weights = RecommenderConfig.GRAPH_JACCARD_WEIGHTS
     total_w = sum(weights.values())
     w_mech = weights["mechanics"] / total_w
     w_cat = weights["categories"] / total_w
+    w_sub = weights["subdomains"] / total_w
+    w_fam = weights["families"] / total_w
     w_des = weights["designers"] / total_w
     w_pub = weights["publishers"] / total_w
     w_art = weights["artists"] / total_w
@@ -48,12 +51,16 @@ def run_jaccard(session, games, bgg_ids, batch_size=200):
         print("Preparing data for Jaccard...")
         mechanics_list = [[m.name for m in g.mechanics] for g in games]
         categories_list = [[c.name for c in g.categories] for g in games]
+        subdomains_list = [[s.name for s in g.subdomains] for g in games]
+        families_list = [[f.name for f in g.families] for g in games]
         designers_list = [[d.name for d in g.designers] for g in games]
         publishers_list = [[p.name for p in g.publishers] for g in games]
         artists_list = [[a.name for a in g.artists] for g in games]
 
         X_mech = MultiLabelBinarizer(sparse_output=True).fit_transform(mechanics_list)
         X_cat = MultiLabelBinarizer(sparse_output=True).fit_transform(categories_list)
+        X_sub = MultiLabelBinarizer(sparse_output=True).fit_transform(subdomains_list)
+        X_fam = MultiLabelBinarizer(sparse_output=True).fit_transform(families_list)
         X_des = MultiLabelBinarizer(sparse_output=True).fit_transform(designers_list)
         X_pub = MultiLabelBinarizer(sparse_output=True).fit_transform(publishers_list)
         X_art = MultiLabelBinarizer(sparse_output=True).fit_transform(artists_list)
@@ -68,6 +75,8 @@ def run_jaccard(session, games, bgg_ids, batch_size=200):
 
             j_mech = sparse_jaccard(X_mech[start_idx:end_idx], X_mech)
             j_cat = sparse_jaccard(X_cat[start_idx:end_idx], X_cat)
+            j_sub = sparse_jaccard(X_sub[start_idx:end_idx], X_sub)
+            j_fam = sparse_jaccard(X_fam[start_idx:end_idx], X_fam)
             j_des = sparse_jaccard(X_des[start_idx:end_idx], X_des)
             j_pub = sparse_jaccard(X_pub[start_idx:end_idx], X_pub)
             j_art = sparse_jaccard(X_art[start_idx:end_idx], X_art)
@@ -75,6 +84,8 @@ def run_jaccard(session, games, bgg_ids, batch_size=200):
             jaccard_sim = (
                 w_mech * j_mech +
                 w_cat * j_cat +
+                w_sub * j_sub +
+                w_fam * j_fam +
                 w_des * j_des +
                 w_pub * j_pub +
                 w_art * j_art
@@ -96,7 +107,8 @@ def run_jaccard(session, games, bgg_ids, batch_size=200):
                         'recommended_game_id': bgg_ids[tgt_idx],
                         'model': 'graph_jaccard',
                         'score': score,
-                        'reasons': ["High structural similarity (Weighted Jaccard)"]
+                        'reasons': ["High structural similarity (Weighted Jaccard)"],
+                        'computed_at': computed_at,
                     })
 
             if len(recs_to_insert) >= 5000:
@@ -118,7 +130,7 @@ def run_jaccard(session, games, bgg_ids, batch_size=200):
 
         mlflow.log_metrics({"recommendations_written": total_recs_written})
 
-def run_deepwalk(session, games, bgg_ids, batch_size=200):
+def run_deepwalk(session, games, bgg_ids, computed_at, batch_size=200):
     """DeepWalk graph embeddings via gensim Word2Vec (model id: 'deepwalk').
 
     Replaces the memory-heavy, never-actually-trained node2vec PyPI-package
@@ -153,6 +165,10 @@ def run_deepwalk(session, games, bgg_ids, batch_size=200):
                 G.add_edge(game_node, f"M_{m.id}")
             for c in g.categories:
                 G.add_edge(game_node, f"C_{c.id}")
+            for s in g.subdomains:
+                G.add_edge(game_node, f"SD_{s.id}")
+            for f in g.families:
+                G.add_edge(game_node, f"SF_{f.id}")
             for d in g.designers:
                 G.add_edge(game_node, f"D_{d.id}")
             for p in g.publishers:
@@ -233,7 +249,8 @@ def run_deepwalk(session, games, bgg_ids, batch_size=200):
                         'recommended_game_id': bgg_ids[tgt_idx],
                         'model': 'deepwalk',
                         'score': score,
-                        'reasons': ["Deep graph relationship match"]
+                        'reasons': ["Deep graph relationship match"],
+                        'computed_at': computed_at,
                     })
 
             if len(recs_to_insert) >= 5000:
@@ -276,9 +293,10 @@ def main():
     session.commit()
 
     bgg_ids = [g.bgg_id for g in games]
+    computed_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
-    run_jaccard(session, games, bgg_ids)
-    run_deepwalk(session, games, bgg_ids)
+    run_jaccard(session, games, bgg_ids, computed_at)
+    run_deepwalk(session, games, bgg_ids, computed_at)
 
     print("Graph recommendation precomputation complete!")
 
