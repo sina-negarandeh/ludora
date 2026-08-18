@@ -21,6 +21,24 @@ def download_fasttext_model(model_path):
         os.replace(tmp_path, model_path)
         print("Downloaded.")
 
+
+# This pilot script is a frozen historical artifact (superseded by
+# app.core.review_quality — see docs/ml/absa.md) — its own quality formula
+# and thresholds are inlined here rather than pulled from ABSAConfig, whose
+# quality-related constants now belong to that newer, differently-scaled
+# system. Keeps this script's behavior unchanged rather than silently
+# reinterpreting its output against a threshold that means something else.
+_LENGTH_NORM_WORDS = 100.0
+_SPAM_PENALTY = 0.5
+_SPAM_PATTERN = r"(.)\1{4,}"
+_ASPECT_SIGNAL_CAP = 0.4
+_ASPECT_SIGNAL_STEP = 0.1
+_GAME_WORDS = {
+    "rulebook", "setup", "cards", "component", "components", "theme",
+    "mechanic", "player", "time", "luck", "balance",
+}
+_QUALITY_SCORE_THRESHOLD = 0.6
+
 def compute_quality_score(text, ft_model):
     if not isinstance(text, str) or not text.strip():
         return 0.0
@@ -40,21 +58,21 @@ def compute_quality_score(text, ft_model):
     if language_score < 0.5:
         return 0.0 # Strict drop for non-English
 
-    # 2. Length Score (normalize up to ABSAConfig.QUALITY_LENGTH_NORM_WORDS words)
-    length_score = min(len(words) / ABSAConfig.QUALITY_LENGTH_NORM_WORDS, 1.0)
+    # 2. Length Score (normalize up to _LENGTH_NORM_WORDS words)
+    length_score = min(len(words) / _LENGTH_NORM_WORDS, 1.0)
 
     # 3. Spam Penalty (excessive repeated characters)
     # e.g., "soooo" or "!!!!!"
     spam_penalty = 0.0
-    if re.search(ABSAConfig.QUALITY_SPAM_PATTERN, text):
-        spam_penalty = ABSAConfig.QUALITY_SPAM_PENALTY
+    if re.search(_SPAM_PATTERN, text):
+        spam_penalty = _SPAM_PENALTY
 
     # 4. Aspect Signal Score (heuristic for game terms)
     # Give a tiny boost if it contains common game words
     text_lower = set(word.lower() for word in words)
     aspect_signal = min(
-        len(text_lower.intersection(ABSAConfig.QUALITY_GAME_WORDS)) * ABSAConfig.QUALITY_ASPECT_SIGNAL_STEP,
-        ABSAConfig.QUALITY_ASPECT_SIGNAL_CAP,
+        len(text_lower.intersection(_GAME_WORDS)) * _ASPECT_SIGNAL_STEP,
+        _ASPECT_SIGNAL_CAP,
     )
 
     score = language_score + length_score + aspect_signal - spam_penalty
@@ -108,7 +126,7 @@ def main():
             seen_hashes.add(text_hash)
             
             q_score = compute_quality_score(text, ft_model)
-            is_eligible = q_score >= ABSAConfig.QUALITY_SCORE_THRESHOLD
+            is_eligible = q_score >= _QUALITY_SCORE_THRESHOLD
             
             filtered_rows.append({
                 'user_id': row['user_id'],
@@ -125,13 +143,13 @@ def main():
     print(f"Skipped {duplicates_skipped} exact duplicates.")
     
     eligible_count = df_out['is_absa_eligible'].sum() if not df_out.empty else 0
-    print(f"Found {eligible_count} reviews eligible for ABSA (Quality >= {ABSAConfig.QUALITY_SCORE_THRESHOLD}).")
+    print(f"Found {eligible_count} reviews eligible for ABSA (Quality >= {_QUALITY_SCORE_THRESHOLD}).")
 
     out_path = os.path.join(base_dir, 'pilot_absa_filtered.csv')
     df_out.to_csv(out_path, index=False)
     print(f"Saved ABSA filter dataset to {out_path}")
 
-    mlflow.log_params({"quality_score_threshold": ABSAConfig.QUALITY_SCORE_THRESHOLD, "game_ids": args.game_ids})
+    mlflow.log_params({"quality_score_threshold": _QUALITY_SCORE_THRESHOLD, "game_ids": args.game_ids})
     mlflow.log_metrics({
         "total_scanned": total_scanned,
         "duplicates_skipped": duplicates_skipped,

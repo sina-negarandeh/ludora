@@ -254,6 +254,15 @@ class ReviewAspect(Base):
     sentiment = Column(String, nullable=False) # 'positive', 'negative', 'mixed', 'neutral'
     sentiment_score = Column(Float)
     confidence = Column(Float)
+    # Full 3-class softmax, stored explicitly rather than left algebraically
+    # recoverable from (sentiment, confidence, sentiment_score) -- the
+    # values ARE fully reconstructable from those three (they sum to 1,
+    # differ by sentiment_score, and the winner equals confidence), but
+    # that requires re-deriving the algebra every time; storing them
+    # directly keeps review_aspects a genuinely self-documenting raw record.
+    prob_positive = Column(Float)
+    prob_neutral = Column(Float)
+    prob_negative = Column(Float)
     evidence = Column(Text)
     model_used = Column(String)
     prompt_version = Column(String)
@@ -285,6 +294,19 @@ class Review(Base):
     comment = Column(Text)
     language = Column(String(10), index=True)
     language_confidence = Column(Float, nullable=True)
+    # Set by scripts/filter_eligible_reviews.py — app.core.review_quality's
+    # weighted score and the final language+hard-filter+dedup+threshold
+    # decision, persisted per review rather than recomputed or cached in a
+    # JSON file (at ~378K eligible rows out of 4.2M, a real DB column is the
+    # right tool). NULL means "not yet scored", not "ineligible".
+    quality_score = Column(Float, nullable=True)
+    is_absa_eligible = Column(Boolean, nullable=True, index=True)
+    # Set by scripts/absa_extract_hf.py on every review it runs inference
+    # on, regardless of whether that review produced any storable aspect
+    # rows -- true resumability requires tracking "was this attempted", not
+    # "did review_aspects end up with a row for it" (a review can be
+    # legitimately attempted and yield zero evidence-matched aspects).
+    absa_processed_at = Column(DateTime, nullable=True)
 
     user = relationship("User", backref="reviews", lazy="selectin")
     game = relationship("Game", backref="reviews")

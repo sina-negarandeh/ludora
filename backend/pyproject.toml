@@ -25,6 +25,7 @@ dependencies = [
     "transformers>=5.15.0",
     "gensim>=4.4.0",
     "mlx-embeddings>=0.0.5",
+    "nltk>=3.10.3",
 ]
 
 [build-system]
