@@ -17,6 +17,8 @@ flowchart LR
         ABSA --> SUMM["generate_summaries.py\ncalls local LLM"]
     end
 
+    SUMM -- "OpenAI-compatible calls\n(separate config from the assistant)" --> MLX2["Local MLX server\nQwen3-4B-MLX-4bit\n(summarization)"]
+
     subgraph DB["PostgreSQL 15 + pgvector"]
         TBLS[("games · ratings · reviews\nreview_aspects · game_aspect_aggregates\ngame_recommendations · game_summaries")]
     end
@@ -34,7 +36,7 @@ flowchart LR
     end
 
     TBLS <--> SVC
-    SVC -- "intent parsing + summarization\n(OpenAI-compatible calls)" --> MLX["Local MLX server\nQwen3-30B-A3B-MLX-4bit"]
+    SVC -- "intent parsing\n(OpenAI-compatible calls, separate config from summarization)" --> MLX["Local MLX server\nQwen3-30B-A3B-MLX-4bit\n(assistant)"]
 
     FE["React 19 frontend\nGamesList · GameDetail · AssistantDrawer"] -- "HTTP (axios / fetch)" --> API
 ```

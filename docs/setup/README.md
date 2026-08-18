@@ -70,7 +70,7 @@ ABSA extraction, LLM summarization, and recommendation precompute are additional
 
 ## Local LLM server
 
-The AI Assistant and LLM summarization features call an OpenAI-compatible local server. The code defaults to `http://localhost:8080/v1` and model name `Qwen/Qwen3-30B-A3B-MLX-4bit` (both overridable via `OPENAI_BASE_URL`/`LLM_MODEL_NAME` environment variables — see `backend/app/services/assistant_service.py`, `summarization_service.py`). To run it (Apple Silicon only):
+The AI Assistant and LLM summarization features call an OpenAI-compatible local server — but **separate config for each**, not shared, since the assistant serves live requests and summarization is an offline precompute job that can point at a different server/instance entirely. The assistant defaults to `http://localhost:8080/v1` and `Qwen/Qwen3-30B-A3B-MLX-4bit` (`OPENAI_BASE_URL`/`OPENAI_API_KEY`/`LLM_MODEL_NAME`); summarization defaults to the same `http://localhost:8080/v1` but a smaller/faster `Qwen/Qwen3-4B-MLX-4bit` (`SUMMARIZATION_OPENAI_BASE_URL`/`SUMMARIZATION_OPENAI_API_KEY`/`SUMMARIZATION_MODEL_NAME`) — see `backend/app/core/config.py`, `assistant_service.py`, `summarization_service.py`. Running both models on one `mlx_lm.server` instance means loading whichever one is needed at the time; run two instances on different ports (and point each `*_BASE_URL` at its own) to have both available simultaneously. To run the assistant's model (Apple Silicon only):
 
 ```bash
 mlx_lm.server --model "Qwen/Qwen3-30B-A3B-MLX-4bit"
@@ -85,9 +85,12 @@ Since the backend runs natively (see above), it reaches this at the default `htt
 | Variable | Default | Where |
 |---|---|---|
 | `DATABASE_URL` | Local dev connection string (see `backend/app/core/config.py`) | Backend, overridable via `.env` (not committed) or environment |
-| `OPENAI_BASE_URL` | `http://localhost:8080/v1` | Backend (assistant + summarization) |
-| `OPENAI_API_KEY` | `not-needed-for-local` (placeholder, not a real key) | Backend |
-| `LLM_MODEL_NAME` | `Qwen/Qwen3-30B-A3B-MLX-4bit` | Backend |
+| `OPENAI_BASE_URL` | `http://localhost:8080/v1` | Backend (AI Assistant, live requests) |
+| `OPENAI_API_KEY` | `not-needed-for-local` (placeholder, not a real key) | Backend (AI Assistant) |
+| `LLM_MODEL_NAME` | `Qwen/Qwen3-30B-A3B-MLX-4bit` | Backend (AI Assistant) |
+| `SUMMARIZATION_OPENAI_BASE_URL` | `http://localhost:8080/v1` | Backend (offline summarization precompute) |
+| `SUMMARIZATION_OPENAI_API_KEY` | `not-needed-for-local` (placeholder) | Backend (summarization) |
+| `SUMMARIZATION_MODEL_NAME` | `Qwen/Qwen3-4B-MLX-4bit` | Backend (summarization) |
 | `VITE_API_URL` | `http://localhost:8000` | Frontend |
 | `RAW_DATA_THRENJEN_DIR` | `data/raw/kaggle_datasets_threnjen_board-games-database-from-boardgamegeek` | Pipeline scripts (repo-root-relative; the default just works when run from the repo root, as documented above) |
 | `RAW_DATA_JVANELTEREN_DIR` | `data/raw/kaggle_datasets_jvanelteren_boardgamegeek-reviews` | Pipeline scripts, same default |

@@ -9,7 +9,7 @@
 
 ## Model / Architecture
 
-Same local instruction-tuned LLM as summarization (`Qwen/Qwen3-30B-A3B-MLX-4bit` by default), via the OpenAI-compatible endpoint. `AssistantService.parse_query()` sends one chat-completion call with the full `ParsedIntent` JSON schema embedded in the system prompt plus a handful of worked examples, JSON-schema-constrained, Pydantic-validated (`ParsedIntent.model_validate_json()`, **no retry on validation failure**). `AssistantOrchestrator` then dispatches on the parsed `intent` enum via a plain `if`/`elif` — not a semantic embedding classifier, just routing on a string the LLM filled in.
+Local instruction-tuned LLM (`Qwen/Qwen3-30B-A3B-MLX-4bit` by default), via the OpenAI-compatible endpoint — its own config (`OPENAI_BASE_URL`/`OPENAI_API_KEY`/`LLM_MODEL_NAME`), deliberately separate from summarization's (`SUMMARIZATION_*`, a smaller `Qwen/Qwen3-4B-MLX-4bit` by default), since this is a live request-time call and summarization is an offline batch job — see [summarization-llm.md](summarization-llm.md). `AssistantService.parse_query()` sends one chat-completion call with the full `ParsedIntent` JSON schema embedded in the system prompt plus a handful of worked examples, JSON-schema-constrained, Pydantic-validated (`ParsedIntent.model_validate_json()`, **no retry on validation failure**). `AssistantOrchestrator` then dispatches on the parsed `intent` enum via a plain `if`/`elif` — not a semantic embedding classifier, just routing on a string the LLM filled in.
 
 Entity resolution (game/category/theme/mechanic names) is a separate, non-ML lowercase-name lookup cache (`EntityResolver`) plus delegation to lexical search for game names — no fuzzy-matching library involved.
 
