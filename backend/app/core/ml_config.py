@@ -276,6 +276,15 @@ class SummarizationConfig:
     MAX_REVIEWS_PER_ASPECT = 100
     TEMPERATURE = 0.0
     MAX_TOKENS = 2048
+    # Real, measured, non-deterministic failure mode despite temperature=0:
+    # the local MLX server occasionally returns an empty completion (no
+    # content, finish_reason=stop, well under MAX_TOKENS) for a prompt that
+    # succeeds on retry with byte-identical input -- reproduced directly
+    # against Ark Nova's Theme aspect (46 real evidence lines), not a
+    # synthetic worst case. Without a retry, one flaky call would abort an
+    # entire batch run partway through. 2 retries, not indefinite -- a
+    # genuinely broken prompt/schema should still surface as an error.
+    MAX_LLM_RETRIES = 2
 
 
 class RecommenderConfig:
