@@ -37,6 +37,7 @@ export interface Game {
   image_path?: string;
   rank?: number;
   num_ratings?: number;
+  num_comments?: number;
   rating_distribution?: number[];
   subdomain_ranks?: Record<string, number>;
   suggested_num_players?: PlayerCountPoll[];
@@ -78,6 +79,9 @@ export interface GameQuery {
   themes?: string[];
   families?: string[];
   mechanics?: string[];
+  designers?: string[];
+  artists?: string[];
+  publishers?: string[];
   exact_players?: number;
   min_players?: number;
   max_players?: number;
@@ -85,6 +89,8 @@ export interface GameQuery {
   max_weight?: number;
   min_playtime?: number;
   max_playtime?: number;
+  min_year?: number;
+  max_year?: number;
   sort_by?: string;
   order?: string;
   skip?: number;
@@ -181,6 +187,11 @@ export const fetchPublishers = async (): Promise<string[]> => {
   return data;
 };
 
+export const fetchArtists = async (): Promise<string[]> => {
+  const { data } = await apiClient.get<string[]>('/api/artists');
+  return data;
+};
+
 export interface SearchQueryPayload {
   q: string;
   mode: 'lexical' | 'semantic' | 'hybrid';
@@ -190,6 +201,9 @@ export interface SearchQueryPayload {
     themes?: string[];
     families?: string[];
     mechanics?: string[];
+    designers?: string[];
+    artists?: string[];
+    publishers?: string[];
     exact_players?: number;
     min_players?: number;
     max_players?: number;
@@ -197,6 +211,8 @@ export interface SearchQueryPayload {
     max_weight?: number;
     min_playtime?: number;
     max_playtime?: number;
+    min_year?: number;
+    max_year?: number;
   };
 }
 

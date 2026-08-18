@@ -42,6 +42,7 @@ class GameBase(BaseModel):
     is_reimplementation: Optional[bool] = Field(None, description="Whether this game is a reimplementation of an earlier game.")
     rank: Optional[int] = Field(None, description="The overall BoardGameGeek ranking of the game.")
     num_ratings: Optional[int] = Field(None, description="Total number of users who have rated this game.")
+    num_comments: Optional[int] = Field(None, description="Total number of users who have left a text review/comment for this game.")
     rating_distribution: Optional[List[int]] = Field(None, description="Array of 10 integers representing the count of ratings from 1 to 10.")
     subdomain_ranks: Optional[dict[str, int]] = Field(None, description="Dictionary mapping subdomain names (e.g., 'Strategy') to this game's rank within that subdomain.")
     suggested_num_players: Optional[List[Dict[str, Any]]] = Field(None, description="Raw BGG community poll: Best/Recommended/Not Recommended vote counts per player count.")

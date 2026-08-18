@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from app.database.models import Game, Category, Mechanic, Theme, Subdomain, Subfamily, GameEmbedding
+from app.database.models import Game, Category, Mechanic, Theme, Subdomain, Subfamily, GameEmbedding, Designer, Artist, Publisher
 from app.schemas.search import SearchQuery, PaginatedSearchResults, SearchResult, SearchDebug
 from app.schemas.game_query import GameFilter
 from app.core.ml_config import SearchConfig
@@ -49,6 +49,15 @@ def apply_game_filters(query, filters: GameFilter):
     if filters.mechanics:
         for mech in filters.mechanics:
             query = query.filter(Game.mechanics.any(Mechanic.name == mech))
+    if filters.designers:
+        for designer in filters.designers:
+            query = query.filter(Game.designers.any(Designer.name == designer))
+    if filters.artists:
+        for artist in filters.artists:
+            query = query.filter(Game.artists.any(Artist.name == artist))
+    if filters.publishers:
+        for publisher in filters.publishers:
+            query = query.filter(Game.publishers.any(Publisher.name == publisher))
 
     return query
 

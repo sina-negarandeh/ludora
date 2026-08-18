@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Tuple, List, Optional
-from app.database.models import Game, Category, Theme, Subdomain, Mechanic, Subfamily
+from app.database.models import Game, Category, Theme, Subdomain, Mechanic, Subfamily, Designer, Artist, Publisher
 
 class GameService:
     def __init__(self, db: Session):
@@ -19,6 +19,9 @@ class GameService:
         themes: Optional[List[str]] = None,
         families: Optional[List[str]] = None,
         mechanics: Optional[List[str]] = None,
+        designers: Optional[List[str]] = None,
+        artists: Optional[List[str]] = None,
+        publishers: Optional[List[str]] = None,
         exact_players: Optional[int] = None,
         min_players: Optional[int] = None,
         max_players: Optional[int] = None,
@@ -75,6 +78,15 @@ class GameService:
         if mechanics:
             for mech in mechanics:
                 query = query.filter(Game.mechanics.any(Mechanic.name == mech))
+        if designers:
+            for designer in designers:
+                query = query.filter(Game.designers.any(Designer.name == designer))
+        if artists:
+            for artist in artists:
+                query = query.filter(Game.artists.any(Artist.name == artist))
+        if publishers:
+            for publisher in publishers:
+                query = query.filter(Game.publishers.any(Publisher.name == publisher))
 
         # Count total after filters but before pagination
         # Use query.with_entities() to efficiently count without fetching full objects

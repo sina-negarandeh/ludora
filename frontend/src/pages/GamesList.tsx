@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { fetchGames, fetchCategories, fetchSubdomains, fetchFamilies, fetchMechanics, fetchSearch } from '../api/games';
+import { fetchGames, fetchCategories, fetchSubdomains, fetchFamilies, fetchMechanics, fetchDesigners, fetchArtists, fetchPublishers, fetchSearch } from '../api/games';
 import type { Game, GameQuery, SearchQueryPayload, PaginatedGames, PaginatedSearchResults } from '../api/games';
 import { GameCard } from '../components/GameCard';
 import { MultiSelectDropdown } from '../components/MultiSelectDropdown';
@@ -45,13 +45,21 @@ export const GamesList: React.FC = () => {
     (query.min_weight !== undefined && query.min_weight > 1.0 ? 1 : 0) +
     (query.max_weight !== undefined && query.max_weight < 5.0 ? 1 : 0) +
     (query.min_playtime !== undefined ? 1 : 0) +
-    (query.max_playtime !== undefined ? 1 : 0);
+    (query.max_playtime !== undefined ? 1 : 0) +
+    (query.designers?.length || 0) +
+    (query.artists?.length || 0) +
+    (query.publishers?.length || 0) +
+    (query.min_year !== undefined ? 1 : 0) +
+    (query.max_year !== undefined ? 1 : 0);
 
   const { data: subdomainsData } = useQuery({ queryKey: ['subdomains'], queryFn: fetchSubdomains, staleTime: Infinity });
   const subdomains = subdomainsData?.map(s => s.name) || [];
   const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: fetchCategories, staleTime: Infinity });
   const { data: familyGroups } = useQuery({ queryKey: ['families'], queryFn: fetchFamilies, staleTime: Infinity });
   const { data: mechanics } = useQuery({ queryKey: ['mechanics'], queryFn: fetchMechanics, staleTime: Infinity });
+  const { data: designers } = useQuery({ queryKey: ['designers'], queryFn: fetchDesigners, staleTime: Infinity });
+  const { data: artists } = useQuery({ queryKey: ['artists'], queryFn: fetchArtists, staleTime: Infinity });
+  const { data: publishers } = useQuery({ queryKey: ['publishers'], queryFn: fetchPublishers, staleTime: Infinity });
 
   const { data, isLoading, isError } = useQuery<PaginatedGames | PaginatedSearchResults>({
     queryKey: ['games', query, searchMode],
@@ -65,6 +73,9 @@ export const GamesList: React.FC = () => {
             categories: query.categories,
             families: query.families,
             mechanics: query.mechanics,
+            designers: query.designers,
+            artists: query.artists,
+            publishers: query.publishers,
             exact_players: query.exact_players,
             min_players: query.min_players,
             max_players: query.max_players,
@@ -72,6 +83,8 @@ export const GamesList: React.FC = () => {
             max_weight: query.max_weight,
             min_playtime: query.min_playtime,
             max_playtime: query.max_playtime,
+            min_year: query.min_year,
+            max_year: query.max_year,
           }
         };
         return fetchSearch(searchPayload, query.skip, query.limit);
@@ -176,17 +189,6 @@ export const GamesList: React.FC = () => {
               <div className="space-y-6 pt-2">
                 <h4 className="text-xs font-bold text-secondary-text uppercase tracking-wider pb-2 border-b border-neutral/10">Gameplay</h4>
 
-                {/* Mechanic */}
-                <div>
-                  <label className="block text-sm font-bold text-secondary-text mb-2">Mechanic</label>
-                  <SearchableCombobox
-                    options={mechanics || []}
-                    selected={query.mechanics || []}
-                    onChange={(selected) => handleFilterChange('mechanics', selected)}
-                    placeholder="Search mechanics..."
-                  />
-                </div>
-
               {/* Players */}
               <div>
                  <label className="block text-sm font-bold text-secondary-text mb-2">Players</label>
@@ -231,11 +233,64 @@ export const GamesList: React.FC = () => {
                     </div>
                   </div>
                </div>
+
+                {/* Mechanic */}
+                <div>
+                  <label className="block text-sm font-bold text-secondary-text mb-2">Mechanic</label>
+                  <SearchableCombobox
+                    options={mechanics || []}
+                    selected={query.mechanics || []}
+                    onChange={(selected) => handleFilterChange('mechanics', selected)}
+                    placeholder="Search mechanics..."
+                  />
+                </div>
               </div>
 
               {/* Group: Experience */}
               <div className="space-y-6 pt-2">
                 <h4 className="text-xs font-bold text-secondary-text uppercase tracking-wider pb-2 border-b border-neutral/10">Experience</h4>
+
+                {/* Playtime */}
+                <div>
+                  <label className="block text-sm font-bold text-secondary-text mb-2">Playtime</label>
+
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { label: 'Any', min: undefined, max: undefined },
+                      { label: '< 30 min', min: undefined, max: 30 },
+                      { label: '30-60 min', min: 30, max: 60 },
+                      { label: '60-120 min', min: 60, max: 120 },
+                      { label: '120+ min', min: 120, max: undefined },
+                    ].map(opt => (
+                      <button
+                        key={opt.label}
+                        onClick={() => {
+                          handleFilterChange('min_playtime', opt.min);
+                          handleFilterChange('max_playtime', opt.max);
+                        }}
+                        className={`px-3 py-1.5 rounded-full text-sm font-bold transition-colors ${query.min_playtime === opt.min && query.max_playtime === opt.max ? 'bg-primary text-white shadow-md' : 'bg-neutral/10 text-secondary-text hover:bg-neutral/20'}`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => setShowAdvancedPlaytime(!showAdvancedPlaytime)}
+                    className="mt-3 text-xs text-secondary-text font-medium hover:text-primary transition-colors flex items-center gap-1"
+                  >
+                    <span>Specify Min/Max</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className={`w-3 h-3 transition-transform ${showAdvancedPlaytime ? 'rotate-180' : ''}`}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                  </button>
+
+                  <div className={`overflow-hidden transition-all duration-300 ${showAdvancedPlaytime ? 'max-h-24 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
+                    <div className="flex items-center gap-2">
+                      <input type="number" min="0" placeholder="Min" value={query.min_playtime || ''} onChange={(e) => handleFilterChange('min_playtime', parseInt(e.target.value))} className="w-full bg-neutral/10 border-none rounded-xl px-3 py-2 text-text focus:ring-2 focus:ring-primary/50 outline-none" />
+                      <span className="text-secondary-text">-</span>
+                      <input type="number" min="0" placeholder="Max" value={query.max_playtime || ''} onChange={(e) => handleFilterChange('max_playtime', parseInt(e.target.value))} className="w-full bg-neutral/10 border-none rounded-xl px-3 py-2 text-text focus:ring-2 focus:ring-primary/50 outline-none" />
+                    </div>
+                  </div>
+                </div>
 
                 {/* Complexity */}
                 <div>
@@ -298,46 +353,52 @@ export const GamesList: React.FC = () => {
                    </span>
                    </div>
                 </div>
+              </div>
 
-                {/* Playtime */}
+              {/* Group: Production */}
+              <div className="space-y-6 pt-2">
+                <h4 className="text-xs font-bold text-secondary-text uppercase tracking-wider pb-2 border-b border-neutral/10">Production</h4>
+
+                {/* Designer */}
                 <div>
-                  <label className="block text-sm font-bold text-secondary-text mb-2">Playtime</label>
+                  <label className="block text-sm font-bold text-secondary-text mb-2">Designer</label>
+                  <SearchableCombobox
+                    options={designers || []}
+                    selected={query.designers || []}
+                    onChange={(selected) => handleFilterChange('designers', selected)}
+                    placeholder="Search designers..."
+                  />
+                </div>
 
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      { label: 'Any', min: undefined, max: undefined },
-                      { label: '< 30 min', min: undefined, max: 30 },
-                      { label: '30-60 min', min: 30, max: 60 },
-                      { label: '60-120 min', min: 60, max: 120 },
-                      { label: '120+ min', min: 120, max: undefined },
-                    ].map(opt => (
-                      <button
-                        key={opt.label}
-                        onClick={() => {
-                          handleFilterChange('min_playtime', opt.min);
-                          handleFilterChange('max_playtime', opt.max);
-                        }}
-                        className={`px-3 py-1.5 rounded-full text-sm font-bold transition-colors ${query.min_playtime === opt.min && query.max_playtime === opt.max ? 'bg-primary text-white shadow-md' : 'bg-neutral/10 text-secondary-text hover:bg-neutral/20'}`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
+                {/* Artist */}
+                <div>
+                  <label className="block text-sm font-bold text-secondary-text mb-2">Artist</label>
+                  <SearchableCombobox
+                    options={artists || []}
+                    selected={query.artists || []}
+                    onChange={(selected) => handleFilterChange('artists', selected)}
+                    placeholder="Search artists..."
+                  />
+                </div>
 
-                  <button
-                    onClick={() => setShowAdvancedPlaytime(!showAdvancedPlaytime)}
-                    className="mt-3 text-xs text-secondary-text font-medium hover:text-primary transition-colors flex items-center gap-1"
-                  >
-                    <span>Specify Min/Max</span>
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className={`w-3 h-3 transition-transform ${showAdvancedPlaytime ? 'rotate-180' : ''}`}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
-                  </button>
+                {/* Publisher */}
+                <div>
+                  <label className="block text-sm font-bold text-secondary-text mb-2">Publisher</label>
+                  <SearchableCombobox
+                    options={publishers || []}
+                    selected={query.publishers || []}
+                    onChange={(selected) => handleFilterChange('publishers', selected)}
+                    placeholder="Search publishers..."
+                  />
+                </div>
 
-                  <div className={`overflow-hidden transition-all duration-300 ${showAdvancedPlaytime ? 'max-h-24 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
-                    <div className="flex items-center gap-2">
-                      <input type="number" min="0" placeholder="Min" value={query.min_playtime || ''} onChange={(e) => handleFilterChange('min_playtime', parseInt(e.target.value))} className="w-full bg-neutral/10 border-none rounded-xl px-3 py-2 text-text focus:ring-2 focus:ring-primary/50 outline-none" />
-                      <span className="text-secondary-text">-</span>
-                      <input type="number" min="0" placeholder="Max" value={query.max_playtime || ''} onChange={(e) => handleFilterChange('max_playtime', parseInt(e.target.value))} className="w-full bg-neutral/10 border-none rounded-xl px-3 py-2 text-text focus:ring-2 focus:ring-primary/50 outline-none" />
-                    </div>
+                {/* Year Published */}
+                <div>
+                  <label className="block text-sm font-bold text-secondary-text mb-2">Year Published</label>
+                  <div className="flex items-center gap-2">
+                    <input type="number" placeholder="Min" value={query.min_year || ''} onChange={(e) => handleFilterChange('min_year', parseInt(e.target.value))} className="w-full bg-neutral/10 border-none rounded-xl px-3 py-2 text-text focus:ring-2 focus:ring-primary/50 outline-none" />
+                    <span className="text-secondary-text">-</span>
+                    <input type="number" placeholder="Max" value={query.max_year || ''} onChange={(e) => handleFilterChange('max_year', parseInt(e.target.value))} className="w-full bg-neutral/10 border-none rounded-xl px-3 py-2 text-text focus:ring-2 focus:ring-primary/50 outline-none" />
                   </div>
                 </div>
               </div>
@@ -427,21 +488,10 @@ export const GamesList: React.FC = () => {
               <div className="space-y-8 pt-4">
                 <h4 className="text-sm font-bold text-secondary-text uppercase tracking-wider pb-3 border-b border-neutral/10">Gameplay</h4>
 
-                {/* Mechanic */}
-                <div>
-                  <label className="block text-lg font-bold text-secondary-text mb-3">Mechanic</label>
-                  <SearchableCombobox 
-                    options={mechanics || []} 
-                    selected={query.mechanics || []} 
-                    onChange={(selected) => handleFilterChange('mechanics', selected)} 
-                    placeholder="Search mechanics..." 
-                  />
-                </div>
-
               {/* Players */}
               <div>
                  <label className="block text-lg font-bold text-secondary-text mb-3">Players</label>
-                 
+
                  <div className="flex flex-wrap gap-3">
                    {[
                      { label: 'Any', value: undefined },
@@ -466,8 +516,8 @@ export const GamesList: React.FC = () => {
                    ))}
                  </div>
 
-                 <button 
-                   onClick={() => setShowAdvancedPlayers(!showAdvancedPlayers)} 
+                 <button
+                   onClick={() => setShowAdvancedPlayers(!showAdvancedPlayers)}
                    className="mt-4 text-sm text-secondary-text font-medium hover:text-primary transition-colors flex items-center gap-1"
                  >
                    <span>Specify Min/Max</span>
@@ -482,73 +532,22 @@ export const GamesList: React.FC = () => {
                     </div>
                   </div>
                </div>
+
+                {/* Mechanic */}
+                <div>
+                  <label className="block text-lg font-bold text-secondary-text mb-3">Mechanic</label>
+                  <SearchableCombobox
+                    options={mechanics || []}
+                    selected={query.mechanics || []}
+                    onChange={(selected) => handleFilterChange('mechanics', selected)}
+                    placeholder="Search mechanics..."
+                  />
+                </div>
               </div>
 
               {/* Group: Experience */}
               <div className="space-y-8 pt-4">
                 <h4 className="text-sm font-bold text-secondary-text uppercase tracking-wider pb-3 border-b border-neutral/10">Experience</h4>
-
-                {/* Complexity */}
-                <div>
-                   <label className="block text-lg font-bold text-secondary-text mb-4">Complexity (1.0 - 5.0)</label>
-                 
-                 <div className="flex flex-wrap gap-3 mb-6">
-                   {[
-                     { label: 'Any', min: undefined, max: undefined },
-                     { label: 'Light (1-2)', min: 1.0, max: 2.0 },
-                     { label: 'Medium (2-3.5)', min: 2.0, max: 3.5 },
-                     { label: 'Heavy (3.5-5)', min: 3.5, max: 5.0 },
-                   ].map(preset => (
-                     <button
-                       key={preset.label}
-                       onClick={() => {
-                         handleFilterChange('min_weight', preset.min);
-                         handleFilterChange('max_weight', preset.max);
-                       }}
-                       className={`px-4 py-2 rounded-full text-sm font-bold transition-colors ${query.min_weight === preset.min && query.max_weight === preset.max ? 'bg-primary text-white shadow-md' : 'bg-neutral/10 text-secondary-text hover:bg-neutral/20'}`}
-                     >
-                       {preset.label}
-                     </button>
-                   ))}
-                 </div>
-
-                 <div className="flex items-center gap-4 px-2">
-                   <span className="text-lg font-bold text-secondary-text min-w-[2rem] text-right">
-                     {(query.min_weight || 1.0).toFixed(1)}
-                   </span>
-                   
-                   <div className="relative w-full h-10 flex items-center">
-                     <div className="absolute w-full h-2 bg-neutral/20 rounded-full" />
-                     <div 
-                       className="absolute h-2 bg-primary rounded-full pointer-events-none" 
-                       style={{ 
-                         left: `${(((query.min_weight || 1.0) - 1.0) / 4.0) * 100}%`,
-                         width: `${(((query.max_weight || 5.0) - (query.min_weight || 1.0)) / 4.0) * 100}%` 
-                       }} 
-                     />
-                     <input 
-                       type="range" min="1.0" max="5.0" step="0.1" value={query.min_weight || 1.0}
-                       onChange={(e) => {
-                         const val = Math.min(parseFloat(e.target.value), (query.max_weight || 5.0));
-                         handleFilterChange('min_weight', val);
-                       }}
-                       className={`absolute w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-[3px] [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:cursor-grab active:[&::-webkit-slider-thumb]:cursor-grabbing [&::-moz-range-thumb]:pointer-events-auto ${(query.min_weight || 1.0) > 3.0 ? 'z-20' : 'z-10'}`}
-                     />
-                     <input 
-                       type="range" min="1.0" max="5.0" step="0.1" value={query.max_weight || 5.0}
-                       onChange={(e) => {
-                         const val = Math.max(parseFloat(e.target.value), (query.min_weight || 1.0));
-                         handleFilterChange('max_weight', val);
-                       }}
-                       className={`absolute w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-[3px] [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:cursor-grab active:[&::-webkit-slider-thumb]:cursor-grabbing [&::-moz-range-thumb]:pointer-events-auto ${(query.min_weight || 1.0) > 3.0 ? 'z-10' : 'z-20'}`}
-                     />
-                   </div>
-
-                   <span className="text-lg font-bold text-secondary-text min-w-[2rem]">
-                     {(query.max_weight || 5.0).toFixed(1)}
-                    </span>
-                  </div>
-                </div>
 
                 {/* Playtime */}
                 <div>
@@ -589,6 +588,116 @@ export const GamesList: React.FC = () => {
                       <span className="text-secondary-text">-</span>
                       <input type="number" min="0" placeholder="Max" value={query.max_playtime || ''} onChange={(e) => handleFilterChange('max_playtime', parseInt(e.target.value))} className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 text-lg text-text focus:ring-2 focus:ring-primary/50 outline-none" />
                     </div>
+                  </div>
+                </div>
+
+                {/* Complexity */}
+                <div>
+                   <label className="block text-lg font-bold text-secondary-text mb-4">Complexity (1.0 - 5.0)</label>
+
+                 <div className="flex flex-wrap gap-3 mb-6">
+                   {[
+                     { label: 'Any', min: undefined, max: undefined },
+                     { label: 'Light (1-2)', min: 1.0, max: 2.0 },
+                     { label: 'Medium (2-3.5)', min: 2.0, max: 3.5 },
+                     { label: 'Heavy (3.5-5)', min: 3.5, max: 5.0 },
+                   ].map(preset => (
+                     <button
+                       key={preset.label}
+                       onClick={() => {
+                         handleFilterChange('min_weight', preset.min);
+                         handleFilterChange('max_weight', preset.max);
+                       }}
+                       className={`px-4 py-2 rounded-full text-sm font-bold transition-colors ${query.min_weight === preset.min && query.max_weight === preset.max ? 'bg-primary text-white shadow-md' : 'bg-neutral/10 text-secondary-text hover:bg-neutral/20'}`}
+                     >
+                       {preset.label}
+                     </button>
+                   ))}
+                 </div>
+
+                 <div className="flex items-center gap-4 px-2">
+                   <span className="text-lg font-bold text-secondary-text min-w-[2rem] text-right">
+                     {(query.min_weight || 1.0).toFixed(1)}
+                   </span>
+
+                   <div className="relative w-full h-10 flex items-center">
+                     <div className="absolute w-full h-2 bg-neutral/20 rounded-full" />
+                     <div
+                       className="absolute h-2 bg-primary rounded-full pointer-events-none"
+                       style={{
+                         left: `${(((query.min_weight || 1.0) - 1.0) / 4.0) * 100}%`,
+                         width: `${(((query.max_weight || 5.0) - (query.min_weight || 1.0)) / 4.0) * 100}%`
+                       }}
+                     />
+                     <input
+                       type="range" min="1.0" max="5.0" step="0.1" value={query.min_weight || 1.0}
+                       onChange={(e) => {
+                         const val = Math.min(parseFloat(e.target.value), (query.max_weight || 5.0));
+                         handleFilterChange('min_weight', val);
+                       }}
+                       className={`absolute w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-[3px] [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:cursor-grab active:[&::-webkit-slider-thumb]:cursor-grabbing [&::-moz-range-thumb]:pointer-events-auto ${(query.min_weight || 1.0) > 3.0 ? 'z-20' : 'z-10'}`}
+                     />
+                     <input
+                       type="range" min="1.0" max="5.0" step="0.1" value={query.max_weight || 5.0}
+                       onChange={(e) => {
+                         const val = Math.max(parseFloat(e.target.value), (query.min_weight || 1.0));
+                         handleFilterChange('max_weight', val);
+                       }}
+                       className={`absolute w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-[3px] [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:cursor-grab active:[&::-webkit-slider-thumb]:cursor-grabbing [&::-moz-range-thumb]:pointer-events-auto ${(query.min_weight || 1.0) > 3.0 ? 'z-10' : 'z-20'}`}
+                     />
+                   </div>
+
+                   <span className="text-lg font-bold text-secondary-text min-w-[2rem]">
+                     {(query.max_weight || 5.0).toFixed(1)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Group: Production */}
+              <div className="space-y-8 pt-4">
+                <h4 className="text-sm font-bold text-secondary-text uppercase tracking-wider pb-3 border-b border-neutral/10">Production</h4>
+
+                {/* Designer */}
+                <div>
+                  <label className="block text-lg font-bold text-secondary-text mb-3">Designer</label>
+                  <SearchableCombobox
+                    options={designers || []}
+                    selected={query.designers || []}
+                    onChange={(selected) => handleFilterChange('designers', selected)}
+                    placeholder="Search designers..."
+                  />
+                </div>
+
+                {/* Artist */}
+                <div>
+                  <label className="block text-lg font-bold text-secondary-text mb-3">Artist</label>
+                  <SearchableCombobox
+                    options={artists || []}
+                    selected={query.artists || []}
+                    onChange={(selected) => handleFilterChange('artists', selected)}
+                    placeholder="Search artists..."
+                  />
+                </div>
+
+                {/* Publisher */}
+                <div>
+                  <label className="block text-lg font-bold text-secondary-text mb-3">Publisher</label>
+                  <SearchableCombobox
+                    options={publishers || []}
+                    selected={query.publishers || []}
+                    onChange={(selected) => handleFilterChange('publishers', selected)}
+                    placeholder="Search publishers..."
+                  />
+                </div>
+
+                {/* Year Published */}
+                <div>
+                  <label className="block text-lg font-bold text-secondary-text mb-3">Year Published</label>
+                  <div className="flex items-center gap-3">
+                    <input type="number" placeholder="Min" value={query.min_year || ''} onChange={(e) => handleFilterChange('min_year', parseInt(e.target.value))} className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 text-lg text-text focus:ring-2 focus:ring-primary/50 outline-none" />
+                    <span className="text-secondary-text">-</span>
+                    <input type="number" placeholder="Max" value={query.max_year || ''} onChange={(e) => handleFilterChange('max_year', parseInt(e.target.value))} className="w-full bg-neutral/10 border-none rounded-2xl px-6 py-4 text-lg text-text focus:ring-2 focus:ring-primary/50 outline-none" />
                   </div>
                 </div>
               </div>

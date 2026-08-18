@@ -11,7 +11,7 @@ from app.services.aspect_service import AspectService, AspectAggregateResponse
 
 router = APIRouter()
 
-@router.get("/", response_model=PaginatedGames, summary="Search and Filter Games", description="Retrieve a paginated list of board games. Supports lexical search via the 'query' parameter, filtering by subdomains, categories, mechanics, themes, families, player counts, weight, and playtime. Allows sorting by rank, rating, and other metrics.")
+@router.get("/", response_model=PaginatedGames, summary="Search and Filter Games", description="Retrieve a paginated list of board games. Supports lexical search via the 'query' parameter, filtering by subdomains, categories, mechanics, themes, families, designers, artists, publishers, player counts, weight, playtime, and year published. Allows sorting by rank, rating, and other metrics.")
 def get_games(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
@@ -23,6 +23,9 @@ def get_games(
     themes: Optional[List[str]] = Query(None),
     families: Optional[List[str]] = Query(None),
     mechanics: Optional[List[str]] = Query(None),
+    designers: Optional[List[str]] = Query(None),
+    artists: Optional[List[str]] = Query(None),
+    publishers: Optional[List[str]] = Query(None),
     exact_players: Optional[int] = None,
     min_players: Optional[int] = None,
     max_players: Optional[int] = None,
@@ -30,6 +33,8 @@ def get_games(
     max_weight: Optional[float] = None,
     min_playtime: Optional[int] = None,
     max_playtime: Optional[int] = None,
+    min_year: Optional[int] = None,
+    max_year: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     service = GameService(db)
@@ -44,13 +49,18 @@ def get_games(
         themes=themes,
         families=families,
         mechanics=mechanics,
+        designers=designers,
+        artists=artists,
+        publishers=publishers,
         exact_players=exact_players,
         min_players=min_players,
         max_players=max_players,
         min_weight=min_weight,
         max_weight=max_weight,
         min_playtime=min_playtime,
-        max_playtime=max_playtime
+        max_playtime=max_playtime,
+        min_year=min_year,
+        max_year=max_year
     )
     return PaginatedGames(total=total, items=games)
 
