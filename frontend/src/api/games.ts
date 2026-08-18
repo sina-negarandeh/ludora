@@ -270,6 +270,18 @@ export const fetchRecommendations = async (
   return data;
 };
 
+export interface RecommendationModel {
+  id: string;
+  paradigm: string;
+  name: string;
+  description: string;
+}
+
+export const fetchRecommendationModels = async (): Promise<RecommendationModel[]> => {
+  const { data } = await apiClient.get<{ models: RecommendationModel[] }>('/api/recommendation-models');
+  return data.models;
+};
+
 export const fetchReviews = async (
   bgg_id: number,
   page: number = 1,

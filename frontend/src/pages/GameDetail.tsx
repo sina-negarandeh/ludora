@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import axios from 'axios';
-import { fetchGame, fetchRecommendations, fetchReviews, fetchGames, fetchSubdomains } from '../api/games';
+import { fetchGame, fetchRecommendations, fetchRecommendationModels, fetchReviews, fetchGames, fetchSubdomains } from '../api/games';
 import type { Game, Review, PlayerCountPoll, AgePollResult } from '../api/games';
 import { GameCard } from '../components/GameCard';
 import { StarIcon, ClockIcon, UserGroupIcon, AcademicCapIcon, TrophyIcon, UserIcon, ArrowLeftIcon, HandThumbUpIcon, HandThumbDownIcon, ScaleIcon, SparklesIcon, ChatBubbleLeftRightIcon, LanguageIcon, XMarkIcon } from '@heroicons/react/24/solid';
@@ -134,25 +134,17 @@ const FamilyGroupList: React.FC<{ items: string[], groupLimit?: number }> = ({ i
   );
 };
 
-const MODELS = [
-  { id: 'popularity', name: 'Popularity Baseline', coverage: null, ild: null, category: 'Popularity-Based' },
-  { id: 'metadata', name: 'Metadata Similarity', coverage: 96.13, ild: 0.52, category: 'Content-Based Filtering' },
-  { id: 'tfidf', name: 'TF-IDF Vectorization', coverage: 95.41, ild: 0.44, category: 'Content-Based Filtering' },
-  { id: 'embedding', name: 'Semantic Embedding', coverage: 93.54, ild: 0.34, category: 'Content-Based Filtering' },
-  { id: 'hybrid', name: 'Hybrid System', coverage: 90.49, ild: 0.39, category: 'Content-Based Filtering' },
-  { id: 'graph_jaccard', name: 'Graph Jaccard', coverage: 94.03, ild: 0.52, category: 'Content-Based Filtering' },
-  { id: 'deepwalk', name: 'Graph DeepWalk', coverage: 96.55, ild: 0.54, category: 'Content-Based Filtering' },
-  { id: 'cf_item_cosine', name: 'Item-Item Cosine', coverage: null, ild: null, category: 'Collaborative Filtering' },
-  { id: 'cf_svd', name: 'Matrix Factorization (SVD)', coverage: null, ild: null, category: 'Collaborative Filtering' },
-  { id: 'cf_als', name: 'Alternating Least Squares (ALS)', coverage: null, ild: null, category: 'Collaborative Filtering' },
-];
-
-const RECSYS_TYPES = [
-  { id: 'Popularity-Based', name: 'Popularity-Based', available: true },
-  { id: 'Content-Based Filtering', name: 'Content-Based Filtering', available: true },
-  { id: 'Collaborative Filtering', name: 'Collaborative Filtering', available: true },
-  { id: 'Hybrid', name: 'Hybrid', available: false },
-];
+// Display metadata for each paradigm the backend's /api/recommendation-models
+// can return (RecommenderConfig paradigms: popularity, content, collaborative,
+// hybrid) -- the models themselves are fetched live, not hardcoded here, so
+// this list can't drift from what RecommendationService actually serves.
+const PARADIGM_DISPLAY: Record<string, { name: string; description: string }> = {
+  popularity: { name: 'Popularity-Based', description: 'Recommendations based on overall community engagement and game ratings.' },
+  content: { name: 'Content-Based Filtering', description: 'Matches based on game characteristics, mechanics, categories, and designer relationships.' },
+  collaborative: { name: 'Collaborative Filtering', description: 'Matches based on real user rating patterns across the catalog.' },
+  hybrid: { name: 'Hybrid', description: 'Blends a collaborative and a content model into a single weighted ranking.' },
+};
+const PARADIGM_ORDER = ['popularity', 'content', 'collaborative', 'hybrid'];
 
 // Near-100% needs over/under-precision care near the ceiling, same as any percentile display.
 const formatBetterThanPct = (pct: number): string => {
@@ -928,11 +920,17 @@ const UserRatings: React.FC<{ game: Game }> = ({ game }) => {
 const GameRecommendations: React.FC<{ bgg_id: number }> = ({ bgg_id }) => {
   const [model, setModel] = useState('hybrid');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<string>('Content-Based Filtering');
+  const [activeTab, setActiveTab] = useState<string>('content');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const selectedModel = MODELS.find(m => m.id === model) || MODELS[4];
-  
+  const { data: models } = useQuery({
+    queryKey: ['recommendation-models'],
+    queryFn: fetchRecommendationModels,
+    staleTime: Infinity,
+  });
+
+  const selectedModel = models?.find(m => m.id === model);
+
   const { data, isLoading } = useQuery({
     queryKey: ['recommendations', bgg_id, model],
     queryFn: () => fetchRecommendations(bgg_id, model, 10),
@@ -958,10 +956,10 @@ const GameRecommendations: React.FC<{ bgg_id: number }> = ({ bgg_id }) => {
 
   useEffect(() => {
     if (isDropdownOpen) {
-      const currentCategory = MODELS.find(m => m.id === model)?.category;
-      if (currentCategory) setActiveTab(currentCategory);
+      const currentParadigm = models?.find(m => m.id === model)?.paradigm;
+      if (currentParadigm) setActiveTab(currentParadigm);
     }
-  }, [isDropdownOpen, model]);
+  }, [isDropdownOpen, model, models]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -989,7 +987,9 @@ const GameRecommendations: React.FC<{ bgg_id: number }> = ({ bgg_id }) => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
             <span className="hidden sm:inline text-secondary-text font-medium">Recommendation Engine: </span>
-            <span className="text-primary">{selectedModel.category} | {selectedModel.name}</span>
+            <span className="text-primary">
+              {selectedModel ? `${PARADIGM_DISPLAY[selectedModel.paradigm]?.name ?? selectedModel.paradigm} | ${selectedModel.name}` : '…'}
+            </span>
             <svg className={`w-3 h-3 ml-0.5 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
@@ -1000,24 +1000,18 @@ const GameRecommendations: React.FC<{ bgg_id: number }> = ({ bgg_id }) => {
               
               {/* Segmented Control / Tabs */}
               <div className="p-3 bg-neutral/5 border-b border-neutral/10">
-                <div className="grid grid-cols-2 gap-1 bg-neutral/20 shadow-inner p-1 rounded-xl">
-                  {RECSYS_TYPES.map(category => (
+                <div className="grid grid-cols-4 gap-1 bg-neutral/20 shadow-inner p-1 rounded-xl">
+                  {PARADIGM_ORDER.map(paradigm => (
                     <button
-                      key={category.id}
-                      onClick={() => {
-                        if (category.available) setActiveTab(category.id);
-                      }}
+                      key={paradigm}
+                      onClick={() => setActiveTab(paradigm)}
                       className={`text-[11px] font-bold px-3 py-2 rounded-lg transition-all text-center flex items-center justify-center duration-200 ${
-                        activeTab === category.id
+                        activeTab === paradigm
                           ? 'bg-surface text-primary shadow-[0_1px_3px_rgba(0,0,0,0.1),0_1px_2px_rgba(0,0,0,0.06)] ring-1 ring-black/5'
-                          : category.available
-                            ? 'text-secondary-text hover:text-text hover:bg-neutral/10'
-                            : 'text-secondary-text/40 cursor-not-allowed'
+                          : 'text-secondary-text hover:text-text hover:bg-neutral/10'
                       }`}
-                      disabled={!category.available}
                     >
-                      {category.name}
-                      {!category.available && <span className="ml-1.5 text-[9px] bg-neutral/20 px-1.5 py-0.5 rounded uppercase tracking-wider shadow-inner">Soon</span>}
+                      {PARADIGM_DISPLAY[paradigm].name}
                     </button>
                   ))}
                 </div>
@@ -1028,45 +1022,29 @@ const GameRecommendations: React.FC<{ bgg_id: number }> = ({ bgg_id }) => {
                 <svg className="w-4 h-4 text-secondary-text/70 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                {activeTab === 'Popularity-Based' 
-                  ? 'Recommendations based on overall community engagement and game ratings.' 
-                  : activeTab === 'Content-Based Filtering'
-                    ? 'Matches based on game characteristics, mechanics, categories, and designer relationships.'
-                    : activeTab === 'Collaborative Filtering'
-                      ? 'Matches based on user collections and play history.'
-                      : 'A hybrid approach combining multiple recommendation strategies.'}
+                {PARADIGM_DISPLAY[activeTab]?.description}
               </div>
 
               {/* Models List for Active Tab */}
               <div className="flex flex-col bg-surface min-h-[250px]">
-                <div className="grid grid-cols-[1fr_90px_90px] gap-4 px-5 py-3 text-[10px] font-extrabold text-secondary-text uppercase tracking-wider border-b border-neutral/10 bg-surface">
-                  <div>Algorithm</div>
-                  <div className="text-right" title="Is the system diverse?">Coverage</div>
-                  <div className="text-right" title="Are the 10 recommendations different from each other?">ILD@10</div>
-                </div>
-                
                 <div className="overflow-y-auto max-h-[300px]">
-                  {MODELS.filter(m => m.category === activeTab).length > 0 ? (
-                    MODELS.filter(m => m.category === activeTab).map(m => (
+                  {(models ?? []).filter(m => m.paradigm === activeTab).length > 0 ? (
+                    (models ?? []).filter(m => m.paradigm === activeTab).map(m => (
                       <button
                         key={m.id}
                         onClick={() => { setModel(m.id); setIsDropdownOpen(false); }}
-                        className={`w-full grid grid-cols-[1fr_90px_90px] gap-4 px-5 py-3 items-center text-left hover:bg-neutral/5 transition-colors ${
+                        title={m.description}
+                        className={`w-full flex flex-col gap-0.5 px-5 py-3 items-start text-left hover:bg-neutral/5 transition-colors ${
                           m.id === model ? 'bg-primary/10 font-bold text-primary' : 'text-text'
                         }`}
                       >
                         <div>{m.name}</div>
-                        <div className="text-right text-secondary-text tabular-nums tracking-tight text-xs">
-                          {m.coverage ? `${m.coverage.toFixed(2)}%` : '—'}
-                        </div>
-                        <div className="text-right text-secondary-text tabular-nums tracking-tight text-xs">
-                          {m.ild ? m.ild.toFixed(2) : '—'}
-                        </div>
+                        <div className="text-secondary-text text-xs font-normal leading-snug line-clamp-2">{m.description}</div>
                       </button>
                     ))
                   ) : (
                     <div className="p-8 text-center text-secondary-text text-sm">
-                      Models for this category are coming soon.
+                      Loading models...
                     </div>
                   )}
                 </div>
