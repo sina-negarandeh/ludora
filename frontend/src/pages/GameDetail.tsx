@@ -6,7 +6,7 @@ import axios from 'axios';
 import { fetchGame, fetchRecommendations, fetchReviews, fetchGames, fetchSubdomains } from '../api/games';
 import type { Game, Review, PlayerCountPoll, AgePollResult } from '../api/games';
 import { GameCard } from '../components/GameCard';
-import { StarIcon, ClockIcon, UserGroupIcon, AcademicCapIcon, TrophyIcon, UserIcon, ArrowLeftIcon, HandThumbUpIcon, HandThumbDownIcon, SparklesIcon, ChatBubbleLeftRightIcon, LanguageIcon, XMarkIcon } from '@heroicons/react/24/solid';
+import { StarIcon, ClockIcon, UserGroupIcon, AcademicCapIcon, TrophyIcon, UserIcon, ArrowLeftIcon, HandThumbUpIcon, HandThumbDownIcon, ScaleIcon, SparklesIcon, ChatBubbleLeftRightIcon, LanguageIcon, XMarkIcon } from '@heroicons/react/24/solid';
 
 const SUBDOMAIN_MAP: Record<string, string> = {
   'CGS': 'Collectible Game System',
@@ -1418,6 +1418,11 @@ const GameReviews: React.FC<{ game: Game }> = ({ game }) => {
 };
 
 // --- Types for ABSA ---
+interface EvidenceSample {
+  sentiment: 'positive' | 'negative' | 'neutral';
+  text: string;
+}
+
 interface AspectAggregate {
   aspect: string;
   positive_count: number;
@@ -1426,7 +1431,7 @@ interface AspectAggregate {
   neutral_count: number;
   total_mentions: number;
   mean_sentiment: number;
-  evidence_samples: string[];
+  evidence_samples: EvidenceSample[];
 }
 
 // --- ABSA Component ---
@@ -1451,7 +1456,7 @@ const CommunityConsensus = ({ gameId, summary }: { gameId: number, summary?: str
   }, [gameId]);
 
   if (loading) return null;
-  if (!summary || aspects.length === 0) return null;
+  if (aspects.length === 0) return null;
 
   return (
     <div className="mb-12">
@@ -1463,23 +1468,51 @@ const CommunityConsensus = ({ gameId, summary }: { gameId: number, summary?: str
         </div>
       </div>
 
-      <div className="bg-white border border-stone-200/60 rounded-2xl p-5 mb-8 shadow-sm">
-        <p className="text-text leading-relaxed text-sm md:text-base italic">
-          "{summary}"
-        </p>
-      </div>
+      {summary && (
+        <div className="bg-white border border-stone-200/60 rounded-2xl p-5 mb-8 shadow-sm">
+          <p className="text-text leading-relaxed text-sm md:text-base italic">
+            "{summary}"
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {(showAll ? aspects : aspects.slice(0, 6)).map((agg, idx) => {
-          // Determine sentiment class
-          const posRatio = agg.positive_count / Math.max(1, agg.total_mentions);
-          const isPositive = posRatio >= 0.5;
-          const Icon = isPositive ? HandThumbUpIcon : HandThumbDownIcon;
+          // Three-way sentiment: positive/negative only claim the card if
+          // they clear CARD_DOMINANCE_THRESHOLD (60%) — keep in sync with
+          // backend/app/core/ml_config.py::ABSAConfig.CARD_DOMINANCE_THRESHOLD.
+          // Below that on both sides, the card falls back to Mixed/Neutral
+          // rather than picking an arbitrary plurality winner — a 45/10/45
+          // positive/neutral/negative split is a genuinely divided aspect,
+          // not a "positive" one on a coin-flip tiebreak.
+          const total = Math.max(1, agg.total_mentions);
+          const posRatio = agg.positive_count / total;
+          const neuRatio = agg.neutral_count / total;
+          const negRatio = agg.negative_count / total;
+          const DOMINANCE_THRESHOLD = 0.6;
+          const sentiment: 'positive' | 'negative' | 'mixed' =
+            posRatio >= DOMINANCE_THRESHOLD ? 'positive' :
+            negRatio >= DOMINANCE_THRESHOLD ? 'negative' :
+            'mixed';
+
+          // The displayed percentage (and the evidence quote, chosen
+          // server-side the same way) always reflects the largest of the
+          // three buckets. Crossing the dominance threshold above
+          // mathematically guarantees that bucket is also the largest — the
+          // other two must share the remainder — so this only diverges from
+          // "the dominant sentiment" in the Mixed case, where there's no
+          // single confident label anyway and the largest bucket is the
+          // only sensible number to show.
+          const displayRatio = Math.max(posRatio, neuRatio, negRatio);
+
+          const COLOR = { positive: 'text-[#00C853]', negative: 'text-red-500', mixed: 'text-amber-500' }[sentiment];
+          const LABEL = { positive: 'Positive Feedback', negative: 'Negative Feedback', mixed: 'Mixed / Neutral' }[sentiment];
+          const Icon = { positive: HandThumbUpIcon, negative: HandThumbDownIcon, mixed: ScaleIcon }[sentiment];
 
           const gaugeRadius = 24;
           const gaugeCircumference = 2 * Math.PI * gaugeRadius;
           const gaugeArcLength = gaugeCircumference * 0.75;
-          const progressLength = posRatio * gaugeArcLength;
+          const progressLength = displayRatio * gaugeArcLength;
 
           return (
             <div key={idx} className="bg-white border border-stone-200/60 rounded-2xl p-5 shadow-sm hover:shadow-md hover:border-primary/30 transition-all relative group">
@@ -1495,25 +1528,25 @@ const CommunityConsensus = ({ gameId, summary }: { gameId: number, summary?: str
                     <circle
                       cx="28" cy="28" r={gaugeRadius} stroke="currentColor" strokeWidth="4" fill="transparent"
                       strokeDasharray={`${progressLength} ${gaugeCircumference}`}
-                      className={`${isPositive ? 'text-[#00C853]' : 'text-red-500'} transition-all duration-1000 ease-out`}
+                      className={`${COLOR} transition-all duration-1000 ease-out`}
                       strokeLinecap="round"
                     />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center pt-0.5">
-                    <span className={`text-[13px] font-bold ${isPositive ? 'text-[#00C853]' : 'text-red-500'} leading-none`}>
-                      {Math.round(posRatio * 100)}%
+                    <span className={`text-[13px] font-bold ${COLOR} leading-none`}>
+                      {Math.round(displayRatio * 100)}%
                     </span>
                   </div>
-                  {/* Thumb Icon in the gap */}
+                  {/* Thumb/Scale Icon in the gap */}
                   <div className="absolute left-1/2 -translate-x-1/2 top-[44px]">
-                    <Icon className={`w-[14px] h-[14px] ${isPositive ? 'text-[#00C853]' : 'text-red-500'}`} />
+                    <Icon className={`w-[14px] h-[14px] ${COLOR}`} />
                   </div>
                 </div>
 
                 <div className="flex flex-col justify-center h-14">
                   <h3 className="font-bold text-[17px] text-text leading-tight group-hover:text-primary transition-colors">{agg.aspect}</h3>
                   <span className="text-[11px] font-bold text-secondary-text mt-1 uppercase tracking-wider">
-                    {isPositive ? 'Positive Feedback' : 'Positive Feedback'}
+                    {LABEL}
                   </span>
                 </div>
               </div>
@@ -1523,10 +1556,30 @@ const CommunityConsensus = ({ gameId, summary }: { gameId: number, summary?: str
                   Based on {agg.total_mentions} {agg.total_mentions === 1 ? 'mention' : 'mentions'}
                 </div>
                 <div className="relative bg-stone-50/80 rounded-xl p-3 border border-stone-100">
-                  <ChatBubbleLeftRightIcon className="w-4 h-4 text-stone-300 absolute top-3 left-3" />
-                  <p className="text-[13px] text-text italic leading-relaxed pl-6 line-clamp-3">
-                    "{agg.evidence_samples[0] || 'Various feedback.'}"
-                  </p>
+                  {sentiment === 'mixed' && agg.evidence_samples.length > 1 ? (
+                    // Mixed: pair a positive + negative (or neutral
+                    // fallback) quote so the card explains *why* it's
+                    // split, rather than one arbitrary near-tied quote.
+                    <div className="flex flex-col gap-1.5">
+                      {agg.evidence_samples.slice(0, 2).map((ev, evIdx) => {
+                        const EvIcon = ev.sentiment === 'positive' ? HandThumbUpIcon : ev.sentiment === 'negative' ? HandThumbDownIcon : ScaleIcon;
+                        const evColor = ev.sentiment === 'positive' ? 'text-[#00C853]' : ev.sentiment === 'negative' ? 'text-red-500' : 'text-amber-500';
+                        return (
+                          <p key={evIdx} className="text-[12px] text-text italic leading-snug flex items-start gap-1.5">
+                            <EvIcon className={`w-3 h-3 mt-0.5 shrink-0 ${evColor}`} />
+                            <span className="line-clamp-2">"{ev.text}"</span>
+                          </p>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <>
+                      <ChatBubbleLeftRightIcon className="w-4 h-4 text-stone-300 absolute top-3 left-3" />
+                      <p className="text-[13px] text-text italic leading-relaxed pl-6 line-clamp-3">
+                        "{agg.evidence_samples[0]?.text || 'Various feedback.'}"
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
