@@ -8,7 +8,7 @@ interface GameCardProps {
   matchPercentage?: number;
 }
 
-const CATEGORY_MAP: Record<string, string> = {
+const SUBDOMAIN_MAP: Record<string, string> = {
   'CGS': 'Collectible Game System',
   'Childrens': "Children's",
 };
@@ -156,9 +156,9 @@ export const GameCard: React.FC<GameCardProps> = ({ game, matchPercentage }) => 
         <ScrollingTitle title={game.name} year={game.year_published} />
         
         <div className="flex flex-wrap items-center gap-1.5 h-[1.75rem] overflow-hidden mb-4">
-          {game.categories && game.categories.map(cat => (
-             <span key={cat} className="inline-flex items-center px-2 py-0.5 bg-surface text-secondary-text rounded text-[10px] font-bold uppercase tracking-wider border border-neutral/30 leading-none h-5">
-               {CATEGORY_MAP[cat] || cat}
+          {game.subdomains && game.subdomains.map(sub => (
+             <span key={sub} className="inline-flex items-center px-2 py-0.5 bg-surface text-secondary-text rounded text-[10px] font-bold uppercase tracking-wider border border-neutral/30 leading-none h-5">
+               {SUBDOMAIN_MAP[sub] || sub}
              </span>
           ))}
         </div>

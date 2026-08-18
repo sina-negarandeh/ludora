@@ -1,118 +1,96 @@
+<p align="center"><img src="docs/assets/images/game_catalog_page.default.png" alt="Ludora game catalog" width="800"></p>
+
 # Ludora
 
-Ludora is an end-to-end Machine Learning web application built to serve intelligent, multi-algorithmic board game recommendations alongside a powerful Conversational AI Assistant. Built on the expansive BoardGameGeek dataset, it showcases a scalable Python API paired with a dynamic, highly-polished React frontend and local AI execution.
+Ludora is a board-game discovery web app built on two merged Kaggle BoardGameGeek datasets (~28K games, ~26M ratings, ~4.2M reviews). It's a full-stack, ML-heavy portfolio project: hybrid search, a 10-algorithm recommendation engine you can compare side by side, aspect-based sentiment analysis over community reviews, and a conversational AI assistant — all built and documented with an explicit goal of not overclaiming what's actually implemented, tested, or measured.
 
-## Comprehensive Feature List
+**Start here:** [Case study](docs/case-study.md) (problem → architecture → data → ML → results, ~10 min read) · [Feature catalogue](docs/product/features.md) (every feature, with real screenshots) · [Known limitations](docs/limitations.md) (what's genuinely missing, stated plainly)
 
-Ludora bridges complex backend data science, locally-hosted LLMs, and zero-shot classifiers with a beautiful, responsive frontend UI to create the ultimate board game discovery platform.
+---
 
-### 1. Game Browsing & Discovery
-- **View and Browse Board Games:** A highly-polished, responsive catalog displaying thousands of board games in a grid view, designed for rapid scanning.
-- **Dedicated Game Detail Pages:** Deep-dive pages for every single game featuring immersive headers, structured data, and rich visual layouts.
-- **Advanced Search Engine:** 
-  - **Lexical Search:** Fast, exact-keyword matching for specific titles or designers.
-  - **Semantic Search:** Vector-embedding based search allowing users to search by "vibe" or descriptive phrases (e.g., "A tense sci-fi trading game").
-  - **Hybrid Search:** Intelligently combines lexical precision and semantic recall to deliver the most relevant results possible.
-- **Comprehensive Filters:** Robust filtering capabilities allowing users to narrow down games by exact Player Count, Play Time, Complexity Weight, Year, Categories, and Mechanics.
-- **Sorting Options:** Sort the vast catalog by Rank, Average Rating, Total Ratings, Year Published, or Complexity.
+## What's actually in it
 
-### 2. Rich Metadata & UI Design
-- **Premium Aesthetics:** Sleek, glassmorphic design language leveraging TailwindCSS. The "All Games" feed and individual Game pages feature strict geometric baseline alignment, fluid CSS transitions, and an elegant color palette.
-- **Extensive Metadata Sections:** Every game page neatly organizes a massive amount of data:
-  - Title & Year Published
-  - High-level taxonomy: Categories, Themes, and Mechanics
-  - Full "About the Game" rich-text descriptions
-  - Core metrics: Player Count (Min-Max), Playtime (Mfg & Community), Age, and Complexity Weight
-  - Credits: Designers, Artists, and Publishers
-- **Ranking Badges:** Distinctive visual trophy badges indicating a game's official rank across the entire database.
+- **Catalog & discovery** — filterable (subdomain, category, BGG family, mechanic, players, complexity, playtime) and sortable grid of ~28K games, with custom SVG statistics (density distributions, rating histograms, recommendation gauges).
+- **Hybrid search** — lexical (Postgres full-text), semantic ("vibe" search via `Qwen3-Embedding-0.6B` + pgvector), and a fused mode combining both with Reciprocal Rank Fusion.
+- **Recommendation engine** — 10 model IDs across popularity, content-based (TF-IDF, metadata blend, semantic embedding, weighted hybrid), graph-based (Jaccard, DeepWalk), and collaborative filtering (Item-Item Cosine, SVD, ALS), with a UI to compare Coverage/diversity across all of them. **Not all 10 are fully wired end-to-end** — see [docs/ml/recommenders.md](docs/ml/recommenders.md) for exactly which.
+- **Aspect-Based Sentiment Analysis** — a 22-aspect zero-shot classifier (`yangheng/deberta-v3-large-absa-v1.1`) extracts what reviewers actually said (Rulebook, Downtime, Component Quality, etc.), synthesized into an LLM-written "Community Consensus" paragraph per game.
+- **AI Assistant** — a chat sidebar that parses natural language into a typed intent (browse/search/compare/recommend/get a game) via a locally-hosted LLM (Apple MLX, OpenAI-compatible), and renders results as inline cards, not free text.
 
-### 3. Statistics, Graphs & Visualizations
-- **"You Are Here" Distributions:** Pre-computes and beautifully renders Gaussian density curves via SVG mathematical paths to show users exactly where a game sits relative to the rest of the database for Complexity, Playtime, and Age.
-- **Interactive Histograms:** 10-bar interactive histograms representing the 0.5-increment score distributions of community ratings, complete with hover tooltips.
-- **Dynamic Arcs:** Visual gauges showing the percentage of players who "Recommend" the game.
+Full breakdown of every feature, with screenshots: [docs/product/features.md](docs/product/features.md).
 
-### 4. Ratings, Reviews & Advanced NLP
-Ludora doesn't just show reviews; it deeply analyzes them using state-of-the-art Natural Language Processing.
-- **Review Browsing:** A dedicated interface to read through tens of thousands of community reviews.
-- **Review Filter Options:** Filter user reviews by specific star ratings or sentiment buckets.
-- **Review Language & Quality Detection:** Employs Meta's `fastText` model to assign quality scores to incoming reviews, automatically filtering out non-English, spam, or unhelpful one-liners.
-- **Aspect-Based Sentiment Analysis (ABSA):** 
-  - A zero-shot classification pipeline running on `deberta-v3-large-absa`.
-  - Automatically identifies sub-sentential mentions of 22 specific game aspects (e.g., *Rulebook*, *Downtime*, *Component Quality*, *Player Interaction*) and categorizes them into granular positive/negative sentiments.
-- **Aspect Cards UI:** Clean, glassmorphic UI cards that group extracted community feedback by Aspect, displaying exactly what players loved (Positive Feedback) or disliked (Negative Feedback) about specific parts of the game.
-- **ABSA + Multi-Review Summarization (Community Consensus):**
-  - Dynamically synthesizes the extracted ABSA metrics into cohesive, localized paragraph summaries using local LLMs.
-  - Generates an intelligent "Community Consensus" that summarizes the overall vibe of the reviews in a human-readable format.
+## What it deliberately doesn't claim
 
-### 5. Recommendation Engine (RecSys)
-A multi-algorithmic engine allowing for real-time comparative analysis of recommendation performance.
-- **Similar Games & Recommendations:** Dedicated UI sections displaying games similar to the one currently being viewed.
-- **Popularity-Based:** Fast baseline model using total ratings and rank.
-- **Content-Based Filtering:** `TF-IDF` Vectorization and Semantic Embeddings for deep contextual similarity.
-- **Collaborative Filtering:** Item-Item Cosine Similarity, Matrix Factorization (SVD), and Alternating Least Squares (ALS).
-- **Hybrid System:** Weighted ensemble algorithms providing a balanced, highly diverse output of recommendations.
+No user accounts or personalization (every visitor sees the same catalog). No multi-turn assistant memory (each message is parsed independently, despite an unused `conversation_id` field in the API). No automated test suite (every `test_*.py` file is a print-only smoke script). No persisted evaluation results (the metrics scripts exist and run correctly; none write their output to a file). Full, unabridged list: [docs/limitations.md](docs/limitations.md).
 
-### 6. Conversational AI Assistant
-An intelligent, locally-hosted sidebar companion that helps users discover games using natural language.
-- **Local Apple Silicon Execution:** Integrates Apple's `MLX` framework to run a 30-Billion parameter LLM (`Qwen3-30B-A3B-MLX-4bit`) directly on local hardware.
-- **Dynamic Semantic Routing:** The assistant uses an intent-classifier to route user queries into distinct functional states:
-  - `Searcher`: Extracts complex metadata parameters from fuzzy natural language.
-  - `Clarifier`: Disambiguates vague queries or multiple game matches gracefully.
-  - `Comparer`: Compares multiple games side-by-side on key attributes.
-  - `Recommender`: Explains *why* a specific game fits the user's previously stated preferences.
-  - `GameDetail`: Pulls up high-level summaries for specific titles.
-- **Contextual Memory:** Maintains a rolling multi-turn memory buffer, allowing users to progressively refine searches (e.g., *"Find economic games"* -> *"Actually, only ones that play well at 2 players"*).
-- **Inline UI Widgets:** Renders interactive mini-cards directly inside the chat interface to surface game details (ratings, weight, player count) seamlessly.
+## Tech stack
 
-## Technology Stack
+**Backend**: Python 3.10+, FastAPI, SQLAlchemy, Alembic, PostgreSQL + pgvector, scikit-learn, `implicit`, sentence-transformers, HuggingFace Transformers, fastText.
+**Frontend**: React 19, TypeScript (strict), Vite, TanStack Query, Tailwind CSS.
+**AI/LLM**: Apple MLX (local inference), OpenAI-compatible client, structured JSON output validated against Pydantic schemas.
+**Infra**: Docker Compose (Postgres + frontend + pgAdmin), backend runs natively (MLX requires macOS/Apple Silicon), 21 tracked Alembic migrations, 27 offline ETL/ML scripts.
 
-- **Python 3.10+** (managed via `uv`)
-- **Backend Framework**: FastAPI, Uvicorn
-- **Database & ORM**: PostgreSQL, SQLAlchemy, Alembic, `pgvector`
-- **Data Science & NLP**: Pandas, Scikit-Learn, Sentence-Transformers, HuggingFace Transformers, PyTorch, fastText
-- **AI & LLM Integration**: Apple `MLX`, `mlx_lm`, Qwen3-30B
-- **Frontend Framework**: React 19, Vite, TypeScript
-- **State Management & Routing**: React Router, TanStack React Query, Axios
-- **Styling**: Tailwind CSS, Heroicons
-- **Containerization**: Docker Compose
+## Why this is interesting beyond the feature list
 
-## Getting Started
+- **Hybrid search** fuses Postgres full-text search and pgvector semantic search at request time with Reciprocal Rank Fusion (`k=60`) — not a toy demo, a real fused-ranking implementation.
+- **The system is architecturally split in two**: an offline Python ETL/ML pipeline (~20 scripts) that populates Postgres, and a stateless FastAPI layer that mostly reads what the pipeline already computed. That split, and exactly where it breaks down, is documented in [docs/architecture/README.md](docs/architecture/README.md).
+- **A real integration bug is documented, not hidden.** Digging into the recommendation engine's routing code during this documentation pass surfaced that 4 of the 10 model IDs currently serve identical results, despite genuinely distinct offline computation existing for three of them. That's disclosed with full detail in [docs/ml/recommenders.md](docs/ml/recommenders.md) rather than papered over — the kind of finding a careful code reviewer would want to know about either way.
+- **Every quantitative claim is labeled by how it was obtained** — Measured (a committed result), Observed (a plausible-but-unverified number), or Not Evaluated — see [docs/ml/evaluation.md](docs/ml/evaluation.md).
 
-### Prerequisites
-- Docker and Docker Compose
-- Node.js (if running frontend locally)
-- Python 3.10+ with `uv` (if running backend or ML scripts locally)
+## Screenshots
 
-### Running the Application
+| Catalog | AI Assistant |
+|---|---|
+| ![Catalog](docs/assets/images/game_catalog_page.default.png) | ![AI Assistant drawer](docs/assets/images/game_catalog_page.default.ai_assistant.drawer.png) |
 
-To spin up the entire application in development mode with live-reloading:
+| Game detail hero | Recommendation model comparison |
+|---|---|
+| ![Game detail hero](docs/assets/images/game_detail_page.hero_section.brass_birmingham.png) | ![Model selector](docs/assets/images/game_detail_page.recommendation_engine.model_selector.brass_birmingham.png) |
+
+| Statistics & distributions | Community Consensus (ABSA) |
+|---|---|
+| ![Stats](docs/assets/images/game_detail_page.stats.brass_birmingham.png) | ![Community Consensus](docs/assets/images/game_detail_page.reviews.community_consensus.brass_birmingham.png) |
+
+More in [docs/product/features.md](docs/product/features.md), including the ratings histogram and user reviews screenshots.
+
+## Getting started
 
 ```bash
 docker compose up -d
 ```
 
-### Accessing the Services
-- **Frontend UI**: http://localhost:5173
-- **FastAPI Swagger Docs**: http://localhost:8000/docs
-- **PostgreSQL Database**: localhost:5432
+This brings up Postgres, the frontend, and pgAdmin. **The backend runs natively, not in Docker** — `SearchService` uses `mlx-embeddings` (Qwen3-Embedding-0.6B) for semantic search, and MLX only runs on macOS/Apple Silicon (it's built on Metal), so a Linux container can never host it:
 
-### Local Development (Native Execution via UV)
-
-**Backend:**
 ```bash
-cd backend
-uv sync
-uv run uvicorn app.main:app --reload
+cd backend && uv sync && uv run uvicorn app.main:app --reload
 ```
 
-**Frontend:**
-```bash
-cd frontend
-npm install
-npm run dev
-```
+- Frontend: http://localhost:5173
+- API + Swagger docs: http://localhost:8000/docs
+- Postgres: `localhost:5432`
 
-**MLX Local LLM Server:**
-```bash
-mlx_lm.server --model "Qwen/Qwen3-30B-A3B-MLX-4bit"
-```
+This brings up an **empty** database — nothing here seeds it. To populate the catalog, run the data pipeline (raw CSVs → master dataset → Postgres → embeddings/search vectors): see [docs/setup/README.md](docs/setup/README.md) for exact commands, and [docs/architecture/data-pipeline.md](docs/architecture/data-pipeline.md) for what each of the 27 scripts does. The AI Assistant and "Community Consensus" generation additionally need a local MLX server (Apple Silicon only) — everything else works without it.
+
+## Data
+
+Two Kaggle datasets, merged on BGG ID: [threnjen/board-games-database-from-boardgamegeek](https://www.kaggle.com/datasets/threnjen/board-games-database-from-boardgamegeek/) (game metadata) and [jvanelteren/boardgamegeek-reviews](https://www.kaggle.com/datasets/jvanelteren/boardgamegeek-reviews/) (ratings + reviews). Not every file in either dataset is actually used by the pipeline — see [docs/data/README.md](docs/data/README.md) for exactly which CSVs feed which tables.
+
+## Documentation map
+
+| Doc | What it answers |
+|---|---|
+| [docs/case-study.md](docs/case-study.md) | The full problem → product → architecture → data → ML → results narrative |
+| [docs/product/features.md](docs/product/features.md) | Every user-facing feature, with screenshots and code references |
+| [docs/architecture/README.md](docs/architecture/README.md) | System design, service boundaries, request flows |
+| [docs/architecture/data-pipeline.md](docs/architecture/data-pipeline.md) | The offline ETL/ML script order, script by script |
+| [docs/data/README.md](docs/data/README.md) | Dataset provenance, schema, taxonomy, data quality rules |
+| [docs/ml/README.md](docs/ml/README.md) | Search, recommenders, ABSA, and assistant — one doc per system |
+| [docs/ml/evaluation.md](docs/ml/evaluation.md) | What's measured, what's observed-but-unverified, what isn't evaluated at all |
+| [docs/engineering/testing.md](docs/engineering/testing.md) | The actual state of test coverage (no assertions, no CI) |
+| [docs/setup/README.md](docs/setup/README.md) | Verified setup and environment-variable reference |
+| [docs/roadmap.md](docs/roadmap.md) | Concretely evidenced planned/unfinished work |
+| [docs/limitations.md](docs/limitations.md) | Every known gap, in one place |
+| [AGENTS.md](AGENTS.md) | Navigation and invariants for anyone (human or AI) extending this repo |
+
+## Status
+
+Actively developed, local-first, not deployed anywhere public. Built end to end (schema through 21 migrations, 27 pipeline scripts, 19 API endpoints, and both frontends) over a short, concentrated build window rather than long-lived incremental development — see [docs/case-study.md](docs/case-study.md#tradeoffs-and-honest-caveats) for what that tradeoff means in practice.

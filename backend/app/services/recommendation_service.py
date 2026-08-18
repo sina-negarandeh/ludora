@@ -1,5 +1,6 @@
-from sqlalchemy.orm import Session
-from app.database.models import GameRecommendation, Game
+from sqlalchemy.orm import Session, joinedload
+from app.database.models import GameRecommendation, Game, GameEmbedding
+from app.core.ml_config import SearchConfig
 from typing import List, Dict
 
 class RecommendationService:
@@ -39,15 +40,26 @@ class RecommendationService:
             return source_game, recs
 
         if model in ["embedding", "metadata", "tfidf", "hybrid"]:
-            if source_game.embedding is None:
+            source_embedding = self.db.query(GameEmbedding).filter(
+                GameEmbedding.game_id == game_id,
+                GameEmbedding.model == SearchConfig.EMBEDDING_MODEL,
+            ).first()
+            if source_embedding is None:
                 return source_game, []
-                
-            similar_games = self.db.query(Game).filter(
-                Game.bgg_id != game_id,
-                Game.embedding.isnot(None)
-            ).order_by(Game.embedding.cosine_distance(source_game.embedding)).limit(limit).all()
-            
-            recs = [{"game": g, "score": 1.0, "reason": ["Semantically similar based on rich metadata"]} for g in similar_games]
+
+            similar = (
+                self.db.query(GameEmbedding)
+                .options(joinedload(GameEmbedding.game))
+                .filter(
+                    GameEmbedding.game_id != game_id,
+                    GameEmbedding.model == SearchConfig.EMBEDDING_MODEL,
+                )
+                .order_by(GameEmbedding.embedding.cosine_distance(source_embedding.embedding))
+                .limit(limit)
+                .all()
+            )
+
+            recs = [{"game": e.game, "score": 1.0, "reason": ["Semantically similar based on rich metadata"]} for e in similar]
             return source_game, recs
 
         # Precomputed collaborative models (ALS, Node2Vec, etc.)

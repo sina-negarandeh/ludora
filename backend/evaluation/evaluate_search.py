@@ -6,9 +6,11 @@ import math
 sys.path.append(os.path.join(os.path.dirname(__file__), '../'))
 sys.path.append('/app')
 
+import mlflow
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
+from app.core.mlflow_utils import tracked_run, write_results_json
 from app.services.search_service import SearchService
 from app.schemas.search import SearchQuery, SearchMode
 
@@ -39,27 +41,37 @@ def evaluate_mode(service, queries, mode):
     total_mrr = 0.0
     total_ndcg = 0.0
     total_recall = 0.0
-    
+
     for item in queries:
         q = item["query"]
         expected = item["expected_bgg_ids"]
-        
+
         search_q = SearchQuery(q=q, mode=SearchMode(mode))
         results_page = service.search(search_q, skip=0, limit=100)
         results = results_page.items
-        
+
         mrr = mrr_at_k(results, expected, 10)
         ndcg = ndcg_at_k(results, expected, 10)
         recall = recall_at_k(results, expected, 100)
-        
+
         total_mrr += mrr
         total_ndcg += ndcg
         total_recall += recall
-        
+
     n = len(queries)
-    print(f"MRR@10: {total_mrr / n:.4f}")
-    print(f"NDCG@10: {total_ndcg / n:.4f}")
-    print(f"Recall@100: {total_recall / n:.4f}")
+    metrics = {
+        "mrr_at_10": total_mrr / n,
+        "ndcg_at_10": total_ndcg / n,
+        "recall_at_100": total_recall / n,
+    }
+    print(f"MRR@10: {metrics['mrr_at_10']:.4f}")
+    print(f"NDCG@10: {metrics['ndcg_at_10']:.4f}")
+    print(f"Recall@100: {metrics['recall_at_100']:.4f}")
+
+    with tracked_run("search/retrieval_eval", run_name=mode):
+        mlflow.log_params({"mode": mode, "n_queries": n})
+        mlflow.log_metrics(metrics)
+    write_results_json(f"search_{mode}", {"mode": mode, "n_queries": n, **metrics})
 
 def main():
     engine = create_engine(settings.DATABASE_URL)

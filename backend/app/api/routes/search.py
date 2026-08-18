@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.schemas.search import SearchQuery, PaginatedSearchResults

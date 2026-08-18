@@ -1,14 +1,14 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useLayoutEffect, useState, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import axios from 'axios';
-import { fetchGame, fetchRecommendations, fetchReviews } from '../api/games';
-import type { Game } from '../api/games';
+import { fetchGame, fetchRecommendations, fetchReviews, fetchGames, fetchSubdomains } from '../api/games';
+import type { Game, Review, PlayerCountPoll, AgePollResult } from '../api/games';
 import { GameCard } from '../components/GameCard';
-import { StarIcon, ClockIcon, UserGroupIcon, AcademicCapIcon, TrophyIcon, UserIcon, ArrowLeftIcon, HandThumbUpIcon, HandThumbDownIcon, SparklesIcon, ChatBubbleLeftRightIcon, CheckCircleIcon, XCircleIcon, MinusCircleIcon, QuestionMarkCircleIcon, LanguageIcon } from '@heroicons/react/24/solid';
+import { StarIcon, ClockIcon, UserGroupIcon, AcademicCapIcon, TrophyIcon, UserIcon, ArrowLeftIcon, HandThumbUpIcon, HandThumbDownIcon, SparklesIcon, ChatBubbleLeftRightIcon, LanguageIcon, XMarkIcon } from '@heroicons/react/24/solid';
 
-const CATEGORY_MAP: Record<string, string> = {
+const SUBDOMAIN_MAP: Record<string, string> = {
   'CGS': 'Collectible Game System',
   'Childrens': "Children's",
 };
@@ -61,6 +61,79 @@ const ExpandableChipList: React.FC<{ items: string[], limit?: number }> = ({ ite
   );
 };
 
+const GameDescription: React.FC<{ html: string }> = ({ html }) => {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = html.length > 1600;
+
+  return (
+    <div>
+      <div className={`relative overflow-hidden ${!expanded && isLong ? 'max-h-72' : ''}`}>
+        <div
+          className="text-lg text-secondary-text leading-relaxed space-y-5"
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+        {!expanded && isLong && (
+          <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-background to-transparent pointer-events-none" />
+        )}
+      </div>
+      {isLong && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="text-primary font-bold text-sm mt-3 hover:underline transition-colors"
+        >
+          {expanded ? 'Show less' : 'Read more'}
+        </button>
+      )}
+    </div>
+  );
+};
+
+const FamilyGroupList: React.FC<{ items: string[], groupLimit?: number }> = ({ items, groupLimit = 6 }) => {
+  const [expanded, setExpanded] = useState(false);
+
+  const groups = useMemo(() => {
+    const map = new Map<string, string[]>();
+    items.forEach(item => {
+      const idx = item.indexOf(': ');
+      const group = idx >= 0 ? item.slice(0, idx) : 'Other';
+      const value = idx >= 0 ? item.slice(idx + 2) : item;
+      if (!map.has(group)) map.set(group, []);
+      map.get(group)!.push(value);
+    });
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [items]);
+
+  const visibleGroups = expanded ? groups : groups.slice(0, groupLimit);
+  const hiddenCount = groups.length - groupLimit;
+
+  return (
+    <div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-6">
+        {visibleGroups.map(([group, values]) => (
+          <div key={group}>
+            <h4 className="text-xs font-bold text-secondary-text uppercase tracking-wider pb-2 mb-3 border-b border-neutral/20">{group}</h4>
+            <div className="flex flex-wrap gap-2">
+              {values.map(v => (
+                <span key={v} className="px-3 py-1.5 bg-surface border border-neutral rounded-lg text-sm text-secondary-text font-medium">
+                  {v}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      {hiddenCount > 0 && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="text-primary font-bold text-sm text-left hover:underline mt-6 w-fit transition-colors"
+        >
+          {expanded ? 'Show less' : `+ ${hiddenCount} more groups...`}
+        </button>
+      )}
+    </div>
+  );
+};
+
 const MODELS = [
   { id: 'popularity', name: 'Popularity Baseline', coverage: null, ild: null, category: 'Popularity-Based' },
   { id: 'metadata', name: 'Metadata Similarity', coverage: 96.13, ild: 0.52, category: 'Content-Based Filtering' },
@@ -68,7 +141,7 @@ const MODELS = [
   { id: 'embedding', name: 'Semantic Embedding', coverage: 93.54, ild: 0.34, category: 'Content-Based Filtering' },
   { id: 'hybrid', name: 'Hybrid System', coverage: 90.49, ild: 0.39, category: 'Content-Based Filtering' },
   { id: 'graph_jaccard', name: 'Graph Jaccard', coverage: 94.03, ild: 0.52, category: 'Content-Based Filtering' },
-  { id: 'node2vec', name: 'Graph DeepWalk', coverage: 96.55, ild: 0.54, category: 'Content-Based Filtering' },
+  { id: 'deepwalk', name: 'Graph DeepWalk', coverage: 96.55, ild: 0.54, category: 'Content-Based Filtering' },
   { id: 'cf_item_cosine', name: 'Item-Item Cosine', coverage: null, ild: null, category: 'Collaborative Filtering' },
   { id: 'cf_svd', name: 'Matrix Factorization (SVD)', coverage: null, ild: null, category: 'Collaborative Filtering' },
   { id: 'cf_als', name: 'Alternating Least Squares (ALS)', coverage: null, ild: null, category: 'Collaborative Filtering' },
@@ -81,30 +154,81 @@ const RECSYS_TYPES = [
   { id: 'Hybrid', name: 'Hybrid', available: false },
 ];
 
+// Near-100% needs over/under-precision care near the ceiling, same as any percentile display.
+const formatBetterThanPct = (pct: number): string => {
+  if (pct > 99.9) return '>99.9%';
+  if (pct > 99) return `${pct.toFixed(1)}%`;
+  return `${Math.round(pct)}%`;
+};
+
+const RankingCard: React.FC<{ rank: number; label: string; total?: number; noun: string }> = ({ rank, label, total, noun }) => {
+  const betterThanPct = total != null ? ((total - rank) / total) * 100 : null;
+
+  return (
+    <div className="relative flex flex-col bg-white border border-stone-200/80 shadow-sm rounded-xl px-6 py-5 w-60">
+      <span className="text-stone-700 text-xs font-extrabold uppercase tracking-widest">{label}</span>
+      <span className="text-5xl font-bold text-primary leading-tight mt-1">#{rank}</span>
+
+      {total != null && (
+        <span className="text-secondary-text/60 text-xs font-medium mt-0.5">
+          Out of {total.toLocaleString()} {noun}
+        </span>
+      )}
+
+      {betterThanPct != null && (
+        <div className="mt-4 pt-4 border-t border-stone-200">
+          <div className="flex justify-end mb-1.5">
+            <span className="text-xs font-medium text-stone-500">
+              Better than <span className="font-bold text-stone-700">{formatBetterThanPct(betterThanPct)}</span>
+            </span>
+          </div>
+          <div className="h-1.5 bg-stone-200 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary rounded-full"
+              style={{ width: `${Math.min(100, Math.max(0, betterThanPct))}%` }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const GameRankings: React.FC<{ game: Game }> = ({ game }) => {
   const hasOverallRank = game.rank && game.rank > 0;
-  const hasCategoryRanks = game.category_ranks && Object.keys(game.category_ranks).length > 0;
-  
-  if (!hasOverallRank && !hasCategoryRanks) return null;
+  const hasSubdomainRanks = game.subdomain_ranks && Object.keys(game.subdomain_ranks).length > 0;
+
+  const { data: totalGamesData } = useQuery({ queryKey: ['games-total'], queryFn: () => fetchGames({ limit: 1 }), staleTime: Infinity });
+  const { data: subdomainsData } = useQuery({ queryKey: ['subdomains'], queryFn: fetchSubdomains, staleTime: Infinity });
+  const subdomainCounts = new Map((subdomainsData || []).map(s => [s.name, s.game_count]));
+
+  if (!hasOverallRank && !hasSubdomainRanks) return null;
 
   return (
     <div className="mt-24 border-t border-neutral/20 pt-16">
       <h2 className="text-4xl font-serif text-text mb-8">Rankings</h2>
       <div className="flex flex-wrap gap-4">
         {hasOverallRank && (
-          <div className="flex items-center gap-3 bg-surface border border-primary/30 px-6 py-4 rounded-full shadow-sm hover:border-primary/60 transition-colors">
-            <TrophyIcon className="w-6 h-6 text-primary" />
-            <span className="font-bold text-text text-xl">#{game.rank}</span>
-            <span className="text-secondary-text font-medium text-lg">Overall</span>
-          </div>
+          <RankingCard
+            rank={game.rank!}
+            label="Overall"
+            total={totalGamesData?.total}
+            noun="games"
+          />
         )}
-        
-        {hasCategoryRanks && Object.entries(game.category_ranks!).sort((a, b) => a[1] - b[1]).map(([category, rank]) => (
-          <div key={category} className="flex items-center gap-3 bg-surface border border-neutral/30 px-6 py-4 rounded-full shadow-sm hover:border-neutral/60 transition-colors">
-            <span className="font-bold text-text text-xl">#{rank}</span>
-            <span className="text-secondary-text font-medium text-lg">{category}</span>
-          </div>
-        ))}
+
+        {hasSubdomainRanks && Object.entries(game.subdomain_ranks!).sort((a, b) => a[1] - b[1]).map(([subdomain, rank]) => {
+          const count = subdomainCounts.get(subdomain);
+          return (
+            <RankingCard
+              key={subdomain}
+              rank={rank}
+              label={`${subdomain} Games`}
+              total={count}
+              noun={`${subdomain} games`}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -121,20 +245,63 @@ interface MetricDistribution {
 type CategoryDistributions = Record<string, MetricDistribution>;
 type AllDistributions = Record<string, CategoryDistributions>;
 
-const DistributionChart = ({ 
-  title, 
-  value, 
-  metric, 
-  category, 
+interface DistributionMarker {
+  value: number;
+  label: string;
+}
+
+// Smooth Catmull-Rom-style SVG path generator, shared by every density-curve chart
+const generateSmoothPath = (points: [number, number][]) => {
+  if (points.length === 0) return '';
+  if (points.length === 1) return `M ${points[0][0]},${points[0][1]}`;
+
+  const controlPoint = (current: [number, number], previous: [number, number] | undefined, next: [number, number] | undefined, reverse: boolean) => {
+    const p = previous || current;
+    const n = next || current;
+    const smoothing = 0.15;
+    const lengthX = n[0] - p[0];
+    const lengthY = n[1] - p[1];
+    const length = Math.sqrt(Math.pow(lengthX, 2) + Math.pow(lengthY, 2)) * smoothing;
+    const angle = Math.atan2(lengthY, lengthX) + (reverse ? Math.PI : 0);
+    return [current[0] + Math.cos(angle) * length, current[1] + Math.sin(angle) * length];
+  };
+
+  let path = `M ${points[0][0]},${points[0][1]}`;
+  for (let i = 1; i < points.length; i++) {
+    const cps = controlPoint(points[i - 1], points[i - 2], points[i], false);
+    const cpe = controlPoint(points[i], points[i - 1], points[i + 1], true);
+    path += ` C ${cps[0]},${cps[1]} ${cpe[0]},${cpe[1]} ${points[i][0]},${points[i][1]}`;
+  }
+  return path;
+};
+
+const buildDensityPath = (dist: MetricDistribution) => {
+  const pts: [number, number][] = dist.density.map((d, i) => {
+    const x = (i / (dist.density.length - 1)) * 100;
+    const y = 100 - (d * 90); // keep a 10% top margin
+    return [x, y];
+  });
+  const pathLine = generateSmoothPath(pts);
+  const pathD = `${pathLine} L 100,100 L 0,100 Z`;
+  return { pathLine, pathD };
+};
+
+const DistributionChart = ({
+  title,
+  markers,
+  metric,
+  category,
   distributions,
   leftLabel,
   rightLabel,
   formatValue,
   formatPercentile,
-  formatAvg
-}: { 
-  title: string, value: number, metric: string, category: string, distributions: AllDistributions,
-  leftLabel: string, rightLabel: string, formatValue: (v: number) => string, formatPercentile: (cdf: number, catName: string) => string, formatAvg: (v: number) => string
+  formatAvg,
+  summaryValue,
+}: {
+  title: string, markers: DistributionMarker[], metric: string, category: string, distributions: AllDistributions,
+  leftLabel: string, rightLabel: string, formatValue: (v: number) => string, formatPercentile: (cdf: number, catName: string) => string, formatAvg: (v: number) => string,
+  summaryValue?: string
 }) => {
   const dist = distributions[category]?.[metric] || distributions['Overall']?.[metric];
   if (!dist) return null;
@@ -142,82 +309,52 @@ const DistributionChart = ({
   const usedCategoryName = distributions[category]?.[metric] ? category : 'Overall';
   const displayCategory = usedCategoryName === 'Overall' ? 'All Games' : `${usedCategoryName} Games`;
 
-  // Calculate Marker Position
-  const p = Math.max(0, Math.min(1, (value - dist.min) / (dist.max - dist.min)));
-  
-  // Find CDF
-  let closestIdx = 0;
-  let minDiff = Infinity;
-  for (let i = 0; i < dist.x.length; i++) {
-    const diff = Math.abs(dist.x[i] - value);
-    if (diff < minDiff) {
-      minDiff = diff;
-      closestIdx = i;
-    }
-  }
-  const cdfValue = dist.cdf[closestIdx];
-
   // Expected value (average) from density
   const sumDensity = dist.density.reduce((a, b) => a + b, 0);
   const avgValue = sumDensity > 0 ? dist.density.reduce((sum, d, i) => sum + (dist.x[i] * d), 0) / sumDensity : 0;
   const avgP = Math.max(0, Math.min(1, (avgValue - dist.min) / (dist.max - dist.min)));
 
-  // Smooth Path Generator
-  const generateSmoothPath = (points: [number, number][]) => {
-    if (points.length === 0) return '';
-    if (points.length === 1) return `M ${points[0][0]},${points[0][1]}`;
-    
-    const controlPoint = (current: [number, number], previous: [number, number] | undefined, next: [number, number] | undefined, reverse: boolean) => {
-      const p = previous || current;
-      const n = next || current;
-      const smoothing = 0.15;
-      const lengthX = n[0] - p[0];
-      const lengthY = n[1] - p[1];
-      const length = Math.sqrt(Math.pow(lengthX, 2) + Math.pow(lengthY, 2)) * smoothing;
-      const angle = Math.atan2(lengthY, lengthX) + (reverse ? Math.PI : 0);
-      return [current[0] + Math.cos(angle) * length, current[1] + Math.sin(angle) * length];
-    };
+  // Per-marker position, CDF and Y-on-curve
+  const markerData = markers.map(({ value, label }) => {
+    const p = Math.max(0, Math.min(1, (value - dist.min) / (dist.max - dist.min)));
 
-    let path = `M ${points[0][0]},${points[0][1]}`;
-    for (let i = 1; i < points.length; i++) {
-      const cps = controlPoint(points[i - 1], points[i - 2], points[i], false);
-      const cpe = controlPoint(points[i], points[i - 1], points[i + 1], true);
-      path += ` C ${cps[0]},${cps[1]} ${cpe[0]},${cpe[1]} ${points[i][0]},${points[i][1]}`;
+    let closestIdx = 0;
+    let minDiff = Infinity;
+    for (let i = 0; i < dist.x.length; i++) {
+      const diff = Math.abs(dist.x[i] - value);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestIdx = i;
+      }
     }
-    return path;
-  };
+    const cdfValue = dist.cdf[closestIdx];
 
-  // Find exact Y position on the curve for the marker
-  let densityAtValue = 0;
-  for (let i = 0; i < dist.x.length - 1; i++) {
-    if (value >= dist.x[i] && value <= dist.x[i+1]) {
-      const range = dist.x[i+1] - dist.x[i];
-      const fraction = (value - dist.x[i]) / range;
-      densityAtValue = dist.density[i] + fraction * (dist.density[i+1] - dist.density[i]);
-      break;
+    let densityAtValue = 0;
+    for (let i = 0; i < dist.x.length - 1; i++) {
+      if (value >= dist.x[i] && value <= dist.x[i + 1]) {
+        const range = dist.x[i + 1] - dist.x[i];
+        const fraction = range === 0 ? 0 : (value - dist.x[i]) / range;
+        densityAtValue = dist.density[i] + fraction * (dist.density[i + 1] - dist.density[i]);
+        break;
+      }
     }
-  }
-  if (value <= dist.x[0]) densityAtValue = dist.density[0];
-  if (value >= dist.x[dist.x.length-1]) densityAtValue = dist.density[dist.density.length-1];
-  const markerY = 100 - (densityAtValue * 90);
+    if (value <= dist.x[0]) densityAtValue = dist.density[0];
+    if (value >= dist.x[dist.x.length - 1]) densityAtValue = dist.density[dist.density.length - 1];
+    const markerY = 100 - (densityAtValue * 90);
 
-  // SVG Path
-  const pts: [number, number][] = dist.density.map((d, i) => {
-    const x = (i / (dist.density.length - 1)) * 100;
-    const y = 100 - (d * 90); // keep a 10% top margin
-    return [x, y];
+    return { value, label, p, cdfValue, markerY };
   });
-  
-  const pathLine = generateSmoothPath(pts);
-  const pathD = `${pathLine} L 100,100 L 0,100 Z`;
+
+  const { pathLine, pathD } = buildDensityPath(dist);
+  const ticks = generateNiceTicks(dist.min, dist.max);
 
   return (
     <div className="flex flex-col mb-8">
-      <div className="flex justify-between items-baseline mb-2">
+      <div className={`flex justify-between items-baseline ${markers.length > 1 ? 'mb-14' : 'mb-8'}`}>
         <h4 className="text-lg font-bold text-text">{title}</h4>
-        <span className="text-xl font-bold text-primary">{formatValue(value)}</span>
+        <span className="text-xl font-bold text-primary">{summaryValue ?? formatValue(markers[0].value)}</span>
       </div>
-      
+
       <div className="relative h-24 w-full mb-1 border-b-2 border-stone-300">
         {/* Background Area */}
         <svg className="w-full h-full overflow-visible absolute inset-0" preserveAspectRatio="none" viewBox="0 0 100 100">
@@ -226,7 +363,7 @@ const DistributionChart = ({
         </svg>
 
         {/* Average Marker */}
-        <div 
+        <div
           className="absolute top-0 bottom-0 flex flex-col items-center z-20 pointer-events-none"
           style={{ left: `${avgP * 100}%`, transform: 'translateX(-50%)' }}
         >
@@ -236,34 +373,221 @@ const DistributionChart = ({
           <div className="w-px border-l-2 border-dashed border-neutral/30 h-full relative" />
         </div>
 
-        {/* This Game Marker */}
-        <div 
-          className="absolute top-0 bottom-0 flex flex-col items-center z-10 pointer-events-none"
-          style={{ left: `${p * 100}%`, transform: 'translateX(-50%)' }}
-        >
-          <div className="text-primary text-[10px] font-bold whitespace-nowrap absolute leading-none pb-1" style={{ bottom: 'calc(100% + 14px)' }}>
-            This Game
-          </div>
-          <div className="w-[2px] bg-primary absolute bottom-full" style={{ height: '14px' }} />
-          <div className="w-[2px] bg-primary h-full relative">
-            <div 
-              className="absolute left-1/2 -translate-x-1/2 w-3 h-3 bg-primary rounded-full border-2 border-surface" 
-              style={{ top: `${markerY}%`, marginTop: '-6px' }} 
-            />
-          </div>
-        </div>
+        {/* Value Marker(s) — with more than one (e.g. Community Min/Max), each sits at its own
+            height so labels never collide with each other or with the AVG/reference chip above
+            (measured: the chip is ~13px tall, each label ~14px tall, so levels need >=16px of
+            clearance from the chip and >=16px from each other). Single-marker charts keep the
+            original height, matched by the heading's normal spacing. */}
+        {markerData.map((m, i) => {
+          const stemHeight = markerData.length > 1 ? 16 + i * 16 : 14;
+          return (
+            <div
+              key={m.label}
+              className="absolute top-0 bottom-0 flex flex-col items-center z-10 pointer-events-none"
+              style={{ left: `${m.p * 100}%`, transform: 'translateX(-50%)' }}
+            >
+              <div className="text-primary text-[10px] font-bold whitespace-nowrap absolute leading-none pb-1" style={{ bottom: `calc(100% + ${stemHeight}px)` }}>
+                {m.label}
+              </div>
+              <div className="w-[2px] bg-primary absolute bottom-full" style={{ height: `${stemHeight}px` }} />
+              <div className="w-[2px] bg-primary h-full relative">
+                <div
+                  className="absolute left-1/2 -translate-x-1/2 w-3 h-3 bg-primary rounded-full border-2 border-surface"
+                  style={{ top: `${m.markerY}%`, marginTop: '-6px' }}
+                />
+              </div>
+            </div>
+          );
+        })}
       </div>
-      
+
+      {ticks.length > 0 && (
+        <div className="relative h-3 w-full mb-1">
+          {ticks.map(t => (
+            <span
+              key={t}
+              className="absolute text-[10px] text-secondary-text/40 font-medium -translate-x-1/2"
+              style={{ left: `${((t - dist.min) / (dist.max - dist.min)) * 100}%` }}
+            >
+              {formatTick(t)}
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="flex justify-between text-xs text-secondary-text/60 font-bold uppercase tracking-wider mb-2">
         <span>{leftLabel}</span>
         <span>{rightLabel}</span>
       </div>
-      
+
+      {markerData.length === 1 ? (
+        <p className="text-sm text-secondary-text font-medium">
+          {formatPercentile(markerData[0].cdfValue, displayCategory)}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-0.5">
+          {markerData.map(m => (
+            <p key={m.label} className="text-sm text-secondary-text font-medium">
+              {m.label} {formatPercentile(m.cdfValue, displayCategory)}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// A handful of representative x-values, evenly sampled (always including the ends),
+// so the axis reads as "anchored" without labeling every single bar.
+const pickTicks = (xs: number[], maxTicks = 5): number[] => {
+  const unique = [...new Set(xs)].sort((a, b) => a - b);
+  if (unique.length <= maxTicks) return unique;
+  const step = (unique.length - 1) / (maxTicks - 1);
+  const picked = new Set<number>();
+  for (let i = 0; i < maxTicks; i++) {
+    picked.add(unique[Math.round(i * step)]);
+  }
+  return [...picked];
+};
+
+// Evenly spaced, round-number ticks across a continuous domain (the classic 1-2-5-10
+// step sequence), so a density chart's axis reads "0, 50, 100, 150, 200" rather than
+// raw bin-center values like "2.5, 62.5, 122.5".
+const generateNiceTicks = (min: number, max: number, targetCount = 6): number[] => {
+  if (!(max > min)) return [min];
+  const rawStep = (max - min) / (targetCount - 1);
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const residual = rawStep / magnitude;
+  const niceResidual = residual <= 1 ? 1 : residual <= 2 ? 2 : residual <= 5 ? 5 : 10;
+  const step = niceResidual * magnitude;
+  const niceMin = Math.ceil(min / step) * step;
+  const ticks: number[] = [];
+  for (let v = niceMin; v <= max + step * 1e-6; v += step) {
+    ticks.push(Math.round(v * 1000) / 1000);
+  }
+  return ticks;
+};
+
+// Compact axis-tick text — whole numbers stay bare, fractional ones get one decimal.
+const formatTick = (v: number): string => Number.isInteger(v) ? v.toString() : v.toFixed(1);
+
+const PollBarChart: React.FC<{
+  title: string;
+  bars: { label: string; value: number; x: number }[];
+  valueNoun: string;
+  distribution?: MetricDistribution;
+  leftLabel: string;
+  rightLabel: string;
+  formatTopLabel?: (label: string) => string;
+}> = ({ title, bars, valueNoun, distribution, leftLabel, rightLabel, formatTopLabel }) => {
+  if (bars.length === 0) return null;
+  const maxVal = Math.max(...bars.map(b => b.value), 1);
+  const top = bars.reduce((a, b) => (b.value > a.value ? b : a), bars[0]);
+
+  const density = distribution ? buildDensityPath(distribution) : null;
+  const posFor = (x: number) => distribution
+    ? Math.max(0, Math.min(100, ((x - distribution.min) / (distribution.max - distribution.min)) * 100))
+    : null;
+  const ticks = density ? pickTicks(bars.map(b => b.x)) : [];
+
+  // Size bars to the tightest real gap between them, so adjacent values (e.g. ages 1 and 2)
+  // never overlap — then clamp their centers so the outermost bars stay inside the track.
+  const positions = density ? bars.map(b => posFor(b.x) ?? 0).sort((a, b) => a - b) : [];
+  let minGapPct = 100;
+  for (let i = 1; i < positions.length; i++) {
+    minGapPct = Math.min(minGapPct, positions[i] - positions[i - 1]);
+  }
+  const barWidthPct = density ? Math.max(2, Math.min(7, minGapPct * 0.7)) : 7;
+  const halfWidthPct = barWidthPct / 2;
+
+  return (
+    <div className="flex flex-col mb-8">
+      <div className="flex justify-between items-baseline mb-8">
+        <h4 className="text-lg font-bold text-text">{title}</h4>
+        <span className="text-xl font-bold text-primary">{formatTopLabel ? formatTopLabel(top.label) : top.label}</span>
+      </div>
+
+      <div className="relative h-24 w-full mb-1 border-b-2 border-stone-300">
+        {/* Catalog-wide density, for context behind the community poll */}
+        {density && (
+          <svg className="w-full h-full overflow-visible absolute inset-0" preserveAspectRatio="none" viewBox="0 0 100 100">
+            <path d={density.pathD} className="fill-primary/10" />
+            <path d={density.pathLine} fill="none" className="stroke-primary/30 stroke-2" />
+          </svg>
+        )}
+
+        <div className={density ? 'absolute inset-0' : 'absolute inset-0 flex items-end gap-1'}>
+          {bars.map(b => {
+            const rawLeft = posFor(b.x);
+            const left = rawLeft != null ? Math.max(halfWidthPct, Math.min(100 - halfWidthPct, rawLeft)) : null;
+            const heightPct = Math.max((b.value / maxVal) * 100, 2);
+            return (
+              <div
+                key={b.label}
+                className={density ? 'absolute bottom-0 group' : 'flex-1 relative h-full group'}
+                style={density ? { left: `${left}%`, transform: 'translateX(-50%)', width: `${barWidthPct}%`, height: '100%' } : undefined}
+              >
+                <div
+                  className={`w-full absolute bottom-0 transition-all duration-300 rounded-t-lg min-h-[4px] ${b.label === top.label ? 'bg-primary/80 group-hover:bg-primary' : 'bg-primary/50 group-hover:bg-primary'}`}
+                  style={{ height: `${heightPct}%` }}
+                >
+                  {/* Tooltip on hover */}
+                  <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-surface shadow-md rounded-md px-3 py-2 text-xs text-text border border-neutral/20 pointer-events-none whitespace-nowrap z-20 flex flex-col items-center">
+                    <span className="font-bold border-b border-neutral/20 pb-1 mb-1 w-full text-center">{b.label}</span>
+                    <span className="text-secondary-text font-medium">{b.value} {valueNoun}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {ticks.length > 0 && (
+        <div className="relative h-3 w-full mb-1">
+          {ticks.map(t => (
+            <span
+              key={t}
+              className="absolute text-[10px] text-secondary-text/40 font-medium -translate-x-1/2"
+              style={{ left: `${posFor(t) ?? 0}%` }}
+            >
+              {t}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="flex justify-between text-xs text-secondary-text/60 font-bold uppercase tracking-wider mb-2">
+        <span>{leftLabel}</span>
+        <span>{rightLabel}</span>
+      </div>
+
       <p className="text-sm text-secondary-text font-medium">
-        {formatPercentile(cdfValue, displayCategory)}
+        Most votes: <span className="font-bold text-text">{top.label}</span> ({top.value} {valueNoun})
       </p>
     </div>
   );
+};
+
+const suggestedAgeBars = (poll?: AgePollResult[]): { label: string, value: number, x: number }[] => {
+  if (!poll) return [];
+  return poll.map(p => ({
+    label: p['@value'],
+    value: parseInt(p['@numvotes'], 10) || 0,
+    x: parseInt(p['@value'], 10) || 0,
+  }));
+};
+
+const suggestedPlayerCountBars = (poll?: PlayerCountPoll[]): { label: string, value: number, x: number }[] => {
+  if (!poll) return [];
+  return poll.map(p => {
+    const n = parseInt(p['@numplayers'], 10);
+    return {
+      label: p['@numplayers'],
+      value: parseInt(p.result.find(r => r['@value'] === 'Best')?.['@numvotes'] || '0', 10),
+      x: p['@numplayers'].includes('+') ? n + 1 : n,
+    };
+  });
 };
 
 const GameDistributions: React.FC<{ game: Game }> = ({ game }) => {
@@ -278,34 +602,33 @@ const GameDistributions: React.FC<{ game: Game }> = ({ game }) => {
 
   if (!distributions) return null;
 
-  // Find primary category
+  // Find primary subdomain
   let primaryCategory = 'Overall';
-  if (game.category_ranks && Object.keys(game.category_ranks).length > 0) {
-    primaryCategory = Object.entries(game.category_ranks).sort((a, b) => a[1] - b[1])[0][0];
+  if (game.subdomain_ranks && Object.keys(game.subdomain_ranks).length > 0) {
+    primaryCategory = Object.entries(game.subdomain_ranks).sort((a, b) => a[1] - b[1])[0][0];
   }
+
+  // BGG appears to fall back to the manufacturer's playtime when no distinct
+  // community min/max was ever recorded — empirically, min==max==mfg_playtime
+  // for every "collapsed" case (0 games have min==max diverging from mfg),
+  // so treat that combination as absent data rather than genuine agreement.
+  const hasDistinctCommunityPlaytime = !(
+    game.min_playtime === game.max_playtime && game.min_playtime === game.mfg_playtime
+  );
+
+  const ageBars = suggestedAgeBars(game.suggested_playerage);
+  const playerCountBars = suggestedPlayerCountBars(game.suggested_num_players);
 
   return (
     <div className="mt-24 border-t border-neutral/20 pt-16">
       <h2 className="text-4xl font-serif text-text mb-8">Stats</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-16 gap-y-12">
-        {game.game_weight != null && game.game_weight > 0 && (
-          <DistributionChart 
-            title="Complexity"
-            value={game.game_weight}
-            metric="Complexity"
-            category={primaryCategory}
-            distributions={distributions}
-            leftLabel="Lighter"
-            rightLabel="Heavier"
-            formatValue={v => `${v.toFixed(2)} / 5`}
-            formatAvg={v => v.toFixed(2)}
-            formatPercentile={(cdf, cat) => `Heavier than ${Math.round(cdf * 100)}% of ${cat}`}
-          />
-        )}
+
+      <h3 className="text-2xl font-serif text-text mb-6">Official</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-16 gap-y-12 mb-16">
         {game.mfg_playtime != null && game.mfg_playtime > 0 && (
-          <DistributionChart 
+          <DistributionChart
             title="Playtime"
-            value={game.mfg_playtime}
+            markers={[{ value: game.mfg_playtime, label: 'This Game' }]}
             metric="Playtime"
             category={primaryCategory}
             distributions={distributions}
@@ -317,9 +640,9 @@ const GameDistributions: React.FC<{ game: Game }> = ({ game }) => {
           />
         )}
         {game.min_age != null && game.min_age > 0 && (
-          <DistributionChart 
+          <DistributionChart
             title="Minimum Age"
-            value={game.min_age}
+            markers={[{ value: game.min_age, label: 'This Game' }]}
             metric="Min Age"
             category={primaryCategory}
             distributions={distributions}
@@ -330,10 +653,24 @@ const GameDistributions: React.FC<{ game: Game }> = ({ game }) => {
             formatPercentile={(cdf, cat) => `More mature than ${Math.round(cdf * 100)}% of ${cat}`}
           />
         )}
+        {game.min_players != null && game.min_players > 0 && (
+          <DistributionChart
+            title="Min Players"
+            markers={[{ value: game.min_players, label: 'This Game' }]}
+            metric="Min Players"
+            category={primaryCategory}
+            distributions={distributions}
+            leftLabel="Fewer"
+            rightLabel="More"
+            formatValue={v => `${v} Players`}
+            formatAvg={v => v.toFixed(1)}
+            formatPercentile={(cdf, cat) => `Requires more players than ${Math.round(cdf * 100)}% of ${cat}`}
+          />
+        )}
         {game.max_players != null && game.max_players > 0 && (
-          <DistributionChart 
+          <DistributionChart
             title="Max Players"
-            value={game.max_players}
+            markers={[{ value: game.max_players, label: 'This Game' }]}
             metric="Players"
             category={primaryCategory}
             distributions={distributions}
@@ -342,6 +679,73 @@ const GameDistributions: React.FC<{ game: Game }> = ({ game }) => {
             formatValue={v => `${v} Players`}
             formatAvg={v => v.toFixed(1)}
             formatPercentile={(cdf, cat) => `Accommodates more players than ${Math.round(cdf * 100)}% of ${cat}`}
+          />
+        )}
+      </div>
+
+      <h3 className="text-2xl font-serif text-text mb-6">Community</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-16 gap-y-12">
+        {game.min_playtime != null && game.max_playtime != null && (
+          hasDistinctCommunityPlaytime ? (
+            <DistributionChart
+              title="Playtime"
+              markers={[
+                { value: game.min_playtime, label: 'Community Min' },
+                { value: game.max_playtime, label: 'Community Max' },
+              ]}
+              metric="Playtime"
+              category={primaryCategory}
+              distributions={distributions}
+              leftLabel="Shorter"
+              rightLabel="Longer"
+              summaryValue={`${game.min_playtime}-${game.max_playtime} Mins`}
+              formatValue={v => `${v} Mins`}
+              formatAvg={v => Math.round(v).toString()}
+              formatPercentile={(cdf, cat) => `longer than ${Math.round(cdf * 100)}% of ${cat}`}
+            />
+          ) : (
+            <div className="flex flex-col mb-8">
+              <h4 className="text-lg font-bold text-text mb-2">Playtime</h4>
+              <div className="h-24 w-full mb-1 border-b-2 border-stone-300 flex items-center justify-center">
+                <p className="text-sm text-secondary-text/60 font-medium">No distinct community range recorded</p>
+              </div>
+            </div>
+          )
+        )}
+        {game.game_weight != null && game.game_weight > 0 && (
+          <DistributionChart
+            title="Complexity"
+            markers={[{ value: game.game_weight, label: 'This Game' }]}
+            metric="Complexity"
+            category={primaryCategory}
+            distributions={distributions}
+            leftLabel="Lighter"
+            rightLabel="Heavier"
+            formatValue={v => `${v.toFixed(2)} / 5`}
+            formatAvg={v => v.toFixed(2)}
+            formatPercentile={(cdf, cat) => `Heavier than ${Math.round(cdf * 100)}% of ${cat}`}
+          />
+        )}
+        {playerCountBars.length > 0 && (
+          <PollBarChart
+            title="Suggested Player Number"
+            bars={playerCountBars}
+            valueNoun="votes"
+            distribution={distributions[primaryCategory]?.['Players'] || distributions['Overall']?.['Players']}
+            leftLabel="Fewer"
+            rightLabel="More"
+            formatTopLabel={l => `${l} Players`}
+          />
+        )}
+        {ageBars.length > 0 && (
+          <PollBarChart
+            title="Suggested Player Age"
+            bars={ageBars}
+            valueNoun="votes"
+            distribution={distributions[primaryCategory]?.['Min Age'] || distributions['Overall']?.['Min Age']}
+            leftLabel="Younger"
+            rightLabel="Older"
+            formatTopLabel={l => l === '21 and up' ? l : `${l} Years`}
           />
         )}
       </div>
@@ -693,20 +1097,13 @@ const GameRecommendations: React.FC<{ bgg_id: number }> = ({ bgg_id }) => {
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
             {data?.recommendations.map(rec => (
-            <div key={rec.game.bgg_id || rec.game.id} className="min-w-[300px] max-w-[300px] snap-start flex flex-col gap-3">
+            <div key={rec.game.bgg_id} className="min-w-[300px] max-w-[300px] snap-start flex flex-col gap-3">
               <div className="flex-1">
                 <GameCard 
                   game={rec.game as any} 
                   matchPercentage={model === 'popularity' ? undefined : Math.round(rec.score * 100)} 
                 />
               </div>
-              {/* 
-              {rec.reason && rec.reason.length > 0 && (
-                <div className="text-xs font-medium text-primary bg-primary/10 border border-primary/20 px-3 py-2 rounded-lg line-clamp-2 leading-relaxed shrink-0 shadow-sm">
-                  {rec.reason[0]}
-                </div>
-              )}
-              */}
             </div>
           ))}
           </div>
@@ -716,21 +1113,28 @@ const GameRecommendations: React.FC<{ bgg_id: number }> = ({ bgg_id }) => {
   );
 };
 
-const ReviewCard: React.FC<{ review: Review }> = ({ review }) => {
-  const [expanded, setExpanded] = useState(false);
-  const isLong = review.comment && review.comment.length > 200;
+const ReviewCard: React.FC<{ review: Review; onReadMore: (review: Review) => void }> = ({ review, onReadMore }) => {
+  const pRef = useRef<HTMLParagraphElement>(null);
+  const [isTruncated, setIsTruncated] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = pRef.current;
+    if (!el) return;
+    // Character count is a poor proxy for whether the 4-line clamp actually cut
+    // anything off — wrapping depends on card width and word boundaries, so a
+    // ~300-char review can render in full within 4 lines. Measure the real
+    // rendered overflow instead, so "Read more" never opens a modal showing
+    // the exact same text already visible on the card.
+    const checkTruncation = () => setIsTruncated(el.scrollHeight > el.clientHeight + 1);
+    checkTruncation();
+    window.addEventListener('resize', checkTruncation);
+    return () => window.removeEventListener('resize', checkTruncation);
+  }, [review.comment]);
 
   return (
-    <div className="bg-white border border-stone-100 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] p-5 rounded-2xl flex flex-col transition-all hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.08)]">
+    <div className="bg-white border border-stone-100 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] p-5 rounded-2xl flex flex-col h-48 overflow-hidden transition-all hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.08)]">
       <div className="flex justify-between items-start mb-3">
-        <div className="flex flex-col">
-          <span className="font-bold text-text text-sm">{review.user}</span>
-          {review.created_at && (
-            <span className="text-[11px] font-medium text-secondary-text/80 uppercase tracking-wider mt-0.5">
-              {new Date(review.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
-            </span>
-          )}
-        </div>
+        <span className="font-bold text-text text-sm">{review.user}</span>
         {review.rating !== null && review.rating !== undefined && (
           <div className="flex items-center gap-1">
             <StarIcon className="w-4 h-4 text-[#FFB400]" />
@@ -740,19 +1144,66 @@ const ReviewCard: React.FC<{ review: Review }> = ({ review }) => {
       </div>
       {review.comment && (
         <div className="flex-1 flex flex-col mt-1">
-          <p className={`text-secondary-text text-sm leading-relaxed whitespace-pre-wrap ${!expanded ? 'line-clamp-4' : ''}`}>
+          <p ref={pRef} className="text-secondary-text text-sm leading-relaxed whitespace-pre-wrap line-clamp-4">
             {review.comment}
           </p>
-          {isLong && (
-            <button 
-              onClick={() => setExpanded(!expanded)}
+          {isTruncated && (
+            <button
+              onClick={() => onReadMore(review)}
               className="text-primary text-xs font-bold self-start mt-2 hover:underline transition-colors"
             >
-              {expanded ? 'Show less' : 'Read more'}
+              Read more
             </button>
           )}
         </div>
       )}
+    </div>
+  );
+};
+
+const ReviewModal: React.FC<{ review: Review; onClose: () => void }> = ({ review, onClose }) => {
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', handleKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div
+        className="relative bg-white rounded-3xl shadow-2xl border border-stone-200/80 w-full max-w-xl max-h-[80vh] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex justify-between items-start p-6 pb-4 border-b border-stone-100">
+          <span className="font-bold text-text text-base">{review.user}</span>
+          <div className="flex items-center gap-4">
+            {review.rating !== null && review.rating !== undefined && (
+              <div className="flex items-center gap-1">
+                <StarIcon className="w-4 h-4 text-[#FFB400]" />
+                <span className="font-bold text-text text-sm">{review.rating}/10</span>
+              </div>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-full hover:bg-neutral/10 transition-colors text-secondary-text"
+              aria-label="Close"
+            >
+              <XMarkIcon className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+        <div className="p-6 pt-4 overflow-y-auto">
+          <p className="text-secondary-text text-sm leading-relaxed whitespace-pre-wrap">{review.comment}</p>
+        </div>
+      </div>
     </div>
   );
 };
@@ -763,6 +1214,7 @@ const GameReviews: React.FC<{ game: Game }> = ({ game }) => {
   const [languageFilter, setLanguageFilter] = useState<string>('en');
   const [isLangOpen, setIsLangOpen] = useState(false);
   const [isRatingOpen, setIsRatingOpen] = useState(false);
+  const [openReview, setOpenReview] = useState<Review | null>(null);
   
   const langRef = useRef<HTMLDivElement>(null);
   const ratingRef = useRef<HTMLDivElement>(null);
@@ -787,7 +1239,7 @@ const GameReviews: React.FC<{ game: Game }> = ({ game }) => {
   
   const language = languageFilter === 'all' ? undefined : languageFilter;
   
-  const { data, isLoading, isError, error, isPlaceholderData } = useQuery({
+  const { data, isLoading, isError, isPlaceholderData } = useQuery({
     queryKey: ['reviews', game.bgg_id, page, ratingFilter, languageFilter],
     queryFn: () => fetchReviews(game.bgg_id, page, pageSize, minRating, maxRating, language),
     placeholderData: keepPreviousData,
@@ -812,14 +1264,12 @@ const GameReviews: React.FC<{ game: Game }> = ({ game }) => {
       .sort((a, b) => b[1] - a[1])
       .map(([code, pct]) => {
         let label = code;
-        try { label = languageNames.of(code) || code; } catch (e) {}
+        try { label = languageNames.of(code) || code; } catch {}
         return { id: code, label, pct };
       });
       
     return [{ id: 'all', label: 'All Languages', pct: undefined }, ...langs];
   }, [data?.language_breakdown]);
-
-  const currentLangLabel = languageOptions.find(o => o.id === languageFilter)?.label || 'All Languages';
 
   const ratingOptions = useMemo(() => {
     return [
@@ -934,7 +1384,7 @@ const GameReviews: React.FC<{ game: Game }> = ({ game }) => {
       ) : (
         <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 transition-opacity duration-300 ${isPlaceholderData ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
           {data?.items.map(review => (
-            <ReviewCard key={review.id} review={review} />
+            <ReviewCard key={review.id} review={review} onReadMore={setOpenReview} />
           ))}
 
           {/* Pagination Controls */}
@@ -961,6 +1411,8 @@ const GameReviews: React.FC<{ game: Game }> = ({ game }) => {
           )}
         </div>
       )}
+
+      {openReview && <ReviewModal review={openReview} onClose={() => setOpenReview(null)} />}
     </div>
   );
 };
@@ -1220,17 +1672,17 @@ export const GameDetail: React.FC = () => {
           </p>
 
           <div className="flex flex-wrap items-center gap-3 mb-3">
-            {game.categories && game.categories.map(cat => (
-               <span key={cat} className="px-4 py-2 bg-neutral/20 text-text rounded-full text-sm font-bold whitespace-nowrap">
-                 {CATEGORY_MAP[cat] || cat}
+            {game.subdomains && game.subdomains.map(sub => (
+               <span key={sub} className="px-4 py-2 bg-neutral/20 text-text rounded-full text-sm font-bold whitespace-nowrap">
+                 {SUBDOMAIN_MAP[sub] || sub}
                </span>
             ))}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {game.themes && game.themes.map(theme => (
-               <span key={theme} className="px-3 py-1 bg-transparent border border-neutral/40 text-secondary-text rounded-full text-xs font-medium whitespace-nowrap">
-                 {theme}
+            {game.categories && game.categories.map(cat => (
+               <span key={cat} className="px-3 py-1 bg-transparent border border-neutral/40 text-secondary-text rounded-full text-xs font-medium whitespace-nowrap">
+                 {cat}
                </span>
             ))}
           </div>
@@ -1281,16 +1733,20 @@ export const GameDetail: React.FC = () => {
         <div className="lg:col-span-2">
           <div className="mb-12">
             <h2 className="text-4xl font-serif text-text mb-6">About the Game</h2>
-            <div 
-              className="text-lg text-secondary-text leading-relaxed space-y-5"
-              dangerouslySetInnerHTML={{ __html: cleanDescription }}
-            />
+            <GameDescription html={cleanDescription} />
           </div>
 
           {game.mechanics && game.mechanics.length > 0 && (
             <div>
               <h3 className="text-2xl font-serif text-text mb-4">Mechanics</h3>
               <ExpandableChipList items={game.mechanics} limit={8} />
+            </div>
+          )}
+
+          {game.families && game.families.length > 0 && (
+            <div className="mt-12">
+              <h3 className="text-2xl font-serif text-text mb-4">Family</h3>
+              <FamilyGroupList items={game.families} groupLimit={6} />
             </div>
           )}
         </div>

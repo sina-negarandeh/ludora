@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List
-from app.database.models import Category, Theme, Mechanic, Designer, Publisher, GameTheme
+from app.database.models import Category, Theme, Subdomain, Mechanic, Designer, Publisher, GameTheme, GameSubdomain, Family, Subfamily, GameSubfamily
 
 class MetadataService:
     def __init__(self, db: Session):
@@ -15,6 +15,23 @@ class MetadataService:
         if limit:
             query = query.limit(limit)
         return [c[0] for c in query.all()]
+
+    def get_subdomains(self, search: str = None, limit: int = None) -> List[dict]:
+        query = self.db.query(
+            Subdomain.id,
+            Subdomain.name,
+            func.count(GameSubdomain.game_id).label("game_count")
+        ).join(GameSubdomain, Subdomain.id == GameSubdomain.subdomain_id)
+
+        if search:
+            query = query.filter(Subdomain.name.ilike(f"%{search}%"))
+
+        query = query.group_by(Subdomain.id).order_by(Subdomain.name)
+        if limit:
+            query = query.limit(limit)
+
+        subdomains = query.all()
+        return [{"id": s.id, "name": s.name, "game_count": s.game_count} for s in subdomains]
 
     def get_mechanics(self, search: str = None, limit: int = None) -> List[str]:
         query = self.db.query(Mechanic.name)
@@ -59,6 +76,32 @@ class MetadataService:
             
         themes = query.all()
         return [{"id": t.id, "name": t.name, "game_count": t.game_count} for t in themes]
+
+    def get_families(self, search: str = None) -> List[dict]:
+        query = self.db.query(
+            Family.name.label("group_name"),
+            Subfamily.id,
+            Subfamily.value,
+            Subfamily.name,
+            func.count(GameSubfamily.game_id).label("game_count"),
+        ).select_from(Subfamily).join(
+            Family, Subfamily.family_id == Family.id
+        ).join(
+            GameSubfamily, Subfamily.id == GameSubfamily.subfamily_id
+        )
+
+        if search:
+            query = query.filter(Subfamily.value.ilike(f"%{search}%"))
+
+        query = query.group_by(Family.name, Subfamily.id).order_by(Family.name, Subfamily.value)
+        rows = query.all()
+
+        grouped: dict[str, list] = {}
+        for r in rows:
+            grouped.setdefault(r.group_name, []).append(
+                {"id": r.id, "value": r.value, "name": r.name, "game_count": r.game_count}
+            )
+        return [{"group": g, "values": vals} for g, vals in grouped.items()]
 
     def get_artists(self, search: str = None, limit: int = None) -> List[str]:
         from app.database.models import Artist

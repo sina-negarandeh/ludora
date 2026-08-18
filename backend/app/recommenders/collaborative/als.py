@@ -5,9 +5,15 @@ import implicit
 from sklearn.metrics.pairwise import cosine_similarity
 from typing import List, Dict, Any
 from app.recommenders.base import BaseRecommender
+from app.core.ml_config import RANDOM_SEED, RecommenderConfig
 
 class ALSRecommender(BaseRecommender):
-    def __init__(self, factors: int = 50, iterations: int = 15, regularization: float = 0.1):
+    def __init__(
+        self,
+        factors: int = RecommenderConfig.CF_ALS_FACTORS,
+        iterations: int = RecommenderConfig.CF_ALS_ITERATIONS,
+        regularization: float = RecommenderConfig.CF_ALS_REGULARIZATION,
+    ):
         self.factors = factors
         self.iterations = iterations
         self.regularization = regularization
@@ -40,7 +46,7 @@ class ALSRecommender(BaseRecommender):
             factors=self.factors,
             regularization=self.regularization,
             iterations=self.iterations,
-            random_state=42
+            random_state=RANDOM_SEED
         )
         
         # Fit the model

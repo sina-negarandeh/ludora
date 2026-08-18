@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, HTTPException, Body
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
@@ -11,21 +11,25 @@ from app.services.aspect_service import AspectService, AspectAggregateResponse
 
 router = APIRouter()
 
-@router.get("/", response_model=PaginatedGames, summary="Search and Filter Games", description="Retrieve a paginated list of board games. Supports lexical search via the 'query' parameter, filtering by categories, mechanics, themes, player counts, and weight. Allows sorting by rank, rating, and other metrics.")
+@router.get("/", response_model=PaginatedGames, summary="Search and Filter Games", description="Retrieve a paginated list of board games. Supports lexical search via the 'query' parameter, filtering by subdomains, categories, mechanics, themes, families, player counts, weight, and playtime. Allows sorting by rank, rating, and other metrics.")
 def get_games(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     sort_by: str = Query("rank"),
     order: str = Query("asc"),
     query: Optional[str] = None,
+    subdomains: Optional[List[str]] = Query(None),
     categories: Optional[List[str]] = Query(None),
     themes: Optional[List[str]] = Query(None),
+    families: Optional[List[str]] = Query(None),
     mechanics: Optional[List[str]] = Query(None),
     exact_players: Optional[int] = None,
     min_players: Optional[int] = None,
     max_players: Optional[int] = None,
     min_weight: Optional[float] = None,
     max_weight: Optional[float] = None,
+    min_playtime: Optional[int] = None,
+    max_playtime: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     service = GameService(db)
@@ -35,14 +39,18 @@ def get_games(
         sort_by=sort_by,
         order=order,
         query_str=query,
+        subdomains=subdomains,
         categories=categories,
         themes=themes,
+        families=families,
         mechanics=mechanics,
         exact_players=exact_players,
         min_players=min_players,
         max_players=max_players,
         min_weight=min_weight,
-        max_weight=max_weight
+        max_weight=max_weight,
+        min_playtime=min_playtime,
+        max_playtime=max_playtime
     )
     return PaginatedGames(total=total, items=games)
 
@@ -89,16 +97,6 @@ def get_game_reviews(
         "rating_breakdown": rating_breakdown,
         "items": items
     }
-
-class AspectAggregateResponse(BaseModel):
-    aspect: str
-    positive_count: int
-    negative_count: int
-    mixed_count: int
-    neutral_count: int
-    total_mentions: int
-    mean_sentiment: float
-    evidence_samples: List[str]
 
 @router.get("/{game_id}/aspects", response_model=List[AspectAggregateResponse], summary="Get Aspect-Based Sentiment Analysis", description="Retrieve the aggregated positive/negative community sentiment towards specific game aspects (e.g., 'Rulebook', 'Downtime') extracted via zero-shot DeBERTa classification.")
 def get_game_aspects(game_id: int, db: Session = Depends(get_db)):

@@ -1,13 +1,8 @@
 import os
-import sys
 import time
 import psycopg
 import pandas as pd
 from sqlalchemy import create_engine, text
-
-# Add backend to path so we can import from app
-sys.path.append(os.path.join(os.path.dirname(__file__), '../backend'))
-sys.path.append('/app')
 
 from app.core.config import settings
 
@@ -36,10 +31,12 @@ def main():
     # 1. Truncate everything
     with engine.connect() as conn:
         print("Truncating all tables...")
-        conn.execute(text("TRUNCATE TABLE games, categories, mechanics, designers, publishers, artists, users, ratings, reviews, game_categories, game_mechanics, game_designers, game_publishers, game_artists CASCADE"))
+        conn.execute(text("TRUNCATE TABLE games, categories, mechanics, themes, subdomains, families, subfamilies, designers, publishers, artists, users, ratings, reviews, game_categories, game_mechanics, game_themes, game_subdomains, game_subfamilies, game_designers, game_publishers, game_artists, game_relations CASCADE"))
         conn.commit()
-            
-    base_path = '../data/processed' if os.path.exists('../data/processed/master_games.csv') else '/data/processed'
+
+    # Run from the repo root, matching every other pipeline script. Override
+    # via env var for Docker or any other cwd — see docs/setup/README.md.
+    base_path = os.environ.get('PROCESSED_DATA_DIR', 'data/processed')
     
     # 2. Insert Games via Pandas (since CSV has extra columns we need to drop/rename)
     print(f"[{time.strftime('%X')}] Loading Games into Pandas...")
@@ -55,11 +52,18 @@ def main():
     db_cols = [
         'bgg_id', 'name', 'description', 'year_published', 'game_weight', 'avg_rating', 'median_rating',
         'min_players', 'max_players', 'mfg_playtime', 'min_age', 'image_path', 'rank', 'num_ratings',
-        'num_comments', 'owned_count', 'trading_count', 'wanting_count', 'wishing_count'
+        'num_comments', 'owned_count', 'trading_count', 'wanting_count', 'wishing_count',
+        'min_playtime', 'max_playtime', 'bayes_avg_rating', 'stddev_rating', 'num_weight_votes',
+        'thumbnail_url', 'kickstarted', 'is_reimplementation',
+        'suggested_num_players', 'suggested_playerage', 'suggested_language_dependence',
     ]
     df_games_db = df_games[db_cols].copy()
-    
-    int_cols = ['year_published', 'min_players', 'max_players', 'mfg_playtime', 'min_age', 'rank', 'num_ratings', 'num_comments', 'owned_count', 'trading_count', 'wanting_count', 'wishing_count']
+
+    int_cols = [
+        'year_published', 'min_players', 'max_players', 'mfg_playtime', 'min_age', 'rank', 'num_ratings',
+        'num_comments', 'owned_count', 'trading_count', 'wanting_count', 'wishing_count',
+        'min_playtime', 'max_playtime', 'num_weight_votes', 'kickstarted', 'is_reimplementation',
+    ]
     for c in int_cols:
         df_games_db[c] = pd.to_numeric(df_games_db[c], errors='coerce').astype('Int64')
     
@@ -84,8 +88,11 @@ def main():
     with psycopg.connect(db_url) as conn:
         
         # Entities
+        copy_csv_to_postgres(conn, 'subdomains', os.path.join(base_path, 'master_subdomains.csv'))
         copy_csv_to_postgres(conn, 'categories', os.path.join(base_path, 'master_categories.csv'))
         copy_csv_to_postgres(conn, 'themes', os.path.join(base_path, 'master_themes.csv'))
+        copy_csv_to_postgres(conn, 'families', os.path.join(base_path, 'master_families.csv'))
+        copy_csv_to_postgres(conn, 'subfamilies', os.path.join(base_path, 'master_subfamilies.csv'))
         copy_csv_to_postgres(conn, 'mechanics', os.path.join(base_path, 'master_mechanics.csv'))
         copy_csv_to_postgres(conn, 'designers', os.path.join(base_path, 'master_designers.csv'))
         copy_csv_to_postgres(conn, 'publishers', os.path.join(base_path, 'master_publishers.csv'))
@@ -93,8 +100,10 @@ def main():
         conn.commit()
 
         # Mappings (often have duplicates from JSON source)
+        copy_mapping_dedup(conn, 'game_subdomains', os.path.join(base_path, 'master_game_subdomains.csv'))
         copy_mapping_dedup(conn, 'game_categories', os.path.join(base_path, 'master_game_categories.csv'))
         copy_mapping_dedup(conn, 'game_themes', os.path.join(base_path, 'master_game_themes.csv'))
+        copy_mapping_dedup(conn, 'game_subfamilies', os.path.join(base_path, 'master_game_subfamilies.csv'))
         copy_mapping_dedup(conn, 'game_mechanics', os.path.join(base_path, 'master_game_mechanics.csv'))
         copy_mapping_dedup(conn, 'game_designers', os.path.join(base_path, 'master_game_designers.csv'))
         copy_mapping_dedup(conn, 'game_publishers', os.path.join(base_path, 'master_game_publishers.csv'))
@@ -132,6 +141,13 @@ def main():
         
         reviews_clean = filter_csv_by_game(os.path.join(base_path, 'master_reviews.csv'), 1)
         copy_csv_to_postgres(conn, 'reviews', reviews_clean)
+        conn.commit()
+
+        # Game relations (expansions/implementations/integrations) — game_id
+        # is index 0; related_game_id may be legitimately empty (unresolved
+        # name match) and is left as-is, not filtered.
+        relations_clean = filter_csv_by_game(os.path.join(base_path, 'master_game_relations.csv'), 0)
+        copy_csv_to_postgres(conn, 'game_relations', relations_clean)
         conn.commit()
 
     print(f"[{time.strftime('%X')}] Master Dataset Ingestion Complete!")

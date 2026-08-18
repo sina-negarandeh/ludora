@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useChatMutation, type AssistantData } from '../api/assistant';
+import { useChatMutation } from '../api/assistant';
 import { AssistantMessageBubble } from './AssistantMessageBubble';
 import { ChatBubbleLeftRightIcon, XMarkIcon, PaperAirplaneIcon, SparklesIcon } from '@heroicons/react/24/solid';
 
@@ -52,7 +52,7 @@ export const AssistantDrawer: React.FC = () => {
         data: res.data,
       };
       setMessages(prev => [...prev, assistantMsg]);
-    } catch (e) {
+    } catch {
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',

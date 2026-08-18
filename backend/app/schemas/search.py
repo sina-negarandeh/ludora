@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Literal, Optional
+from typing import Optional
 from enum import Enum
 from app.schemas.game_query import GameFilter
 from app.schemas.game import GameResponse

@@ -2,6 +2,7 @@ import sys
 import os
 import pandas as pd
 import numpy as np
+import mlflow
 from sklearn.model_selection import train_test_split
 from collections import defaultdict
 import math
@@ -10,6 +11,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../'))
 from app.recommenders.collaborative.item_cosine import ItemCosineRecommender
 from app.recommenders.collaborative.svd import SVDRecommender
 from app.recommenders.collaborative.als import ALSRecommender
+from app.core.ml_config import RANDOM_SEED, RecommenderConfig
+from app.core.mlflow_utils import tracked_run, write_results_json
 
 def calculate_ndcg(recommended_list, test_set, k):
     dcg = 0.0
@@ -38,7 +41,7 @@ def main():
     active_users = user_counts[(user_counts >= 10) & (user_counts <= 100)].index
     
     # Sample 1000 active users for evaluation
-    np.random.seed(42)
+    np.random.seed(RANDOM_SEED)
     eval_users = np.random.choice(active_users, 1000, replace=False)
     
     # The training set is everyone else PLUS the training portion of the eval_users
@@ -58,7 +61,7 @@ def main():
             train_eval_list.append(group)
             continue
         # Split 80/20
-        train_grp, test_grp = train_test_split(group, test_size=0.2, random_state=42)
+        train_grp, test_grp = train_test_split(group, test_size=0.2, random_state=RANDOM_SEED)
         train_eval_list.append(train_grp)
         test_eval_list.append(test_grp)
         
@@ -80,20 +83,24 @@ def main():
     train_histories = df_train_eval[df_train_eval['rating'] >= 8.0].groupby('user')['item'].apply(set).to_dict()
 
     recommenders = [
-        ItemCosineRecommender(min_shared_users=50),
-        SVDRecommender(n_factors=50),
-        ALSRecommender(factors=50, iterations=15, regularization=0.1)
+        ItemCosineRecommender(min_shared_users=RecommenderConfig.CF_ITEM_COSINE_MIN_SHARED_USERS),
+        SVDRecommender(n_factors=RecommenderConfig.CF_SVD_N_FACTORS),
+        ALSRecommender(
+            factors=RecommenderConfig.CF_ALS_FACTORS,
+            iterations=RecommenderConfig.CF_ALS_ITERATIONS,
+            regularization=RecommenderConfig.CF_ALS_REGULARIZATION,
+        ),
     ]
 
     for recommender in recommenders:
         model_name = recommender.get_model_name()
         print(f"\nEvaluating {model_name}...")
         recommender.fit(df_train)
-        
+
         precisions = []
         recalls = []
         ndcgs = []
-        
+
         for u in eval_users_filtered:
             user_history = train_histories.get(u, set())
             if not user_history:
@@ -121,10 +128,21 @@ def main():
             recalls.append(hits / len(test_set))
             ndcgs.append(calculate_ndcg(top_items, test_set, k))
             
+        metrics = {
+            "precision_at_10": float(np.mean(precisions)),
+            "recall_at_10": float(np.mean(recalls)),
+            "ndcg_at_10": float(np.mean(ndcgs)),
+        }
         print(f"Metrics @ 10 for {model_name}:")
-        print(f"Precision: {np.mean(precisions):.4f}")
-        print(f"Recall:    {np.mean(recalls):.4f}")
-        print(f"NDCG:      {np.mean(ndcgs):.4f}")
+        print(f"Precision: {metrics['precision_at_10']:.4f}")
+        print(f"Recall:    {metrics['recall_at_10']:.4f}")
+        print(f"NDCG:      {metrics['ndcg_at_10']:.4f}")
+
+        with tracked_run("recommender/collaborative", run_name=f"{model_name}_eval_cf_split"):
+            hyperparams = {k: v for k, v in vars(recommender).items() if isinstance(v, (int, float, str, bool))}
+            mlflow.log_params({**hyperparams, "random_seed": RANDOM_SEED, "n_eval_users": len(eval_users_filtered)})
+            mlflow.log_metrics(metrics)
+        write_results_json(f"cf_split_{model_name}", {"model": model_name, **metrics, "n_eval_users": len(eval_users_filtered)})
 
 if __name__ == "__main__":
     main()

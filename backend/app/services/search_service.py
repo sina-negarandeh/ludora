@@ -1,14 +1,11 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from app.database.models import Game, Category, Mechanic, Theme
+from app.database.models import Game, Category, Mechanic, Theme, Subdomain, Subfamily, GameEmbedding
 from app.schemas.search import SearchQuery, PaginatedSearchResults, SearchResult, SearchDebug
 from app.schemas.game_query import GameFilter
-from typing import Dict, List
-import datetime
-from sentence_transformers import SentenceTransformer
-
-# Load embedding model once globally
-model = SentenceTransformer('all-MiniLM-L6-v2')
+from app.core.ml_config import SearchConfig
+from app.core import embeddings as embedding_model
+from typing import Dict
 
 def apply_game_filters(query, filters: GameFilter):
     if not filters:
@@ -26,34 +23,60 @@ def apply_game_filters(query, filters: GameFilter):
         query = query.filter(Game.game_weight >= filters.min_weight)
     if filters.max_weight is not None:
         query = query.filter(Game.game_weight <= filters.max_weight)
-        
+
+    if filters.min_playtime is not None:
+        query = query.filter(Game.mfg_playtime >= filters.min_playtime)
+    if filters.max_playtime is not None:
+        query = query.filter(Game.mfg_playtime <= filters.max_playtime)
+
     if filters.min_year is not None:
         query = query.filter(Game.year_published >= filters.min_year)
     if filters.max_year is not None:
         query = query.filter(Game.year_published <= filters.max_year)
 
+    if filters.subdomains:
+        for sub in filters.subdomains:
+            query = query.filter(Game.subdomains.any(Subdomain.name == sub))
     if filters.categories:
         for cat in filters.categories:
             query = query.filter(Game.categories.any(Category.name == cat))
     if filters.themes:
         for theme in filters.themes:
             query = query.filter(Game.themes.any(Theme.name == theme))
+    if filters.families:
+        for fam in filters.families:
+            query = query.filter(Game.families.any(Subfamily.name == fam))
     if filters.mechanics:
         for mech in filters.mechanics:
             query = query.filter(Game.mechanics.any(Mechanic.name == mech))
-            
+
     return query
 
 class SearchService:
     def __init__(self, db: Session):
         self.db = db
-        self.rrf_k = 60
+        self.rrf_k = SearchConfig.RRF_K
 
-    def search_lexical(self, q: str, limit: int = 100) -> Dict[int, int]:
-        # Using websearch_to_tsquery for natural language-like parsing
-        tsquery = func.websearch_to_tsquery('english', q)
+    def search_lexical(self, q: str, limit: int = SearchConfig.CANDIDATE_POOL_SIZE) -> Dict[int, int]:
+        # 'english_unaccent' (not plain 'english') — must match the config
+        # search_vector itself was built with (scripts/update_search_vectors.py),
+        # or accent-insensitive matching silently doesn't happen: querying
+        # "Chvatil" against an 'english'-tokenized tsvector containing
+        # "Chvátil" returns zero rows, since the two accent forms produce
+        # different lexemes under the plain config.
+        tsquery = func.websearch_to_tsquery('english_unaccent', q)
         
-        # Rank the results using ts_rank_cd
+        # Rank the results using ts_rank_cd. Tried adding normalization=1
+        # (divide by 1 + log(document length)) to discount long, noisy
+        # descriptions — measured it against a real query ("worker
+        # placement"): it dropped the exact-name match "Worker Placement"
+        # out of the top 5 entirely (its own description is long, so it got
+        # penalized as much as an irrelevant long document would), while
+        # promoting a much weaker match with a short description to #1.
+        # ts_rank_cd's length normalization applies to the whole combined
+        # tsvector, not per-field, so it can't distinguish "long because
+        # noisy" from "long because it's a substantive, relevant match" —
+        # reverted; not a clear win over the default.
         results = (
             self.db.query(Game.bgg_id)
             .filter(Game.search_vector.op("@@")(tsquery))
@@ -64,17 +87,21 @@ class SearchService:
         
         return {row.bgg_id: rank + 1 for rank, row in enumerate(results)}
 
-    def search_semantic(self, q: str, limit: int = 100) -> Dict[int, int]:
-        embedding = model.encode(q).tolist()
-        
+    def search_semantic(self, q: str, limit: int = SearchConfig.CANDIDATE_POOL_SIZE) -> Dict[int, int]:
+        embedding = embedding_model.encode([q], is_query=True)[0]
+
+        # Filter to the currently-configured model first — game_embeddings can
+        # hold rows for more than one model at once (e.g. during a comparison),
+        # and vectors of different dimensions can't be compared to each other.
         results = (
-            self.db.query(Game.bgg_id)
-            .order_by(Game.embedding.cosine_distance(embedding))
+            self.db.query(GameEmbedding.game_id)
+            .filter(GameEmbedding.model == SearchConfig.EMBEDDING_MODEL)
+            .order_by(GameEmbedding.embedding.cosine_distance(embedding))
             .limit(limit)
             .all()
         )
-        
-        return {row.bgg_id: rank + 1 for rank, row in enumerate(results)}
+
+        return {row.game_id: rank + 1 for rank, row in enumerate(results)}
 
     def search(self, search_query: SearchQuery, skip: int, limit: int) -> PaginatedSearchResults:
         lexical_ranks = {}
@@ -82,10 +109,10 @@ class SearchService:
         
         # 1. Retrieval
         if search_query.mode in ["lexical", "hybrid"]:
-            lexical_ranks = self.search_lexical(search_query.q, limit=100)
-            
+            lexical_ranks = self.search_lexical(search_query.q, limit=SearchConfig.CANDIDATE_POOL_SIZE)
+
         if search_query.mode in ["semantic", "hybrid"]:
-            semantic_ranks = self.search_semantic(search_query.q, limit=100)
+            semantic_ranks = self.search_semantic(search_query.q, limit=SearchConfig.CANDIDATE_POOL_SIZE)
             
         # 2. Candidate Pool & RRF
         candidate_ids = set(lexical_ranks.keys()).union(semantic_ranks.keys())

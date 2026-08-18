@@ -9,22 +9,37 @@ from sklearn.metrics.pairwise import cosine_distances
 sys.path.append(os.path.join(os.path.dirname(__file__), '../backend'))
 sys.path.append('/app')
 
-from app.database.models import GameRecommendation, Game
+from app.database.models import GameRecommendation, Game, GameEmbedding
 from app.core.config import settings
+from app.core.ml_config import SearchConfig
+from app.core.mlflow_utils import tracked_run, write_results_json
+import mlflow
 
 def main():
     engine = create_engine(settings.DATABASE_URL)
     Session = sessionmaker(bind=engine)
     session = Session()
 
-    models = ['metadata', 'tfidf', 'embedding', 'hybrid', 'graph_jaccard', 'node2vec', 'cf_item_cosine', 'cf_svd', 'cf_als']
-    
+    models = ['metadata', 'tfidf', 'embedding', 'hybrid', 'graph_jaccard', 'deepwalk', 'cf_item_cosine', 'cf_svd', 'cf_als']
+    # Technique-family grouping, matching the precompute/training-side experiments —
+    # so a model's eval run lands in the same MLflow experiment as its training run.
+    MODEL_EXPERIMENT = {
+        'metadata': 'recommender/content_based', 'tfidf': 'recommender/content_based',
+        'embedding': 'recommender/content_based', 'hybrid': 'recommender/content_based',
+        'graph_jaccard': 'recommender/graph', 'deepwalk': 'recommender/graph',
+        'cf_item_cosine': 'recommender/collaborative', 'cf_svd': 'recommender/collaborative',
+        'cf_als': 'recommender/collaborative',
+    }
+
     print("Loading game embeddings for diversity calculation...")
-    games = session.query(Game.bgg_id, Game.embedding).filter(Game.embedding.isnot(None)).all()
-    embeddings_map = {g.bgg_id: np.array(g.embedding) for g in games}
+    rows = session.query(GameEmbedding.game_id, GameEmbedding.embedding).filter(
+        GameEmbedding.model == SearchConfig.EMBEDDING_MODEL
+    ).all()
+    embeddings_map = {r.game_id: np.array(r.embedding) for r in rows}
     total_games = session.query(Game).count()
 
     print("Evaluating models...")
+    all_results = {}
     for model in models:
         # 1. Catalog Coverage
         unique_recs = session.query(GameRecommendation.recommended_game_id).filter(
@@ -64,9 +79,16 @@ def main():
             ild = sum_dist / (N * (N - 1) / 2)
             ild_scores.append(ild)
             
-        mean_ild = np.mean(ild_scores) if ild_scores else 0
-        
+        mean_ild = float(np.mean(ild_scores)) if ild_scores else 0.0
+
         print(f"[{model.upper()}] Catalog Coverage: {coverage:.2%} | ILD@10: {mean_ild:.4f}")
+
+        with tracked_run(MODEL_EXPERIMENT[model], run_name=f"{model}_eval_coverage_ild"):
+            mlflow.log_metrics({"catalog_coverage": float(coverage), "ild_at_10": mean_ild})
+
+        all_results[model] = {"catalog_coverage": float(coverage), "ild_at_10": mean_ild}
+
+    write_results_json("recommenders_coverage_ild", all_results)
 
 if __name__ == "__main__":
     main()

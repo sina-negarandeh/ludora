@@ -8,12 +8,18 @@ def smooth(y, box_pts):
     y_smooth = np.convolve(y, box, mode='same')
     return y_smooth
 
+RAW_DATA_THRENJEN_DIR = os.environ.get(
+    'RAW_DATA_THRENJEN_DIR',
+    'data/raw/kaggle_datasets_threnjen_board-games-database-from-boardgamegeek',
+)
+
+
 def main():
-    csv_path = os.path.join(os.path.dirname(__file__), '../data/raw/games.csv')
+    csv_path = os.path.join(RAW_DATA_THRENJEN_DIR, 'games.csv')
     df = pd.read_csv(csv_path)
 
     CATEGORIES = [
-        'Cat:Thematic', 'Cat:Strategy', 'Cat:War', 'Cat:Family', 
+        'Cat:Thematic', 'Cat:Strategy', 'Cat:War', 'Cat:Family',
         'Cat:CGS', 'Cat:Abstract', 'Cat:Party', 'Cat:Childrens'
     ]
 
@@ -21,6 +27,7 @@ def main():
         'Complexity': {'col': 'GameWeight', 'min': 0.0, 'max': 5.0, 'bins': 50},
         'Playtime': {'col': 'MfgPlaytime', 'min': 0.0, 'max': 240.0, 'bins': 48},
         'Players': {'col': 'MaxPlayers', 'min': 1.0, 'max': 10.0, 'bins': 10},
+        'Min Players': {'col': 'MinPlayers', 'min': 1.0, 'max': 10.0, 'bins': 10},
         'Min Age': {'col': 'MfgAgeRec', 'min': 0.0, 'max': 18.0, 'bins': 18},
     }
 

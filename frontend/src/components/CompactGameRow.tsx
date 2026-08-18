@@ -20,7 +20,7 @@ export const CompactGameRow: React.FC<CompactGameRowProps> = ({ game }) => (
       <span className="font-bold text-sm text-text truncate">{game.name} <span className="text-secondary-text font-normal text-xs">({game.year_published})</span></span>
       <span className="text-xs text-secondary-text truncate flex items-center gap-1.5 mt-0.5">
         <span className="flex items-center gap-0.5 font-bold text-primary"><StarIcon className="w-3 h-3" /> {game.avg_rating?.toFixed(1) || '-'}</span>
-        {game.rank > 0 && <span className="flex items-center gap-0.5 font-bold text-yellow-600"><TrophyIcon className="w-3 h-3" /> {game.rank}</span>}
+        {game.rank !== undefined && game.rank > 0 && <span className="flex items-center gap-0.5 font-bold text-yellow-600"><TrophyIcon className="w-3 h-3" /> {game.rank}</span>}
         <span className="text-neutral/30 mx-0.5">|</span>
         {game.min_players && <span>{game.min_players}-{game.max_players}p</span>}
         {game.game_weight > 0 && <span>• {game.game_weight.toFixed(2)}/5</span>}

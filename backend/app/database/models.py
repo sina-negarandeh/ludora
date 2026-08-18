@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, JSON, Text, func
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, JSON, Text, func, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from pgvector.sqlalchemy import Vector
@@ -35,15 +35,39 @@ class GameTheme(Base):
     game_id = Column(Integer, ForeignKey("games.bgg_id", ondelete="CASCADE"), primary_key=True)
     theme_id = Column(Integer, ForeignKey("themes.id", ondelete="CASCADE"), primary_key=True, index=True)
 
+class GameSubdomain(Base):
+    __tablename__ = "game_subdomains"
+    game_id = Column(Integer, ForeignKey("games.bgg_id", ondelete="CASCADE"), primary_key=True)
+    subdomain_id = Column(Integer, ForeignKey("subdomains.id", ondelete="CASCADE"), primary_key=True, index=True)
+
+class GameSubfamily(Base):
+    __tablename__ = "game_subfamilies"
+    game_id = Column(Integer, ForeignKey("games.bgg_id", ondelete="CASCADE"), primary_key=True)
+    subfamily_id = Column(Integer, ForeignKey("subfamilies.id", ondelete="CASCADE"), primary_key=True, index=True)
+
 # --- Entity Tables ---
 
 class Category(Base):
+    """BGG's real Category field (boardgamecategory) — e.g. Adventure,
+    Economic, Card Game. Not the old "categories" concept; see Subdomain.
+    """
     __tablename__ = "categories"
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, unique=True, index=True, nullable=False)
 
 class Theme(Base):
+    """BGG Family's "Theme:" group only (e.g. "Theme: Cthulhu Mythos") —
+    distinct from Category. See docs/data/README.md.
+    """
     __tablename__ = "themes"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, unique=True, index=True, nullable=False)
+
+class Subdomain(Base):
+    """BGG's rank/leaderboard type (Thematic/Strategy/War/Family/CGS/
+    Abstract/Party/Childrens) — this used to be mislabeled "Category".
+    """
+    __tablename__ = "subdomains"
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, unique=True, index=True, nullable=False)
 
@@ -51,6 +75,29 @@ class Mechanic(Base):
     __tablename__ = "mechanics"
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, unique=True, index=True, nullable=False)
+
+class Family(Base):
+    """A BGG Family namespace/group (e.g. "Animals", "Mechanism", "Theme",
+    "Crowdfunding") — the full boardgamefamily field, all 72 groups. See
+    Subfamily for the specific values within a group, and docs/data/README.md.
+    """
+    __tablename__ = "families"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, unique=True, index=True, nullable=False)
+
+class Subfamily(Base):
+    """A specific BGG Family value within a group (e.g. "Bears" within
+    "Animals"). Includes the Theme: group, which is also separately
+    extracted into the themes table today — consolidating the two is a
+    later decision.
+    """
+    __tablename__ = "subfamilies"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    family_id = Column(Integer, ForeignKey("families.id", ondelete="CASCADE"), nullable=False, index=True)
+    value = Column(String, nullable=False)
+    name = Column(String, unique=True, index=True, nullable=False)  # "{family.name}: {value}"
+
+    family = relationship("Family")
 
 class Designer(Base):
     __tablename__ = "designers"
@@ -92,21 +139,78 @@ class Game(Base):
     wanting_count = Column(Integer, nullable=True)
     wishing_count = Column(Integer, nullable=True)
     rating_distribution = Column(JSON, nullable=True)
-    category_ranks = Column(JSON, nullable=True)
+    subdomain_ranks = Column(JSON, nullable=True)
 
-    # Search and Vector Columns
-    embedding = Column(Vector(384))
-    embedding_model = Column(String)
-    embedding_updated_at = Column(DateTime)
+    # Fields computed by build_master_dataset.py that previously never
+    # reached the schema — see docs/architecture/data-pipeline.md.
+    min_playtime = Column(Integer, nullable=True)
+    max_playtime = Column(Integer, nullable=True)
+    bayes_avg_rating = Column(Float, nullable=True)
+    stddev_rating = Column(Float, nullable=True)
+    num_weight_votes = Column(Integer, nullable=True)
+    thumbnail_url = Column(String, nullable=True)
+    kickstarted = Column(Boolean, nullable=True)
+    is_reimplementation = Column(Boolean, nullable=True)
+
+    # jvanelteren poll data (Best/Recommended/Not Recommended per player
+    # count, age votes, language-dependence votes) — replaces the flat,
+    # unused Threnjen best_players/good_players/com_age_rec/language_ease.
+    suggested_num_players = Column(JSON, nullable=True)
+    suggested_playerage = Column(JSON, nullable=True)
+    suggested_language_dependence = Column(JSON, nullable=True)
+
+    # Search Column — semantic vectors live in GameEmbedding, not here (see below).
     search_vector = Column(TSVECTOR)
 
     # Relationships (Using selectin to prevent N+1 query performance issues)
     categories = relationship("Category", secondary="game_categories", lazy="selectin")
     themes = relationship("Theme", secondary="game_themes", lazy="selectin")
+    subdomains = relationship("Subdomain", secondary="game_subdomains", lazy="selectin")
     mechanics = relationship("Mechanic", secondary="game_mechanics", lazy="selectin")
+    families = relationship("Subfamily", secondary="game_subfamilies", lazy="selectin")
     designers = relationship("Designer", secondary="game_designers", lazy="selectin")
     publishers = relationship("Publisher", secondary="game_publishers", lazy="selectin")
     artists = relationship("Artist", secondary="game_artists", lazy="selectin")
+
+class GameEmbedding(Base):
+    """One row per (game, embedding model) — not a 1:1 column on Game, since
+    switching or comparing embedding models means having more than one
+    model's vectors present at once. `embedding` has no fixed dimension at
+    the column level (different models produce different dims); every query
+    filters to a single `model` before computing distance, so vectors of
+    different dimensions never get compared against each other.
+    """
+    __tablename__ = "game_embeddings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    game_id = Column(Integer, ForeignKey("games.bgg_id", ondelete="CASCADE"), nullable=False, index=True)
+    model = Column(String, nullable=False, index=True)
+    dimension = Column(Integer, nullable=False)
+    embedding = Column(Vector(), nullable=False)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+    game = relationship("Game")
+
+    __table_args__ = (
+        UniqueConstraint("game_id", "model", name="uq_game_embeddings_game_id_model"),
+    )
+
+class GameRelation(Base):
+    """boardgameexpansion / boardgameimplementation / boardgameintegration
+    from jvanelteren. Source data links by name, not BGGId — related_game_id
+    is null wherever related_name didn't resolve to an exact match. See
+    docs/data/README.md and backend/scripts/build_master_dataset.py.
+    """
+    __tablename__ = "game_relations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    game_id = Column(Integer, ForeignKey("games.bgg_id", ondelete="CASCADE"), index=True, nullable=False)
+    related_name = Column(String, nullable=False)
+    related_game_id = Column(Integer, ForeignKey("games.bgg_id", ondelete="SET NULL"), index=True, nullable=True)
+    relation_type = Column(String, nullable=False)  # 'expansion' | 'implementation' | 'integration'
+
+    game = relationship("Game", foreign_keys=[game_id])
+    related_game = relationship("Game", foreign_keys=[related_game_id])
 
 class GameRecommendation(Base):
     __tablename__ = "game_recommendations"
@@ -180,8 +284,8 @@ class Review(Base):
     rating = Column(Float)
     comment = Column(Text)
     language = Column(String(10), index=True)
-    created_at = Column(DateTime, nullable=True)
-    
+    language_confidence = Column(Float, nullable=True)
+
     user = relationship("User", backref="reviews", lazy="selectin")
     game = relationship("Game", backref="reviews")
 

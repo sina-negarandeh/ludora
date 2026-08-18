@@ -6,6 +6,21 @@ const apiClient = axios.create({
   baseURL: API_URL,
 });
 
+export interface PlayerCountPollResult {
+  '@value': string;
+  '@numvotes': string;
+}
+
+export interface PlayerCountPoll {
+  '@numplayers': string;
+  result: PlayerCountPollResult[];
+}
+
+export interface AgePollResult {
+  '@value': string;
+  '@numvotes': string;
+}
+
 export interface Game {
   bgg_id: number;
   name: string;
@@ -16,14 +31,20 @@ export interface Game {
   min_players: number;
   max_players: number;
   mfg_playtime: number;
+  min_playtime?: number;
+  max_playtime?: number;
   min_age: number;
   image_path?: string;
   rank?: number;
   num_ratings?: number;
   rating_distribution?: number[];
-  category_ranks?: Record<string, number>;
+  subdomain_ranks?: Record<string, number>;
+  suggested_num_players?: PlayerCountPoll[];
+  suggested_playerage?: AgePollResult[];
+  subdomains: string[];
   categories: string[];
   themes: string[];
+  families: string[];
   mechanics: string[];
   designers: string[];
   publishers: string[];
@@ -36,7 +57,6 @@ export interface Review {
   user: string;
   rating?: number;
   comment?: string;
-  created_at?: string;
 }
 
 export interface PaginatedReviews {
@@ -53,14 +73,18 @@ export interface PaginatedGames {
 
 export interface GameQuery {
   query?: string;
+  subdomains?: string[];
   categories?: string[];
   themes?: string[];
+  families?: string[];
   mechanics?: string[];
   exact_players?: number;
   min_players?: number;
   max_players?: number;
   min_weight?: number;
   max_weight?: number;
+  min_playtime?: number;
+  max_playtime?: number;
   sort_by?: string;
   order?: string;
   skip?: number;
@@ -103,6 +127,17 @@ export const fetchCategories = async (): Promise<string[]> => {
   return data;
 };
 
+export interface SubdomainMetadata {
+  id: number;
+  name: string;
+  game_count: number;
+}
+
+export const fetchSubdomains = async (): Promise<SubdomainMetadata[]> => {
+  const { data } = await apiClient.get<SubdomainMetadata[]>('/api/subdomains');
+  return data;
+};
+
 export interface ThemeMetadata {
   id: number;
   name: string;
@@ -111,6 +146,23 @@ export interface ThemeMetadata {
 
 export const fetchThemes = async (): Promise<ThemeMetadata[]> => {
   const { data } = await apiClient.get<ThemeMetadata[]>('/api/themes');
+  return data;
+};
+
+export interface SubfamilyMetadata {
+  id: number;
+  value: string;
+  name: string;
+  game_count: number;
+}
+
+export interface FamilyGroupMetadata {
+  group: string;
+  values: SubfamilyMetadata[];
+}
+
+export const fetchFamilies = async (): Promise<FamilyGroupMetadata[]> => {
+  const { data } = await apiClient.get<FamilyGroupMetadata[]>('/api/families');
   return data;
 };
 
@@ -133,14 +185,18 @@ export interface SearchQueryPayload {
   q: string;
   mode: 'lexical' | 'semantic' | 'hybrid';
   filters?: {
+    subdomains?: string[];
     categories?: string[];
     themes?: string[];
+    families?: string[];
     mechanics?: string[];
     exact_players?: number;
     min_players?: number;
     max_players?: number;
     min_weight?: number;
     max_weight?: number;
+    min_playtime?: number;
+    max_playtime?: number;
   };
 }
 

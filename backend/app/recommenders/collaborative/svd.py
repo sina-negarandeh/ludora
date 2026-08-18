@@ -7,9 +7,10 @@ from sklearn.decomposition import TruncatedSVD
 from sklearn.metrics.pairwise import cosine_similarity
 from typing import List, Dict, Any
 from app.recommenders.base import BaseRecommender
+from app.core.ml_config import RANDOM_SEED, RecommenderConfig
 
 class SVDRecommender(BaseRecommender):
-    def __init__(self, n_factors: int = 50):
+    def __init__(self, n_factors: int = RecommenderConfig.CF_SVD_N_FACTORS):
         self.n_factors = n_factors
         self.item_embeddings = None
         self.item_idx_to_id = {}
@@ -38,7 +39,7 @@ class SVDRecommender(BaseRecommender):
 
         # Perform Truncated SVD on the Item-User matrix (n_items, n_users)
         # This will give us item embeddings directly
-        svd = TruncatedSVD(n_components=self.n_factors, random_state=42)
+        svd = TruncatedSVD(n_components=self.n_factors, random_state=RANDOM_SEED)
         self.item_embeddings = svd.fit_transform(ui_matrix.T)
 
     def recommend(self, item_id: int, limit: int = 10) -> List[Dict[str, Any]]:

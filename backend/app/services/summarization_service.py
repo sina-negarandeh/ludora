@@ -1,28 +1,36 @@
-import os
+import hashlib
 import json
 import random
-from typing import List, Dict, Any, Optional
+import time
+from typing import List, Any, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from openai import OpenAI
 from collections import defaultdict
 
+from app.core.config import settings
+from app.core.ml_config import RANDOM_SEED, SummarizationConfig
 from app.database.models import Game, ReviewAspect, GameAspectAggregate, GameSummary
 from app.schemas.summarization import AspectMiniSummary, FinalGameSummary
 
 # Constants
-MIN_REVIEWS_FOR_ABSA = 15
-MIN_ASPECT_MENTIONS = 5
-TOP_K_ASPECTS = 5
-MAX_REVIEWS_PER_ASPECT = 100
+MIN_REVIEWS_FOR_ABSA = SummarizationConfig.MIN_REVIEWS_FOR_ABSA
+MIN_ASPECT_MENTIONS = SummarizationConfig.MIN_ASPECT_MENTIONS
+TOP_K_ASPECTS = SummarizationConfig.TOP_K_ASPECTS
+MAX_REVIEWS_PER_ASPECT = SummarizationConfig.MAX_REVIEWS_PER_ASPECT
 
 class SummarizationService:
     def __init__(self, db: Session):
         self.db = db
-        base_url = os.environ.get("OPENAI_BASE_URL", "http://localhost:8080/v1")
-        api_key = os.environ.get("OPENAI_API_KEY", "not-needed-for-local")
-        self.client = OpenAI(base_url=base_url, api_key=api_key)
-        self.model = os.environ.get("LLM_MODEL_NAME", "Qwen/Qwen3-30B-A3B-MLX-4bit")
+        self.client = OpenAI(base_url=settings.OPENAI_BASE_URL, api_key=settings.OPENAI_API_KEY)
+        self.model = settings.LLM_MODEL_NAME
+        # Seeded so the same aspect's evidence sample (and thus the same LLM
+        # input) is reproducible across offline generate_summaries.py runs.
+        self._rng = random.Random(RANDOM_SEED)
+        # Per-call (prompt_hash, latency_seconds) log — an LLM-prompted feature's
+        # "training" is really its prompt, so this is what generate_summaries.py
+        # logs to MLflow instead of conventional model hyperparameters.
+        self.llm_calls: List[dict] = []
 
     def _call_llm_json(self, system_prompt: str, user_prompt: str, schema_class) -> Any:
         schema_json = schema_class.model_json_schema()
@@ -31,6 +39,8 @@ class SummarizationService:
 Output ONLY valid JSON matching this schema. No markdown wrapping.
 {json.dumps(schema_json, indent=2)}
 """
+        prompt_hash = hashlib.sha256(full_system_prompt.encode()).hexdigest()[:12]
+        start = time.time()
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
@@ -38,10 +48,16 @@ Output ONLY valid JSON matching this schema. No markdown wrapping.
                 {"role": "user", "content": user_prompt}
             ],
             response_format={"type": "json_object"},
-            temperature=0.0,
-            max_tokens=2048
+            temperature=SummarizationConfig.TEMPERATURE,
+            max_tokens=SummarizationConfig.MAX_TOKENS
         )
-        
+        latency_seconds = time.time() - start
+        self.llm_calls.append({
+            "schema": schema_class.__name__,
+            "prompt_hash": prompt_hash,
+            "latency_seconds": round(latency_seconds, 3),
+        })
+
         raw_content = response.choices[0].message.content or "{}"
         raw_content = raw_content.strip()
         if raw_content.startswith("```json"):
@@ -72,8 +88,8 @@ Output ONLY valid JSON matching this schema. No markdown wrapping.
         for sentiment, group_reviews in sentiment_groups.items():
             proportion = len(group_reviews) / len(reviews)
             sample_size = max(1, int(MAX_REVIEWS_PER_ASPECT * proportion))
-            # Shuffle safely for sampling
-            random.shuffle(group_reviews)
+            # Shuffle safely for sampling (seeded — see __init__)
+            self._rng.shuffle(group_reviews)
             sampled.extend(group_reviews[:sample_size])
             
         # Ensure we don't exceed MAX exactly due to rounding

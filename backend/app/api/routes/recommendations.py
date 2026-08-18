@@ -1,16 +1,15 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from app.database.session import get_db
-from app.database.models import GameRecommendation, Game
 from app.schemas.game import GameResponse
-from typing import List, Optional
+from typing import List
 from pydantic import BaseModel
 
 from app.services.recommendation_service import RecommendationService
 
 router = APIRouter(tags=["recommendations"])
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 class RecommendationItemSchema(BaseModel):
     game: GameResponse = Field(..., description="The recommended game.")

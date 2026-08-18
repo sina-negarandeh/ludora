@@ -18,23 +18,30 @@ services:
       timeout: 5s
       retries: 5
 
-  backend:
-    build:
-      context: ./backend
-    container_name: ludora_backend
+  # No `backend` service: the backend needs to run natively on the host, not
+  # in this Docker Compose stack — as of the Qwen3-Embedding/MLX search
+  # migration, SearchService imports `mlx-embeddings`, and MLX only runs on
+  # macOS with Apple Silicon (it's built on Metal/Accelerate). This
+  # container used a `python:3.12-slim` (Linux) base image, which cannot
+  # install or run mlx at all — no rebuild fixes this, it's a platform
+  # constraint, not a missing dependency. Run the backend with
+  # `cd backend && uv run uvicorn app.main:app --reload` instead — see
+  # docs/setup/README.md.
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: ludora_pgadmin
     environment:
-      - DATABASE_URL=postgresql+psycopg://ludora:ludorapassword@db:5432/ludoradb
-      - OPENAI_BASE_URL=http://host.docker.internal:8080/v1
+      - PGADMIN_DEFAULT_EMAIL=admin@ludora.dev
+      - PGADMIN_DEFAULT_PASSWORD=admin
+      - PGADMIN_CONFIG_SERVER_MODE=False
     ports:
-      - "8000:8000"
+      - "5050:80"
     volumes:
-      - ./backend:/app
-      - ./data:/data
-      - ./scripts:/scripts
+      - pgadmin_data:/var/lib/pgadmin
     depends_on:
       db:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   frontend:
     build:
@@ -45,11 +52,10 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    depends_on:
-      - backend
     environment:
       - VITE_API_URL=http://localhost:8000
     command: npm run dev -- --host 0.0.0.0
 
 volumes:
   postgres_data:
+  pgadmin_data:

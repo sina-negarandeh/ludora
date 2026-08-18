@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from typing import Optional, List, Dict
+from typing import Optional
 from app.database.models import Review
 
 class ReviewService:
@@ -29,20 +29,18 @@ class ReviewService:
         total = query.count()
         
         reviews = query.order_by(
-            Review.comment.is_(None), 
-            Review.created_at.desc().nullslast(), 
-            Review.rating.desc().nullslast(), 
+            Review.comment.is_(None),
+            Review.rating.desc().nullslast(),
             Review.id.desc()
         ).offset(skip).limit(page_size).all()
-            
+
         items = []
         for r in reviews:
             items.append({
                 "id": r.id,
                 "user": r.user.external_user_id if r.user else "Anonymous",
                 "rating": r.rating,
-                "comment": r.comment,
-                "created_at": r.created_at
+                "comment": r.comment
             })
             
         return total, items

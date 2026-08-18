@@ -1,23 +1,22 @@
-import os
 import json
 from openai import OpenAI
+from app.core.config import settings
+from app.core.ml_config import AssistantConfig
 from app.schemas.assistant import ParsedIntent
 
 class AssistantService:
     def __init__(self):
-        # Default to local MLX / OpenAI compatible server if OPENAI_BASE_URL is set, 
-        # otherwise fallback to typical local default or real OpenAI.
-        base_url = os.environ.get("OPENAI_BASE_URL", "http://localhost:8080/v1")
-        api_key = os.environ.get("OPENAI_API_KEY", "not-needed-for-local")
-        
-        self.client = OpenAI(base_url=base_url, api_key=api_key)
-        # Fallback model name if none provided. MLX server expects the exact HuggingFace repo ID.
-        self.model = os.environ.get("LLM_MODEL_NAME", "Qwen/Qwen3-30B-A3B-MLX-4bit")
+        # Local MLX / OpenAI-compatible server, or real OpenAI if configured.
+        self.client = OpenAI(base_url=settings.OPENAI_BASE_URL, api_key=settings.OPENAI_API_KEY)
+        # MLX server expects the exact HuggingFace repo ID.
+        self.model = settings.LLM_MODEL_NAME
 
-    def parse_query(self, user_message: str) -> ParsedIntent:
+    def _build_system_prompt(self) -> str:
+        """The full, static system prompt — independent of any user message,
+        so callers (e.g. an eval harness computing a prompt-version hash)
+        can reconstruct exactly what was sent without duplicating it."""
         schema_json = ParsedIntent.model_json_schema()
-        
-        system_prompt = f"""You are the Ludora Assistant, an expert in board games.
+        return f"""You are the Ludora Assistant, an expert in board games.
 Your job is to parse the user's natural language request into a strictly structured JSON intent object.
 DO NOT answer the user's question. Just output the JSON.
 
@@ -41,6 +40,9 @@ Important Rules:
 7. Output ONLY valid JSON matching the schema. No markdown wrapping.
 """
 
+    def parse_query(self, user_message: str) -> ParsedIntent:
+        system_prompt = self._build_system_prompt()
+
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
@@ -48,8 +50,8 @@ Important Rules:
                 {"role": "user", "content": user_message}
             ],
             response_format={"type": "json_object"},
-            temperature=0.0,
-            max_tokens=4096
+            temperature=AssistantConfig.TEMPERATURE,
+            max_tokens=AssistantConfig.MAX_TOKENS
         )
         
         raw_content = response.choices[0].message.content

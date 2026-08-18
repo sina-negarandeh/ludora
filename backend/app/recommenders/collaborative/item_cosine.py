@@ -4,9 +4,10 @@ from scipy.sparse import csr_matrix
 from sklearn.metrics.pairwise import cosine_similarity
 from typing import List, Dict, Any
 from app.recommenders.base import BaseRecommender
+from app.core.ml_config import RecommenderConfig
 
 class ItemCosineRecommender(BaseRecommender):
-    def __init__(self, min_shared_users: int = 50):
+    def __init__(self, min_shared_users: int = RecommenderConfig.CF_ITEM_COSINE_MIN_SHARED_USERS):
         self.min_shared_users = min_shared_users
         self.item_sim_matrix = None
         self.item_idx_to_id = {}
