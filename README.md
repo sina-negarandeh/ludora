@@ -80,6 +80,8 @@ This brings up an **empty** database; nothing here seeds it. To populate the cat
 
 Two Kaggle datasets, merged on BGG ID: [threnjen/board-games-database-from-boardgamegeek](https://www.kaggle.com/datasets/threnjen/board-games-database-from-boardgamegeek/) for game metadata, and [jvanelteren/boardgamegeek-reviews](https://www.kaggle.com/datasets/jvanelteren/boardgamegeek-reviews/) for ratings and reviews. Not every file in either dataset ends up used by the pipeline; see [docs/data/README.md](docs/data/README.md) for exactly which CSVs feed which tables.
 
+All of it traces back to BoardGameGeek and its community: two decades of ratings, reviews, and game data contributed by people who love the hobby. This project is a personal proof of concept built to learn and to build the thing I wanted to build, not a commentary on BGG or a competitor to it, and it's not used for any commercial purpose. The data belongs to BoardGameGeek and the people who contributed it, not to this project.
+
 ## Documentation map
 
 | Doc | What it answers |

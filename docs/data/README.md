@@ -11,6 +11,8 @@ Ludora is built from two Kaggle datasets, merged into one master dataset.
 
 Both directories are gitignored in full; nothing under `data/` is tracked in git. Exact license terms and dataset version dates aren't recorded beyond the Kaggle pages linked above; link out to them rather than asserting a license elsewhere.
 
+Every game, rating, and review underneath this project originates with BoardGameGeek and the people who built its community over two decades. This project is a personal proof of concept, not a commentary on BGG or a competitor to it, and it isn't used for any commercial purpose. The data itself belongs to BoardGameGeek and its contributors; nothing here claims otherwise.
+
 ### What each file is used for
 
 | File | Role |
