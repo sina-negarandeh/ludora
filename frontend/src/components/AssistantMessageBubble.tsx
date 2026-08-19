@@ -1,5 +1,7 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import type { AssistantData, AspectAggregate } from '../api/assistant';
+import type { Game } from '../api/games';
 import { CompactGameRow } from './CompactGameRow';
 import { StarIcon, ExclamationTriangleIcon } from '@heroicons/react/24/solid';
 
@@ -63,6 +65,47 @@ const ReviewCard: React.FC<{ review: NonNullable<AssistantData['reviews']>[numbe
     {review.comment && (
       <p className="text-xs text-secondary-text leading-relaxed line-clamp-4">{review.comment}</p>
     )}
+  </div>
+);
+
+// Same "Official" fields the game detail page's stat cards show (not the
+// Community percentile/poll stats) -- one row per attribute, one column
+// per compared game.
+const COMPARISON_ROWS: { label: string; value: (g: Game) => string }[] = [
+  { label: 'Rating', value: (g) => (g.avg_rating != null ? g.avg_rating.toFixed(1) : '—') },
+  { label: 'Rank', value: (g) => (g.rank ? `#${g.rank}` : '—') },
+  { label: 'Complexity', value: (g) => (g.game_weight != null ? `${g.game_weight.toFixed(2)}/5` : '—') },
+  { label: 'Players', value: (g) => (g.min_players && g.max_players ? `${g.min_players}-${g.max_players}` : '—') },
+  { label: 'Playtime', value: (g) => (g.mfg_playtime ? `${g.mfg_playtime}m` : '—') },
+  { label: 'Min Age', value: (g) => (g.min_age ? `${g.min_age}+` : '—') },
+];
+
+const ComparisonTable: React.FC<{ games: Game[] }> = ({ games }) => (
+  <div className="overflow-x-auto rounded-xl border border-neutral/20 bg-white shadow-sm">
+    <table className="text-xs">
+      <thead>
+        <tr className="border-b border-neutral/20">
+          <th className="sticky left-0 bg-white px-3 py-2" />
+          {games.map((g) => (
+            <th key={g.bgg_id} className="px-3 py-2 text-left align-bottom min-w-[110px]">
+              <Link to={`/games/${g.bgg_id}`} className="font-bold text-text hover:text-primary line-clamp-2">
+                {g.name}
+              </Link>
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {COMPARISON_ROWS.map((row) => (
+          <tr key={row.label} className="border-b border-neutral/10 last:border-0">
+            <td className="sticky left-0 bg-white px-3 py-2 font-bold text-secondary-text whitespace-nowrap">{row.label}</td>
+            {games.map((g) => (
+              <td key={g.bgg_id} className="px-3 py-2 text-text">{row.value(g)}</td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   </div>
 );
 
@@ -148,6 +191,10 @@ export const AssistantMessageBubble: React.FC<AssistantMessageBubbleProps> = ({ 
             </div>
           )}
         </div>
+      )}
+
+      {responseType === 'comparison' && data?.games && data.games.length > 0 && (
+        <ComparisonTable games={data.games} />
       )}
 
       {responseType === 'reviews' && data?.reviews && (
