@@ -14,6 +14,11 @@ SearchMode = Literal["lexical", "semantic", "hybrid"]
 RecommendationFamily = Literal["popularity", "content", "collaborative", "hybrid"]
 SortDirection = Literal["asc", "desc"]
 SortField = Literal["rank", "rating", "year_published", "complexity", "name"]
+# Official (manufacturer-stated / BGG-computed single-value) facts about one
+# game -- deliberately not the "Community" percentile/poll stats shown
+# alongside these on the game detail page (e.g. suggested_num_players,
+# "better than X% of Strategy Games"), which have no single answer to state.
+GameFactEnum = Literal["rank", "rating", "complexity", "player_count", "age", "playtime"]
 
 class SortSpec(BaseModel):
     field: SortField
@@ -46,6 +51,8 @@ class ParsedIntent(BaseModel):
     
     game_name: Optional[str] = Field(default=None, description="A specific game name mentioned by the user (e.g. for get_game, recommend).")
 
+    requested_facts: Optional[List[GameFactEnum]] = Field(default=None, description="Only set when intent is 'get_game' AND the user asked about one or more specific official facts (e.g. 'how heavy is X', 'what rank is X') rather than general info. Leave unset for a general 'tell me about X' request -- it changes the response message from a full summary to a direct, pointed answer.")
+
     search_mode: Optional[SearchMode] = Field(default=None, description="The search mode to use if intent is search.")
     
     filters: Optional[GameFilters] = Field(default=None, description="Filters to apply to the query.")
@@ -58,6 +65,6 @@ class ParsedIntent(BaseModel):
 
 class AssistantResponse(BaseModel):
     message: str = Field(description="Deterministic natural language message for the user.")
-    type: str = Field(description="The UI presentation type: search_results, recommendations, clarification, game_detail, error")
+    type: str = Field(description="The UI presentation type: search_results, recommendations, clarification, game_detail, community_consensus, reviews, error")
     parsed_intent: ParsedIntent
     data: Optional[dict] = Field(default=None, description="The resulting data from the executed intent.")
