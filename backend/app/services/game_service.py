@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Tuple, List, Optional
-from app.database.models import Game, Category, Theme, Subdomain, Mechanic, Subfamily, Designer, Artist, Publisher
+from app.database.models import Game, Category, Theme, Subdomain, Mechanic, Subfamily, Designer, Artist, Publisher, GameSummary
 
 class GameService:
     def __init__(self, db: Session):
@@ -114,4 +114,20 @@ class GameService:
         return total, games
 
     def get_game(self, bgg_id: int) -> Optional[Game]:
-        return self.db.query(Game).filter(Game.bgg_id == bgg_id).first()
+        game = self.db.query(Game).filter(Game.bgg_id == bgg_id).first()
+        if game is None:
+            return None
+
+        # customer_summary has no real column/relationship on Game matching
+        # its name -- it's bolted on here as a plain attribute (picked up
+        # by GameResponse's from_attributes conversion via getattr) rather
+        # than mapped, since the LLM-generated summary lives in its own
+        # table (GameSummary), not on Game itself. Previously this lookup
+        # lived directly in the /api/games/{bgg_id} route handler, bypassing
+        # this service entirely -- moved here so every caller of
+        # get_game() (the route, the assistant orchestrator) gets it
+        # consistently instead of the route needing its own duplicate query.
+        summary_obj = self.db.query(GameSummary).filter(GameSummary.game_id == bgg_id).first()
+        game.customer_summary = summary_obj.summary if summary_obj else None
+
+        return game

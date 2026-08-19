@@ -68,12 +68,6 @@ def get_game(bgg_id: int, db: Session = Depends(get_db)):
     game = GameService(db).get_game(bgg_id)
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
-        
-    from app.database.models import GameSummary
-    summary_obj = db.query(GameSummary).filter(GameSummary.game_id == bgg_id).first()
-    if summary_obj:
-        game.customer_summary = summary_obj.summary
-        
     return game
 
 @router.get("/{bgg_id}/reviews", response_model=PaginatedReviews, summary="Get Game Reviews", description="Fetch paginated user reviews for a specific game. Includes breakdown statistics for languages and star ratings.")
