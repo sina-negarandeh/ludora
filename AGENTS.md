@@ -1,11 +1,11 @@
 # AGENTS.md
 
-Ludora is a board-game discovery web app — FastAPI + PostgreSQL/pgvector backend, React 19 + TypeScript frontend, offline Python ETL/ML pipeline — built on two merged Kaggle BoardGameGeek datasets, with hybrid search, a 9-model recommendation engine, aspect-based sentiment analysis, and a local-LLM assistant.
+Ludora is a board-game discovery web app: FastAPI + PostgreSQL/pgvector backend, React 19 + TypeScript frontend, offline Python ETL/ML pipeline, built on two merged Kaggle BoardGameGeek datasets, with hybrid search, a 9-model recommendation engine, aspect-based sentiment analysis, and a local-LLM assistant.
 
 This file covers what's true across the whole repo. Also read the nested file for whichever side you're touching:
 
-- [backend/AGENTS.md](backend/AGENTS.md) — FastAPI, SQLAlchemy, the ML pipeline, Python conventions
-- [frontend/AGENTS.md](frontend/AGENTS.md) — React, TypeScript, component conventions
+- [backend/AGENTS.md](backend/AGENTS.md): FastAPI, SQLAlchemy, the ML pipeline, Python conventions
+- [frontend/AGENTS.md](frontend/AGENTS.md): React, TypeScript, component conventions
 
 ## Orient yourself
 
@@ -26,9 +26,9 @@ Link to the relevant doc instead of re-explaining it here.
 ```
 backend/          FastAPI app (app/), evaluation (evaluation/)
 frontend/          React 19 + TypeScript + Vite
-data/raw/          Two Kaggle datasets, as downloaded — do not hand-edit
-data/processed/    Pipeline output (master_*.csv, model artifacts) — regenerable, do not hand-edit
-scripts/           All offline ETL/ML pipeline scripts, in one place — run via `uv run --project backend python scripts/<name>.py`
+data/raw/          Two Kaggle datasets, as downloaded; do not hand-edit
+data/processed/    Pipeline output (master_*.csv, model artifacts); regenerable, do not hand-edit
+scripts/           All offline ETL/ML pipeline scripts, in one place; run via `uv run --project backend python scripts/<name>.py`
 docs/              Documentation set (see table above)
 ```
 
@@ -38,22 +38,22 @@ docs/              Documentation set (see table above)
 docker compose up -d
 ```
 
-Brings up Postgres, the frontend, and pgAdmin — **not the backend**. The backend must run natively (`cd backend && uv run uvicorn app.main:app --reload`): `SearchService` uses `mlx-embeddings` for semantic search, and MLX only runs on macOS/Apple Silicon, so it can't be containerized on the Linux base image Docker would use.
+Brings up Postgres, the frontend, and pgAdmin, not the backend. The backend must run natively (`cd backend && uv run uvicorn app.main:app --reload`): `SearchService` uses `mlx-embeddings` for semantic search, and MLX only runs on macOS/Apple Silicon, so it can't be containerized on the Linux base image Docker would use.
 
-The database starts empty — nothing here seeds it. Populate it via the pipeline in `docs/setup/README.md` before expecting real data from any endpoint.
+The database starts empty; nothing here seeds it. Populate it via the pipeline in `docs/setup/README.md` before expecting real data from any endpoint.
 
 ## Known debt
 
-No CI and no automated test suite (backend or frontend). This is tracked debt, not steady state — full list and priority in `docs/roadmap.md`. Don't add to it; see the standards below for the bar on new work.
+No CI and no automated test suite (backend or frontend). This is tracked debt, not steady state; full list and priority in `docs/roadmap.md`. Don't add to it; see the standards below for the bar on new work.
 
 ## Standards for new work
 
-- Grep for a filename across the whole repo before adding a script — do not create a second file with a name that already exists elsewhere.
-- Don't claim a recommendation model id is served without checking `RecommendationService.get_recommendations()` against `docs/ml/recommenders.md` — each of the 9 ids routes to its own live query or its own precomputed `game_recommendations` rows.
-- New backend routes and new pipeline/recommender scripts need a way to verify they work — a request check, a rerunnable script, a before/after diff. See "Verify your work."
-- Match existing terminology exactly — `docs/data/README.md#glossary` (two source datasets, nine recommendation model ids, "Community Consensus").
-- If a change alters a capability's status or behavior, check `docs/maintenance/coverage-map.md` for every doc that claims something about it and update them together — don't fix the first doc you find and stop.
-- Don't extend the no-auth / open-CORS / hardcoded-local-credential pattern to new code, and don't change it without asking — auth and deploy hardening are a larger decision this file doesn't own.
+- Grep for a filename across the whole repo before adding a script. Do not create a second file with a name that already exists elsewhere.
+- Don't claim a recommendation model id is served without checking `RecommendationService.get_recommendations()` against `docs/ml/recommenders.md`; each of the 9 ids routes to its own live query or its own precomputed `game_recommendations` rows.
+- New backend routes and new pipeline/recommender scripts need a way to verify they work: a request check, a rerunnable script, a before/after diff. See "Verify your work."
+- Match existing terminology exactly: `docs/data/README.md#glossary` (two source datasets, nine recommendation model ids, "Community Consensus").
+- If a change alters a capability's status or behavior, check `docs/maintenance/coverage-map.md` for every doc that claims something about it and update them together. Don't fix the first doc you find and stop.
+- Don't extend the no-auth, open-CORS, hardcoded-local-credential pattern to new code, and don't change it without asking; auth and deploy hardening are a larger decision this file doesn't own.
 
 ## Verify your work
 
@@ -79,7 +79,6 @@ Examples: `feat(ml): precompute cf_als recommendations to game_recommendations`,
 
 - MUST NOT commit secrets or credential values, including the existing `DATABASE_URL` default in `backend/app/core/config.py`.
 - MUST NOT force-push or rewrite published git history.
-- MUST NOT edit an already-applied Alembic migration in `backend/alembic/versions/` — add a new one.
-- MUST NOT rewrite `docs/audit/phase-1-audit.md`'s findings — it's a historical record; append corrections.
-- SHOULD ask before deleting or regenerating anything under `data/raw/` or `data/processed/` — slow and expensive to rebuild.
+- MUST NOT edit an already-applied Alembic migration in `backend/alembic/versions/`; add a new one instead.
+- SHOULD ask before deleting or regenerating anything under `data/raw/` or `data/processed/`; slow and expensive to rebuild.
 - SHOULD ask before changing CORS, auth, or deployment configuration.
