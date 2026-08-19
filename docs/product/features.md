@@ -138,6 +138,10 @@ A 10-bar histogram of community ratings in 0.5-point increments (19 raw buckets 
 
 A paginated review list (4 per page) with a language filter (built dynamically from the response's own language breakdown) and a rating-bucket filter (positive ≥7, mixed 4-6.99, negative <4). `GameReviews` calls `GET /api/games/{bgg_id}/reviews` with `page, page_size, min_rating, max_rating, language`; filtering happens server-side, not in the browser. `keepPreviousData` plus a dimmed opacity during refetch keeps pagination from flickering.
 
+![Language filter open on Brass: Birmingham's reviews, showing the real per-language breakdown](../assets/images/game_detail_page.reviews.language_filter.brass_birmingham.png)
+
+![Rating-bucket filter open on Brass: Birmingham's reviews, showing positive/mixed/negative thresholds and shares](../assets/images/game_detail_page.reviews.rating_filter.brass_birmingham.png)
+
 The `language` field itself is ML-derived; see [Review language & quality filtering](#8-review-language--quality-filtering) below.
 
 **Evidence**: `backend/test_routes.py` smoke-checks the endpoint (no assertions).
