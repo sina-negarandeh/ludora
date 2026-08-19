@@ -12,6 +12,11 @@ from app.services.review_service import ReviewService
 from app.services.entity_resolver import EntityResolver, AmbiguousEntityError, EntityNotFoundError
 
 class AssistantOrchestrator:
+    # Cap on how many games a "compare" request will fetch/render -- past
+    # this many, a comparison table stops being readable in the narrow
+    # assistant drawer.
+    MAX_COMPARE_GAMES = 5
+
     def __init__(self, db: Session):
         self.db = db
         self.game_service = GameService(db)
@@ -38,6 +43,8 @@ class AssistantOrchestrator:
                 return self._handle_search(intent)
             elif intent.intent == "recommend":
                 return self._handle_recommend(intent)
+            elif intent.intent == "compare":
+                return self._handle_compare(intent)
             elif intent.intent == "get_game":
                 return self._handle_get_game(intent)
             elif intent.intent == "get_aspects":
@@ -237,6 +244,37 @@ class AssistantOrchestrator:
                 "source_game": GameResponse.model_validate(source_game).model_dump() if source_game else None,
                 "recommendations": [{"game": GameResponse.model_validate(r["game"]).model_dump(), "score": r["score"], "reason": r["reason"]} for r in recs]
             }
+        )
+
+    def _handle_compare(self, intent: ParsedIntent) -> AssistantResponse:
+        if not intent.game_names or len(intent.game_names) < 2:
+            intent.needs_clarification = True
+            intent.clarification_question = "Which games do you want to compare? Please name at least two."
+            return AssistantResponse(
+                message=intent.clarification_question,
+                type="clarification",
+                parsed_intent=intent,
+                data={}
+            )
+
+        names = intent.game_names[:self.MAX_COMPARE_GAMES]
+        bgg_ids = [self.resolver.resolve_game(name) for name in names]
+        games = [self.game_service.get_game(bgg_id) for bgg_id in bgg_ids]
+        games = [g for g in games if g is not None]
+
+        if len(games) < 2:
+            return AssistantResponse(
+                message="I could only find one of those games, so there's nothing to compare.",
+                type="error",
+                parsed_intent=intent,
+                data={"games": [GameResponse.model_validate(g).model_dump() for g in games]}
+            )
+
+        return AssistantResponse(
+            message=f"Here's a comparison of {len(games)} games.",
+            type="comparison",
+            parsed_intent=intent,
+            data={"games": [GameResponse.model_validate(g).model_dump() for g in games]}
         )
 
     def _handle_get_game(self, intent: ParsedIntent) -> AssistantResponse:

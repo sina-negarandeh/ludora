@@ -5,6 +5,7 @@ IntentEnum = Literal[
     "browse",
     "search",
     "recommend",
+    "compare",
     "get_game",
     "get_reviews",
     "get_aspects"
@@ -50,6 +51,7 @@ class ParsedIntent(BaseModel):
     query: Optional[str] = Field(default=None, description="The natural language query string, primarily used for 'search' intent.")
     
     game_name: Optional[str] = Field(default=None, description="A specific game name mentioned by the user (e.g. for get_game, recommend).")
+    game_names: Optional[List[str]] = Field(default=None, description="Two or more game names, ONLY for 'compare' -- e.g. 'compare Catan and Terraforming Mars' -> game_names=['Catan', 'Terraforming Mars'].")
 
     requested_facts: Optional[List[GameFactEnum]] = Field(default=None, description="Only set when intent is 'get_game' AND the user asked about one or more specific official facts (e.g. 'how heavy is X', 'what rank is X') rather than general info. Leave unset for a general 'tell me about X' request -- it changes the response message from a full summary to a direct, pointed answer.")
 
@@ -65,6 +67,6 @@ class ParsedIntent(BaseModel):
 
 class AssistantResponse(BaseModel):
     message: str = Field(description="Deterministic natural language message for the user.")
-    type: str = Field(description="The UI presentation type: search_results, recommendations, clarification, game_detail, community_consensus, reviews, error")
+    type: str = Field(description="The UI presentation type: search_results, recommendations, clarification, game_detail, community_consensus, reviews, comparison, error")
     parsed_intent: ParsedIntent
     data: Optional[dict] = Field(default=None, description="The resulting data from the executed intent.")

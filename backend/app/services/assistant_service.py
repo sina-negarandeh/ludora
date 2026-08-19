@@ -34,7 +34,7 @@ Here is the JSON Schema you MUST follow:
 {json.dumps(schema_json, indent=2)}
 
 Important Rules:
-1. "intent" MUST be one of the enums (browse, search, recommend, get_game, get_reviews, get_aspects).
+1. "intent" MUST be one of the enums (browse, search, recommend, compare, get_game, get_reviews, get_aspects).
 2. Understand the strict differences between these tag types -- do not mix them up:
    - Categories: BGG's broad subject/format classification, e.g. Card Game, Wargame, Fantasy, Economic, Trains.
    - Subdomains: BGG's 8 coarse rank/leaderboard types. Valid Subdomains are EXACTLY: Abstract, CGS, Childrens, Family, Party, Strategy, Thematic, War.
@@ -58,7 +58,12 @@ Important Rules:
    - "games like Wingspan" -> recommend, game_name="Wingspan" (NOT browse -- "like X" naming one game is always recommend)
    - "suggest something similar to Gloomhaven" -> recommend, game_name="Gloomhaven"
 6. For "recommend", "recommendation_family" is one of popularity, content, collaborative, or hybrid -- default to hybrid if the user doesn't specify one.
-7. If "intent" is "get_game" and the user is asking about one or more SPECIFIC official facts rather than general info, set "requested_facts" to the relevant subset of [rank, rating, complexity, player_count, age, playtime]. Examples:
+7. "compare" needs "game_names" (a list, NOT "game_name") with the actual titles -- ALWAYS extract two or more real game names, never leave it empty when names are present. Examples:
+   - "compare Catan and Terraforming Mars" -> compare, game_names=["Catan", "Terraforming Mars"]
+   - "how does Brass Birmingham compare to Brass Lancashire" -> compare, game_names=["Brass Birmingham", "Brass Lancashire"]
+   - "Wingspan vs Everdell vs Photosynthesis" -> compare, game_names=["Wingspan", "Everdell", "Photosynthesis"]
+   If only one game is named, that's not a comparison -- use "get_game" instead and set "needs_clarification" only if the request is genuinely ambiguous about which second game to compare against.
+8. If "intent" is "get_game" and the user is asking about one or more SPECIFIC official facts rather than general info, set "requested_facts" to the relevant subset of [rank, rating, complexity, player_count, age, playtime]. Examples:
    - "what rank is Catan" -> get_game, game_name="Catan", requested_facts=["rank"]
    - "what's the rating of Brass Birmingham" -> get_game, game_name="Brass Birmingham", requested_facts=["rating"]
    - "how heavy is Brass Birmingham" -> get_game, game_name="Brass Birmingham", requested_facts=["complexity"]
@@ -66,22 +71,22 @@ Important Rules:
    - "how long does Gloomhaven take to play" -> get_game, game_name="Gloomhaven", requested_facts=["playtime"]
    - "how many people can play Terraforming Mars, and how long does it take" -> get_game, game_name="Terraforming Mars", requested_facts=["player_count", "playtime"]
    Leave "requested_facts" unset for a general request like "tell me about Catan".
-8. "get_game" and "requested_facts" (rule 7) are ONLY for a request that already NAMES a specific game. A request that asks to FIND or IDENTIFY a game by some criterion, with no game named yet, is "browse" instead -- use "sort" (and "limit" if only the single best match is wanted). Never invent a "game_name" out of a criterion word like "rank" or "heaviest". Examples:
+9. "get_game" and "requested_facts" (rule 8) are ONLY for a request that already NAMES a specific game. A request that asks to FIND or IDENTIFY a game by some criterion, with no game named yet, is "browse" instead -- use "sort" (and "limit" if only the single best match is wanted). Never invent a "game_name" out of a criterion word like "rank" or "heaviest". Examples:
    - "what game is ranked 1st overall" -> browse, sort={{"field":"rank", "direction":"asc"}}, limit=1 (NOT get_game, NOT game_name="rank")
    - "what's the heaviest game" -> browse, sort={{"field":"complexity", "direction":"desc"}}, limit=1
    - "what's the highest rated strategy game" -> browse, subdomains=["Strategy"], sort={{"field":"rating", "direction":"desc"}}, limit=1
-9. "browse" filters (categories/subdomains/themes/mechanics/families) ONLY accept values from the real, fixed BGG taxonomy -- never invent a value for a franchise, character, brand, or fictional universe (e.g. "Marvel", "Spiderman", "Comic Book", "Star Wars"). These are NOT real category/theme values and filtering on them will fail. If the request is about a franchise/character/brand or any other concept that doesn't map onto the taxonomy in rule 2, use "search" instead with that text as "query" -- free-text search over game names and descriptions can find these, filters can't. Examples:
+10. "browse" filters (categories/subdomains/themes/mechanics/families) ONLY accept values from the real, fixed BGG taxonomy -- never invent a value for a franchise, character, brand, or fictional universe (e.g. "Marvel", "Spiderman", "Comic Book", "Star Wars"). These are NOT real category/theme values and filtering on them will fail. If the request is about a franchise/character/brand or any other concept that doesn't map onto the taxonomy in rule 2, use "search" instead with that text as "query" -- free-text search over game names and descriptions can find these, filters can't. Examples:
    - "marvel games with spiderman" -> search, query="marvel spiderman" (NOT browse with themes=["Marvel","Spiderman"] -- these aren't real theme values)
    - "star wars themed games" -> search, query="star wars"
    - "games about pirates" -> search, query="pirates" (unless "Pirates" is a real category/theme you're confident exists)
-10. "get_aspects" and "get_reviews" both need "game_name" and answer different questions -- do not confuse them:
+11. "get_aspects" and "get_reviews" both need "game_name" and answer different questions -- do not confuse them:
    - "get_aspects": a general opinion/sentiment question -- "what do people think of X", "is the theme good", "users' thoughts on X", "how are the reviews". Returns a community consensus summary plus a per-aspect sentiment breakdown, NOT raw review text.
    - "get_reviews": the user explicitly wants to read actual written reviews -- "show me some reviews of X", "what did people write about X".
    Examples:
    - "what do people think of Wingspan" -> get_aspects, game_name="Wingspan"
    - "is the theme in Ark Nova any good" -> get_aspects, game_name="Ark Nova"
    - "show me some reviews of Gloomhaven" -> get_reviews, game_name="Gloomhaven"
-11. Output ONLY valid JSON matching the schema. No markdown wrapping.
+12. Output ONLY valid JSON matching the schema. No markdown wrapping.
 """
 
     def parse_query(self, user_message: str) -> ParsedIntent:
