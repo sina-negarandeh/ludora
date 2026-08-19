@@ -51,6 +51,8 @@ class AssistantOrchestrator:
                 return self._handle_get_aspects(intent)
             elif intent.intent == "get_reviews":
                 return self._handle_get_reviews(intent)
+            elif intent.intent == "unsupported":
+                return self._handle_unsupported(intent)
             else:
                 return AssistantResponse(
                     message="I'm not sure how to handle that intent.",
@@ -450,4 +452,24 @@ class AssistantOrchestrator:
             type="reviews",
             parsed_intent=intent,
             data={"game": GameResponse.model_validate(game).model_dump(), "total": total, "reviews": reviews}
+        )
+
+    def _handle_unsupported(self, intent: ParsedIntent) -> AssistantResponse:
+        """A request with nothing to do with board games (small talk,
+        general knowledge, questions about the assistant itself). The
+        message is fixed here rather than left to the LLM's phrasing --
+        the small model has shown it can't be trusted to word a graceful
+        decline consistently (e.g. answering "tell me a joke" with a
+        clarifying question about what *type* of joke instead of declining).
+        """
+        return AssistantResponse(
+            message=(
+                "I can only help with board games -- browsing and searching the catalog, "
+                "recommendations, comparing games, game details (rank, rating, complexity, "
+                "players, age, playtime), and what reviewers think. What would you like to "
+                "know about a game?"
+            ),
+            type="unsupported",
+            parsed_intent=intent,
+            data={}
         )

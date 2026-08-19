@@ -8,7 +8,8 @@ IntentEnum = Literal[
     "compare",
     "get_game",
     "get_reviews",
-    "get_aspects"
+    "get_aspects",
+    "unsupported"
 ]
 
 SearchMode = Literal["lexical", "semantic", "hybrid"]
@@ -67,6 +68,6 @@ class ParsedIntent(BaseModel):
 
 class AssistantResponse(BaseModel):
     message: str = Field(description="Deterministic natural language message for the user.")
-    type: str = Field(description="The UI presentation type: search_results, recommendations, clarification, game_detail, community_consensus, reviews, comparison, error")
+    type: str = Field(description="The UI presentation type: search_results, recommendations, clarification, game_detail, community_consensus, reviews, comparison, unsupported, error")
     parsed_intent: ParsedIntent
     data: Optional[dict] = Field(default=None, description="The resulting data from the executed intent.")

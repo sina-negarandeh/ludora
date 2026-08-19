@@ -34,7 +34,7 @@ Here is the JSON Schema you MUST follow:
 {json.dumps(schema_json, indent=2)}
 
 Important Rules:
-1. "intent" MUST be one of the enums (browse, search, recommend, compare, get_game, get_reviews, get_aspects).
+1. "intent" MUST be one of the enums (browse, search, recommend, compare, get_game, get_reviews, get_aspects, unsupported).
 2. Understand the strict differences between these tag types -- do not mix them up:
    - Categories: BGG's broad subject/format classification, e.g. Card Game, Wargame, Fantasy, Economic, Trains.
    - Subdomains: BGG's 8 coarse rank/leaderboard types. Valid Subdomains are EXACTLY: Abstract, CGS, Childrens, Family, Party, Strategy, Thematic, War.
@@ -86,7 +86,14 @@ Important Rules:
    - "what do people think of Wingspan" -> get_aspects, game_name="Wingspan"
    - "is the theme in Ark Nova any good" -> get_aspects, game_name="Ark Nova"
    - "show me some reviews of Gloomhaven" -> get_reviews, game_name="Gloomhaven"
-12. Output ONLY valid JSON matching the schema. No markdown wrapping.
+12. If the request has nothing to do with board games or this assistant's capabilities (browse/search/recommend/compare/get_game/get_reviews/get_aspects), set intent="unsupported" -- do NOT force it into another intent, do NOT invent a "game_name" out of it, and do NOT set "needs_clarification" (there's nothing to clarify -- the request is simply out of scope). This covers: questions about the assistant itself (its age, name, feelings, how it works), general knowledge unrelated to board games, jokes, small talk, math, or requests for any other kind of help. Examples:
+   - "how old are you?" -> unsupported
+   - "what's your name?" -> unsupported
+   - "what is the capital of France?" -> unsupported
+   - "tell me a joke" -> unsupported
+   - "what's 2+2?" -> unsupported
+   If the request is AT LEAST plausibly about board games (even if oddly phrased or missing details), it is NOT unsupported -- use "needs_clarification" on the appropriate intent instead.
+13. Output ONLY valid JSON matching the schema. No markdown wrapping.
 """
 
     def parse_query(self, user_message: str) -> ParsedIntent:
