@@ -54,9 +54,9 @@ This is a single-shot intent parser with a deterministic dispatcher, not an open
 
 ![AI Assistant comparing Brass: Birmingham and Brass: Lancashire](../assets/images/game_catalog_page.ai_assistant.comparison.brass_birmingham_vs_brass_lancashire.png)
 
-**An ambiguous title** ("tell me about Catan") triggers a disambiguation prompt instead of guessing:
+**An ambiguous title** ("tell me about Brass") triggers a disambiguation prompt instead of guessing:
 
-![AI Assistant asking which Catan the user meant](../assets/images/game_catalog_page.ai_assistant.clarification.png)
+![AI Assistant asking which Brass game the user meant](../assets/images/game_catalog_page.ai_assistant.clarification.png)
 
 **A question with nothing to do with board games** ("how old are you?") gets a plain decline instead of being force-mapped into browse or search results:
 
