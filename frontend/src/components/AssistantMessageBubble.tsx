@@ -158,14 +158,17 @@ export const AssistantMessageBubble: React.FC<AssistantMessageBubbleProps> = ({ 
       )}
 
       {responseType === 'clarification' && data?.ambiguous_matches && (
-        <div className="flex flex-col gap-2 mt-1">
+        <div className="flex flex-col gap-2">
           {data.ambiguous_matches.map((match) => (
             <button
               key={match.id}
               onClick={() => onSelectOption && onSelectOption(match.name)}
-              className="text-left text-sm bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 rounded-lg px-4 py-2 transition-colors"
+              className="flex items-center justify-between gap-3 p-3 bg-white hover:bg-stone-50 border border-stone-200/60 shadow-sm rounded-lg transition-colors text-left group"
             >
-              {match.name} <span className="opacity-70 text-xs">({match.year})</span>
+              <span className="font-bold text-sm text-text truncate group-hover:text-primary transition-colors">{match.name}</span>
+              {match.year && (
+                <span className="text-xs text-secondary-text shrink-0">{match.year}</span>
+              )}
             </button>
           ))}
         </div>
