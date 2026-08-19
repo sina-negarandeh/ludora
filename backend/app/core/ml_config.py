@@ -398,3 +398,9 @@ class AssistantConfig:
 
     TEMPERATURE = 0.0
     MAX_TOKENS = 4096
+    # Same reasoning as SummarizationConfig.MAX_LLM_RETRIES: Qwen3 models
+    # occasionally return an empty completion for an identical
+    # (temperature=0) prompt and succeed on a byte-identical retry -- a
+    # real, reproduced flake, not a broken prompt. One bad call shouldn't
+    # fail an entire user request.
+    MAX_LLM_RETRIES = 2

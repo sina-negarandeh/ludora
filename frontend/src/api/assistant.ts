@@ -20,7 +20,6 @@ export interface ParsedIntent {
   intent: string;
   query?: string;
   game_name?: string;
-  game_names?: string[];
   filters?: GameQuery;
   needs_clarification?: boolean;
   clarification_question?: string;
@@ -28,7 +27,7 @@ export interface ParsedIntent {
 
 export interface AssistantResponse {
   message: string;
-  type: string; // 'search_results', 'recommendations', 'comparison', 'clarification', 'game_detail', 'error'
+  type: string; // 'search_results', 'recommendations', 'clarification', 'game_detail', 'error'
   parsed_intent: ParsedIntent;
   data?: AssistantData;
 }

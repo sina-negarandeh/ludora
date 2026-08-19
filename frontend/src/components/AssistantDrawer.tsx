@@ -17,7 +17,7 @@ export const AssistantDrawer: React.FC = () => {
     {
       id: 'welcome',
       role: 'assistant',
-      text: 'Hi! I am the Ludora assistant. You can ask me to find, compare, or recommend board games.',
+      text: 'Hi! I am the Ludora assistant. You can ask me to find or recommend board games.',
     }
   ]);
   const [input, setInput] = useState('');

@@ -35,24 +35,6 @@ export const AssistantMessageBubble: React.FC<AssistantMessageBubbleProps> = ({ 
         </div>
       )}
 
-      {responseType === 'comparison' && data?.games && (
-        <div className="flex overflow-x-auto gap-3 pb-2 w-[85vw] md:w-[350px]">
-          {data.games.map((game) => (
-            <div key={game.bgg_id} className="min-w-[200px] bg-white border border-neutral/20 rounded-xl p-3 flex flex-col gap-2 shadow-sm">
-              <span className="font-bold text-sm truncate">{game.name}</span>
-              <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
-                <span className="text-secondary-text">Rating</span>
-                <span className="font-bold text-right">{game.avg_rating?.toFixed(1)}</span>
-                <span className="text-secondary-text">Weight</span>
-                <span className="font-bold text-right">{game.game_weight?.toFixed(2)}</span>
-                <span className="text-secondary-text">Players</span>
-                <span className="text-right">{game.min_players}-{game.max_players}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
       {responseType === 'recommendations' && data?.recommendations && (
         <div className="flex flex-col gap-3">
           {data.recommendations.map((r) => (

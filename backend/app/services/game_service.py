@@ -115,9 +115,3 @@ class GameService:
 
     def get_game(self, bgg_id: int) -> Optional[Game]:
         return self.db.query(Game).filter(Game.bgg_id == bgg_id).first()
-        
-    def compare_games(self, game_ids: List[int]) -> List[Game]:
-        games = self.db.query(Game).filter(Game.bgg_id.in_(game_ids)).all()
-        # Ensure the order matches the requested game_ids
-        game_map = {g.bgg_id: g for g in games}
-        return [game_map[gid] for gid in game_ids if gid in game_map]

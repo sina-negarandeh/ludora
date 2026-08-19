@@ -14,7 +14,9 @@ client = TestClient(app)
 # Bump this whenever TEST_CASES changes meaningfully (new/changed queries or
 # expectations) — an LLM-prompted feature's "eval dataset" is this fixed set
 # of cases, and its version should move independently of the code version.
-EVAL_DATASET_VERSION = "smoke_v1"
+# v2: the "compare" intent (and its two test cases below) was removed
+# entirely from the assistant.
+EVAL_DATASET_VERSION = "smoke_v2"
 
 # Each case's "expect" is a minimal, honest check — not a semantic-quality
 # benchmark. It confirms the pipeline routes to the right intent (and, for
@@ -22,8 +24,8 @@ EVAL_DATASET_VERSION = "smoke_v1"
 # intent parsing shows up as a metric drop over time instead of silently
 # passing whatever the LLM happens to return.
 TEST_CASES = [
-    {"query": "Compare Brass Birmingham and Terraforming Mars", "expect_intent": "compare", "expect_clarification": False},
-    {"query": "Compare Catan with the 1995 edition", "expect_intent": None, "expect_clarification": True},
+    {"query": "Recommend games like Brass Birmingham", "expect_intent": "recommend", "expect_clarification": False},
+    {"query": "Tell me about Catan", "expect_intent": None, "expect_clarification": True},
     {"query": "Show me economic games for 2-4 players", "expect_intent": None, "expect_clarification": False},
 ]
 

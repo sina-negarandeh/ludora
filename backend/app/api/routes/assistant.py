@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from typing import Optional
 from sqlalchemy.orm import Session
 from app.schemas.assistant import ParsedIntent, AssistantResponse
@@ -13,26 +13,34 @@ class ParseRequest(BaseModel):
     message: str
     conversation_id: Optional[str] = None
 
-@router.post("/parse", response_model=ParsedIntent, summary="Parse Natural Language Intent", description="Uses a local MLX LLM to parse a natural language query into structured JSON intent (e.g., 'search', 'compare', 'recommend').")
+# 502, not 500, for a ValidationError specifically: it means the LLM
+# (an upstream dependency) returned something that didn't match the
+# expected schema even after retries -- distinct from a bug in this
+# app's own code. Neither branch leaks str(e) to the client -- a raw
+# Pydantic validation message or SQLAlchemy error isn't something an
+# API consumer should see.
+_LLM_PARSE_FAILURE_MESSAGE = "The assistant returned a response that couldn't be parsed. Please try rephrasing your request."
+_UNEXPECTED_ERROR_MESSAGE = "Something went wrong while processing your request."
+
+@router.post("/parse", response_model=ParsedIntent, summary="Parse Natural Language Intent", description="Uses a local MLX LLM to parse a natural language query into structured JSON intent (e.g., 'search', 'recommend').")
 def parse_intent(request: ParseRequest):
     service = AssistantService()
     try:
-        parsed = service.parse_query(request.message)
-        return parsed
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return service.parse_query(request.message)
+    except ValidationError:
+        raise HTTPException(status_code=502, detail=_LLM_PARSE_FAILURE_MESSAGE)
+    except Exception:
+        raise HTTPException(status_code=500, detail=_UNEXPECTED_ERROR_MESSAGE)
 
-@router.post("/chat", response_model=AssistantResponse, summary="Execute Assistant Chat", description="Parses the user intent and automatically routes it to the correct backend service (e.g. executing a semantic search, fetching recommendations, or comparing games). Returns a UI-ready response.")
+@router.post("/chat", response_model=AssistantResponse, summary="Execute Assistant Chat", description="Parses the user intent and automatically routes it to the correct backend service (e.g. executing a semantic search, fetching recommendations, or looking up a game). Returns a UI-ready response.")
 def chat_endpoint(request: ParseRequest, db: Session = Depends(get_db)):
     service = AssistantService()
     orchestrator = AssistantOrchestrator(db)
-    
+
     try:
-        # 1. Parse intent
         parsed = service.parse_query(request.message)
-        
-        # 2. Execute intent
-        response = orchestrator.execute(parsed)
-        return response
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return orchestrator.execute(parsed)
+    except ValidationError:
+        raise HTTPException(status_code=502, detail=_LLM_PARSE_FAILURE_MESSAGE)
+    except Exception:
+        raise HTTPException(status_code=500, detail=_UNEXPECTED_ERROR_MESSAGE)

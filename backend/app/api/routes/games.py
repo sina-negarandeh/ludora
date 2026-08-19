@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from pydantic import BaseModel
 
 from app.database.session import get_db
 from app.schemas.game import GameResponse, PaginatedGames, PaginatedReviews
@@ -63,14 +62,6 @@ def get_games(
         max_year=max_year
     )
     return PaginatedGames(total=total, items=games)
-
-class CompareRequest(BaseModel):
-    game_ids: List[int]
-
-@router.post("/compare", response_model=List[GameResponse], summary="Compare Board Games", description="Retrieve detailed information for a specific list of games to power side-by-side comparisons.")
-def compare_games(request: CompareRequest, db: Session = Depends(get_db)):
-    service = GameService(db)
-    return service.compare_games(request.game_ids)
 
 @router.get("/{bgg_id}", response_model=GameResponse, summary="Get Game Details", description="Fetch comprehensive metadata, including LLM-generated community consensus summaries, for a single board game by its BoardGameGeek ID.")
 def get_game(bgg_id: int, db: Session = Depends(get_db)):

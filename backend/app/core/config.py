@@ -8,7 +8,13 @@ class Settings(BaseSettings):
     # hyperparameters — see app.core.ml_config for those.
     OPENAI_BASE_URL: str = "http://localhost:8080/v1"
     OPENAI_API_KEY: str = "not-needed-for-local"
-    LLM_MODEL_NAME: str = "Qwen/Qwen3-30B-A3B-MLX-4bit"
+    # Small and fast, not the larger reasoning-capable Qwen3-30B-A3B this used
+    # to point at -- intent parsing is single-shot JSON classification, not a
+    # task that benefits from a bigger "thinking" model. Same model
+    # SUMMARIZATION_MODEL_NAME below uses; kept as its own independent
+    # setting rather than merged with it, so the two can diverge again later
+    # without needing to agree on what serves live traffic.
+    LLM_MODEL_NAME: str = "Qwen/Qwen3-4B-MLX-4bit"
 
     # Separate config for summarization (scripts/generate_summaries.py) —
     # deliberately not shared with the assistant settings above. Summarization
