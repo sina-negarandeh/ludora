@@ -6,7 +6,7 @@ Ludora is built from two Kaggle datasets, merged into one master dataset.
 
 | # | Dataset | Kaggle source | On disk |
 |---|---|---|---|
-| 1 | Board Games Database from BoardGameGeek ("Threnjen") | [kaggle.com/datasets/threnjen/board-games-database-from-boardgamegeek](https://www.kaggle.com/datasets/threnjen/board-games-database-from-boardgamegeek/) | `data/raw/kaggle_datasets_threnjen_board-games-database-from-boardgamegeek/` |
+| 1 | Board Games Database from [BoardGameGeek](https://boardgamegeek.com/) ("Threnjen") | [kaggle.com/datasets/threnjen/board-games-database-from-boardgamegeek](https://www.kaggle.com/datasets/threnjen/board-games-database-from-boardgamegeek/) | `data/raw/kaggle_datasets_threnjen_board-games-database-from-boardgamegeek/` |
 | 2 | BoardGameGeek Reviews ("jvanelteren") | [kaggle.com/datasets/jvanelteren/boardgamegeek-reviews](https://www.kaggle.com/datasets/jvanelteren/boardgamegeek-reviews/) | `data/raw/kaggle_datasets_jvanelteren_boardgamegeek-reviews/` |
 
 Both directories are gitignored in full; nothing under `data/` is tracked in git. Exact license terms and dataset version dates aren't recorded beyond the Kaggle pages linked above; link out to them rather than asserting a license elsewhere.

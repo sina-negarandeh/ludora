@@ -7,7 +7,7 @@
 ## Data
 
 - Source: `games` table (via ORM): categories, mechanics, subdomains, families, designers, publishers, `game_weight`, `mfg_playtime`, `min_players`, `max_players`, `description`, `name`, plus `game_embeddings`, filtered to the currently-configured model (produced separately; see [search-semantic.md](search-semantic.md)).
-- `subdomains` and `families` feed both `metadata`'s categorical TF-IDF features and `tfidf`'s text blob. Deliberately not `themes`: BGG's `Theme:` namespace is already one of `families`'s 72 namespaces (`scripts/build_master_dataset.py:302-304`), so adding both would double-count the same tags.
+- `subdomains` and `families` feed both `metadata`'s categorical TF-IDF features and `tfidf`'s text blob. Deliberately not `themes`: [BGG](https://boardgamegeek.com/)'s `Theme:` namespace is already one of `families`'s 72 namespaces (`scripts/build_master_dataset.py:302-304`), so adding both would double-count the same tags.
 - No held-out split; all three are unsupervised similarity computations, not fit against a labeled objective.
 
 ## Model / Architecture

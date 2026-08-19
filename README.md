@@ -2,7 +2,7 @@
 
 # Ludora
 
-Ludora is a board game discovery app built on two merged BoardGameGeek datasets from Kaggle: about 28,000 games, 26 million ratings, 4.2 million reviews. It's a full-stack, ML-heavy portfolio project. Hybrid search, a nine-algorithm recommendation engine you can compare side by side, aspect-based sentiment analysis over community reviews, and a conversational assistant that parses requests into typed intents instead of guessing at free text. Every claim in this repo is backed by something you can check yourself: a script you can rerun, an endpoint you can curl, a metric you can recompute.
+Ludora is a board game discovery app built on two merged [BoardGameGeek](https://boardgamegeek.com/) datasets from Kaggle: about 28,000 games, 26 million ratings, 4.2 million reviews. It's a full-stack, ML-heavy portfolio project. Hybrid search, a nine-algorithm recommendation engine you can compare side by side, aspect-based sentiment analysis over community reviews, and a conversational assistant that parses requests into typed intents instead of guessing at free text. Every claim in this repo is backed by something you can check yourself: a script you can rerun, an endpoint you can curl, a metric you can recompute.
 
 **Start here:** [Case study](docs/case-study.md) (problem, architecture, data, ML, results, a 10 minute read), [feature catalogue](docs/product/features.md) (every feature, with screenshots), [known limitations](docs/limitations.md) (what's actually missing, stated plainly).
 
@@ -80,7 +80,7 @@ This brings up an **empty** database; nothing here seeds it. To populate the cat
 
 Two Kaggle datasets, merged on BGG ID: [threnjen/board-games-database-from-boardgamegeek](https://www.kaggle.com/datasets/threnjen/board-games-database-from-boardgamegeek/) for game metadata, and [jvanelteren/boardgamegeek-reviews](https://www.kaggle.com/datasets/jvanelteren/boardgamegeek-reviews/) for ratings and reviews. Not every file in either dataset ends up used by the pipeline; see [docs/data/README.md](docs/data/README.md) for exactly which CSVs feed which tables.
 
-All of it traces back to BoardGameGeek and its community: two decades of ratings, reviews, and game data contributed by people who love the hobby. This project is a personal proof of concept built to learn and to build the thing I wanted to build, not a commentary on BGG or a competitor to it, and it's not used for any commercial purpose. The data belongs to BoardGameGeek and the people who contributed it, not to this project.
+All of it traces back to [BoardGameGeek](https://boardgamegeek.com/) and its community: two decades of ratings, reviews, and game data contributed by people who love the hobby. This project is a personal proof of concept built to learn and to build the thing I wanted to build, not a commentary on BGG or a competitor to it, and it's not used for any commercial purpose. The data belongs to BoardGameGeek and the people who contributed it, not to this project.
 
 ## Documentation map
 

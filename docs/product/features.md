@@ -16,7 +16,7 @@ The catalog renders as a paginated, responsive grid of game cards (box art, rati
 
 The sidebar is organized into four groups:
 
-**Classification** (Subdomain, Category, Family) is where the one genuinely two-level filter lives. Family picks a namespace first (Animals, Mechanism, Setting, Crowdfunding, and so on), then the specific values inside it, since the raw BGG Family field spans 72 namespaces and about 4,200 values and a flat list of that size isn't browsable.
+**Classification** (Subdomain, Category, Family) is where the one genuinely two-level filter lives. Family picks a namespace first (Animals, Mechanism, Setting, Crowdfunding, and so on), then the specific values inside it, since the raw [BGG](https://boardgamegeek.com/) Family field spans 72 namespaces and about 4,200 values and a flat list of that size isn't browsable.
 
 ![Classification filters, including the two-level Family selector](../assets/images/game_catalog_page.filters.classification.png)
 

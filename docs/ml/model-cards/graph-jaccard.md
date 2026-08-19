@@ -4,7 +4,7 @@
 
 ## Data
 
-- Source: `games` table (via ORM): mechanics, categories, subdomains, families, designers, publishers, artists, one-hot encoded per game via `MultiLabelBinarizer`. Deliberately not `themes`: BGG's `Theme:` namespace is already one of `families`'s 72 namespaces (`scripts/build_master_dataset.py:302-304`), so adding both would double-count the same tags.
+- Source: `games` table (via ORM): mechanics, categories, subdomains, families, designers, publishers, artists, one-hot encoded per game via `MultiLabelBinarizer`. Deliberately not `themes`: [BGG](https://boardgamegeek.com/)'s `Theme:` namespace is already one of `families`'s 72 namespaces (`scripts/build_master_dataset.py:302-304`), so adding both would double-count the same tags.
 
 ## Model / Architecture
 

@@ -10,7 +10,7 @@ For dataset sources and schema, see [docs/data/README.md](../data/README.md). Th
 
 | Script | Reads | Writes |
 |---|---|---|
-| `scripts/build_master_dataset.py` | Both datasets' game-metadata files, outer-merged on BGG ID, plus Dataset 1's `mechanics.csv`/`themes.csv`/`subcategories.csv`/`designers_reduced.csv`/`artists_reduced.csv`/`publishers_reduced.csv` as fallback sources | `data/processed/master_games.csv`, one entity/mapping CSV pair each for subdomains, categories, themes, mechanics, designers, artists, publishers, a `families`/`subfamilies`/`game_subfamilies` trio for the full BGG Family field (72 namespaces, about 4,200 values), and `master_game_relations.csv` |
+| `scripts/build_master_dataset.py` | Both datasets' game-metadata files, outer-merged on BGG ID, plus Dataset 1's `mechanics.csv`/`themes.csv`/`subcategories.csv`/`designers_reduced.csv`/`artists_reduced.csv`/`publishers_reduced.csv` as fallback sources | `data/processed/master_games.csv`, one entity/mapping CSV pair each for subdomains, categories, themes, mechanics, designers, artists, publishers, a `families`/`subfamilies`/`game_subfamilies` trio for the full [BGG](https://boardgamegeek.com/) Family field (72 namespaces, about 4,200 values), and `master_game_relations.csv` |
 | `scripts/build_interactions_dataset.py` | Dataset 2's `bgg-26m-reviews.csv`, streamed in 1M-row chunks, deduped on `(user, game_id)` | `data/processed/master_ratings.csv`, `master_reviews.csv`, `master_users.csv` |
 
 Exact dataset provenance and the category/subdomain/theme sourcing logic: [docs/data/README.md](../data/README.md). These two scripts are independent of each other and of the database; both can run any time after the raw CSVs exist.

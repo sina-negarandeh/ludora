@@ -11,7 +11,7 @@
 
 ## Problem
 
-BoardGameGeek hosts the largest public dataset of board games and reviews on the internet, but its own UI is a 2000s-era forum layout. No semantic search, no aspect-level review analysis, a single "geek rating" as the only recommendation signal. Ludora asks what a modern discovery product looks like on top of that same data: hybrid search, a multi-algorithm recommendation engine you can actually compare, aspect-level sentiment extraction instead of one star rating, and a natural-language assistant on top of all of it.
+[BoardGameGeek](https://boardgamegeek.com/) hosts the largest public dataset of board games and reviews on the internet, but its own UI is a 2000s-era forum layout. No semantic search, no aspect-level review analysis, a single "geek rating" as the only recommendation signal. Ludora asks what a modern discovery product looks like on top of that same data: hybrid search, a multi-algorithm recommendation engine you can actually compare, aspect-level sentiment extraction instead of one star rating, and a natural-language assistant on top of all of it.
 
 ## Product
 

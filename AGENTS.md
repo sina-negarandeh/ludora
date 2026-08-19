@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Ludora is a board-game discovery web app: FastAPI + PostgreSQL/pgvector backend, React 19 + TypeScript frontend, offline Python ETL/ML pipeline, built on two merged Kaggle BoardGameGeek datasets, with hybrid search, a 9-model recommendation engine, aspect-based sentiment analysis, and a local-LLM assistant.
+Ludora is a board-game discovery web app: FastAPI + PostgreSQL/pgvector backend, React 19 + TypeScript frontend, offline Python ETL/ML pipeline, built on two merged Kaggle [BoardGameGeek](https://boardgamegeek.com/) datasets, with hybrid search, a 9-model recommendation engine, aspect-based sentiment analysis, and a local-LLM assistant.
 
 This file covers what's true across the whole repo. Also read the nested file for whichever side you're touching:
 
