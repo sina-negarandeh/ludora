@@ -52,11 +52,11 @@ export const AssistantDrawer: React.FC = () => {
         data: res.data,
       };
       setMessages(prev => [...prev, assistantMsg]);
-    } catch {
+    } catch (err) {
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        text: 'Sorry, I encountered an error communicating with the server.',
+        text: err instanceof Error ? err.message : 'Sorry, I encountered an error communicating with the server.',
         responseType: 'error'
       }]);
     }
