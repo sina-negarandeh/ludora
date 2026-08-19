@@ -4,7 +4,6 @@ from typing import List, Literal, Optional
 IntentEnum = Literal[
     "browse",
     "search",
-    "compare",
     "recommend",
     "get_game",
     "get_reviews",
@@ -12,7 +11,7 @@ IntentEnum = Literal[
 ]
 
 SearchMode = Literal["lexical", "semantic", "hybrid"]
-RecommendationFamily = Literal["content", "collaborative", "hybrid"]
+RecommendationFamily = Literal["popularity", "content", "collaborative", "hybrid"]
 SortDirection = Literal["asc", "desc"]
 SortField = Literal["rank", "rating", "year_published", "complexity", "name"]
 
@@ -21,9 +20,14 @@ class SortSpec(BaseModel):
     direction: SortDirection
 
 class GameFilters(BaseModel):
-    themes: Optional[List[str]] = Field(default=None, description="Game themes like 'Economic', 'Trains', 'Science Fiction'.")
-    mechanics: Optional[List[str]] = Field(default=None, description="Game mechanics like 'Worker Placement', 'Deck Building'.")
-    categories: Optional[List[str]] = Field(default=None, description="Game categories like 'Card Game', 'Miniatures'.")
+    themes: Optional[List[str]] = Field(default=None, description="Narrow setting/franchise tags, e.g. 'Zombies', 'Cthulhu Mythos', 'Science Fiction'.")
+    mechanics: Optional[List[str]] = Field(default=None, description="Gameplay mechanisms, e.g. 'Worker Placement', 'Deck Building', 'Area Control'.")
+    categories: Optional[List[str]] = Field(default=None, description="Broad subject/format classification, e.g. 'Card Game', 'Wargame', 'Fantasy'.")
+    subdomains: Optional[List[str]] = Field(default=None, description="BGG's 8 coarse rank/leaderboard types, exactly: Abstract, CGS, Childrens, Family, Party, Strategy, Thematic, War.")
+    families: Optional[List[str]] = Field(default=None, description="Specific named series/groupings, e.g. 'Bears', 'Kickstarter' -- looser and much larger than categories/themes, only use when the user names one explicitly.")
+    designers: Optional[List[str]] = Field(default=None, description="Specific game designer names, e.g. 'Uwe Rosenberg', 'Martin Wallace'. Only set when the user names a person explicitly.")
+    artists: Optional[List[str]] = Field(default=None, description="Specific illustrator/artist names. Only set when the user names a person explicitly.")
+    publishers: Optional[List[str]] = Field(default=None, description="Specific publisher/company names, e.g. 'Days of Wonder', 'Fantasy Flight Games'. Only set when the user names a company explicitly.")
     min_players: Optional[int] = Field(default=None, description="Minimum player count.")
     max_players: Optional[int] = Field(default=None, description="Maximum player count.")
     exact_players: Optional[int] = Field(default=None, description="Exact player count if specifically requested.")
@@ -41,8 +45,7 @@ class ParsedIntent(BaseModel):
     query: Optional[str] = Field(default=None, description="The natural language query string, primarily used for 'search' intent.")
     
     game_name: Optional[str] = Field(default=None, description="A specific game name mentioned by the user (e.g. for get_game, recommend).")
-    game_names: Optional[List[str]] = Field(default=None, description="A list of game names (e.g. for compare).")
-    
+
     search_mode: Optional[SearchMode] = Field(default=None, description="The search mode to use if intent is search.")
     
     filters: Optional[GameFilters] = Field(default=None, description="Filters to apply to the query.")
@@ -55,6 +58,6 @@ class ParsedIntent(BaseModel):
 
 class AssistantResponse(BaseModel):
     message: str = Field(description="Deterministic natural language message for the user.")
-    type: str = Field(description="The UI presentation type: search_results, recommendations, comparison, clarification, game_detail, error")
+    type: str = Field(description="The UI presentation type: search_results, recommendations, clarification, game_detail, error")
     parsed_intent: ParsedIntent
     data: Optional[dict] = Field(default=None, description="The resulting data from the executed intent.")

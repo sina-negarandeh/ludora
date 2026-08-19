@@ -31,8 +31,6 @@ class AssistantOrchestrator:
                 return self._handle_browse(intent)
             elif intent.intent == "search":
                 return self._handle_search(intent)
-            elif intent.intent == "compare":
-                return self._handle_compare(intent)
             elif intent.intent == "recommend":
                 return self._handle_recommend(intent)
             elif intent.intent == "get_game":
@@ -74,8 +72,13 @@ class AssistantOrchestrator:
         
         base_filters = GameFilter(
             categories=assistant_filters.categories,
+            subdomains=assistant_filters.subdomains,
             themes=assistant_filters.themes,
+            families=assistant_filters.families,
             mechanics=assistant_filters.mechanics,
+            designers=assistant_filters.designers,
+            artists=assistant_filters.artists,
+            publishers=assistant_filters.publishers,
             exact_players=assistant_filters.exact_players,
             min_players=assistant_filters.min_players,
             max_players=assistant_filters.max_players,
@@ -100,8 +103,13 @@ class AssistantOrchestrator:
             sort_by=sort_by,
             order=order,
             categories=db_filters.categories,
+            subdomains=db_filters.subdomains,
             themes=db_filters.themes,
+            families=db_filters.families,
             mechanics=db_filters.mechanics,
+            designers=db_filters.designers,
+            artists=db_filters.artists,
+            publishers=db_filters.publishers,
             exact_players=db_filters.exact_players,
             min_players=db_filters.min_players,
             max_players=db_filters.max_players,
@@ -136,28 +144,6 @@ class AssistantOrchestrator:
             type="search_results",
             parsed_intent=intent,
             data={"total": results.total, "results": [{"game": GameResponse.model_validate(item.game).model_dump(), "score": item.score} for item in results.items]}
-        )
-
-    def _handle_compare(self, intent: ParsedIntent) -> AssistantResponse:
-        if not intent.game_names or len(intent.game_names) < 2:
-            intent.needs_clarification = True
-            intent.clarification_question = "Which games do you want to compare? Please provide at least two."
-            return AssistantResponse(
-                message=intent.clarification_question,
-                type="clarification",
-                parsed_intent=intent,
-                data={}
-            )
-
-        # Resolve all strings to IDs
-        bgg_ids = self.resolver.resolve_games(intent.game_names)
-        
-        games = self.game_service.compare_games(bgg_ids)
-        return AssistantResponse(
-            message=f"Here is a comparison of the {len(games)} games you asked for.",
-            type="comparison",
-            parsed_intent=intent,
-            data={"games": [GameResponse.model_validate(g).model_dump() for g in games]}
         )
 
     def _handle_recommend(self, intent: ParsedIntent) -> AssistantResponse:
