@@ -33,6 +33,19 @@ class SearchConfig:
     RRF_K = 60
     # Candidate pool pulled from each retrieval leg before RRF + filtering.
     CANDIDATE_POOL_SIZE = 100
+    # When a search is re-ordered by an explicit field (SearchQuery.sort,
+    # e.g. "find Spiderman games, sorted by rating") instead of relevance,
+    # only the top SORT_RELEVANCE_POOL_SIZE candidates by RRF score are
+    # eligible to be re-sorted -- much tighter than the full
+    # CANDIDATE_POOL_SIZE. Measured directly against a real query ("find
+    # games with Spiderman in it, sort by rating desc"): without this
+    # floor, sorting the full 100-candidate pool by rating surfaced
+    # "Slay the Spire: The Board Game" (semantic rank 44) and "Marvel
+    # Zombies: X-Men Resistance" (semantic rank 59) ahead of the actually-
+    # relevant matches, purely because they happened to be highly rated --
+    # a marginal, borderline-irrelevant match should never outrank a
+    # strong match just for having a better score on the sort field.
+    SORT_RELEVANCE_POOL_SIZE = 25
     # Embedding document construction (scripts/update_embeddings.py).
     # Tried raising this to 4,000 on the reasoning that Qwen3's 32K context
     # *can* handle longer input — but measured against the actual catalog,
@@ -404,3 +417,15 @@ class AssistantConfig:
     # real, reproduced flake, not a broken prompt. One bad call shouldn't
     # fail an entire user request.
     MAX_LLM_RETRIES = 2
+    # Measured, not assumed: on the deeper-nested plan schema, Qwen3-4B
+    # produced a JSON syntax error (one extra closing brace) that
+    # reproduced identically on every retry at TEMPERATURE=0 -- a
+    # deterministic bug retries at the same temperature can never escape.
+    # Retries (attempt > 0) use this instead; the first attempt still
+    # runs at TEMPERATURE for reproducible primary behavior.
+    RETRY_TEMPERATURE = 0.3
+    # A hard ceiling on plan length, enforced in the orchestrator, not
+    # requested of the model -- caps a runaway decomposition (or a
+    # confidently-wrong one) at a size that's still cheap and legible to
+    # execute, rather than trusting the LLM's own restraint.
+    MAX_PLAN_STEPS = 3

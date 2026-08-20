@@ -30,7 +30,15 @@ s_score = 1.0 / (self.rrf_k + s_rank) if s_rank else 0.0
 rrf_score = l_score + s_score
 ```
 
-Filters (`apply_game_filters()`) are applied after the fused candidate set is scored, then the result is sorted by `rrf_score` and paginated. Filtering isn't pushed into the retrieval SQL for either underlying path.
+Filters (`apply_game_filters()`) are applied after the fused candidate set is scored, then the result is sorted by `rrf_score` and paginated by default. Filtering isn't pushed into the retrieval SQL for either underlying path.
+
+### Optional field sort, with a relevance floor
+
+`SearchQuery.sort` (a `SortSpec`: `field`, rank/rating/year/complexity/name/playtime, plus `direction`) overrides the default relevance ordering, for a request like "find games with Spiderman in it, sorted by rating," a free-text match that also wants a specific ordering criterion, not just relevance rank. When set, sorting is **not** applied across the whole ~100-candidate pool: it's restricted to the top `SearchConfig.SORT_RELEVANCE_POOL_SIZE` (25) candidates by RRF score first, and only that slice is re-sorted by the requested field.
+
+This floor exists because of a measured failure mode, not a hypothetical one: sorting the full 100-candidate pool for the query above by rating surfaced "Slay the Spire: The Board Game" (RRF relevance rank #44 out of ~100, barely related to the query at all) ahead of games with a real, strong textual/semantic connection to "Spiderman," purely because it happened to have a high rating. A marginal match shouldn't be able to outrank a strong one just by scoring well on the sort field. Restricting the floor to the top 25 keeps enough headroom to answer "top 3 by rating" meaningfully while still requiring every candidate to have cleared a real relevance bar first.
+
+This is the primary way the AI assistant expresses "find X, sorted/limited by Y" (`_handle_search` in `AssistantOrchestrator`); see [docs/ml/assistant.md](assistant.md).
 
 ### Filters
 

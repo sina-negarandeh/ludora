@@ -1,6 +1,6 @@
 # Assistant intent parsing
 
-**Category:** LLM-powered NL query assistant · **Status:** Implemented, no benchmark
+**Category:** LLM-powered NL query assistant · **Status:** Implemented, no benchmark · **Covers `POST /api/assistant/parse` only**, a debug/introspection route, not what the frontend calls. Live chat traffic runs on a different, larger model; see [assistant-plan-parse.md](assistant-plan-parse.md).
 
 ## Data
 
@@ -9,7 +9,7 @@
 
 ## Model / Architecture
 
-Local instruction-tuned LLM (`Qwen/Qwen3-4B-MLX-4bit`), via the OpenAI-compatible endpoint, its own config (`OPENAI_BASE_URL`/`OPENAI_API_KEY`/`LLM_MODEL_NAME`), deliberately separate from summarization's (`SUMMARIZATION_*`), since this is a live request-time call and summarization is an offline batch job; see [summarization-llm.md](summarization-llm.md). `AssistantService.parse_query()` sends one chat-completion call with the full `ParsedIntent` JSON schema embedded in the system prompt plus a handful of worked examples, JSON-schema-constrained, Pydantic-validated (`ParsedIntent.model_validate_json()`). On a validation failure, it retries up to `AssistantConfig.MAX_LLM_RETRIES` (2) times before raising, since the same class of empty-completion flake `SummarizationService` was built to tolerate shows up here too. `AssistantOrchestrator` then dispatches on the parsed `intent` enum via a plain `if`/`elif`, not a semantic embedding classifier, just routing on a string the LLM filled in.
+Local instruction-tuned LLM (`Qwen/Qwen3-4B-MLX-4bit`), via the OpenAI-compatible endpoint, its own config (`OPENAI_BASE_URL`/`OPENAI_API_KEY`/`LLM_MODEL_NAME`), deliberately separate from summarization's (`SUMMARIZATION_*`), since this is a live request-time call and summarization is an offline batch job; see [summarization-llm.md](summarization-llm.md). `AssistantService.parse_query()` sends one chat-completion call, `/no_think`-prefixed (this model never needs to reason, only classify), with the full `ParsedIntent` JSON schema embedded in the system prompt plus the same 26 rules and worked examples [assistant-plan-parse.md](assistant-plan-parse.md)'s model uses, Pydantic-validated. On a validation failure, it retries up to `AssistantConfig.MAX_LLM_RETRIES` (2) times before raising, since the same class of empty-completion flake `SummarizationService` was built to tolerate shows up here too. Kept small deliberately: single-intent classification has never shown a reliability problem at this size, unlike multi-step planning. See the other card for the measured comparison that justifies the split.
 
 Entity resolution (game, category, theme, mechanic, designer, artist, publisher names) is a separate, non-ML lowercase-name lookup cache (`EntityResolver`) plus delegation to lexical search for game names; no fuzzy-matching library involved.
 
@@ -36,19 +36,9 @@ None. Every call is live against the local LLM server; nothing is precomputed or
 
 ## Evaluation
 
-**Status: does not exist as a benchmark**, but a print-only smoke test has been upgraded into a small, MLflow-tracked one:
-
-- Script: `backend/test_orchestrator.py`, hardcoded queries against the live `/api/assistant/chat` endpoint, each with a minimal expected-behavior check (correct `intent`, and correct `needs_clarification` for a deliberately-ambiguous query).
-- Fixed eval set, explicitly versioned: `EVAL_DATASET_VERSION = "smoke_v2"` (bump this whenever `TEST_CASES` changes meaningfully), the same idea as `SearchConfig`'s `search_queries.json` but for a prompted feature where the "dataset" is just the fixed case list, not an external file.
-- MLflow experiment: `llm/intent_parsing` (run name `smoke_test`), logging `n_queries`, `eval_dataset_version`, `llm_model`, `temperature`, and a 12-char SHA-256 hash of the static system prompt (`AssistantService._build_system_prompt()`, extracted specifically so this hash can be computed without duplicating the prompt text) as params; `pass_rate`, `latency_p50_seconds`, `latency_p95_seconds`, and a 0/1 metric per query as metrics.
-- Can write `backend/evaluation/results/assistant_intent_eval_latest.json`, but hasn't been run since that capability was added; no committed file exists yet. See [docs/ml/evaluation.md](../evaluation.md).
-- Command: `uv run --project backend python test_orchestrator.py`
-
-This is still a small smoke test, not a real benchmark. It checks the pipeline doesn't regress on a few known cases, not that intent parsing is generally accurate across the space of things a user might ask.
+**Status: does not exist as a benchmark, and no smoke test exercises this route specifically.** `backend/test_orchestrator.py` (the repo's only intent-parsing smoke test) hits `/api/assistant/chat`, which runs on the plan-parsing model, not this one. See [assistant-plan-parse.md](assistant-plan-parse.md#evaluation) for what that script actually covers, and note there that it's currently out of date. Nothing in the repo currently exercises `parse_query()`/`/parse` directly beyond ad hoc manual `curl` calls.
 
 ## Known limitations
 
-- `compare` needs two or more named titles in the query; a franchise or series reference doesn't resolve to a concrete pair yet.
-- The assistant's structured filter set has no playtime fields, unlike the catalog's direct browse and search filters.
-- `conversation_id` is accepted by the API but never read anywhere; no multi-turn memory.
-- No evaluation set covers the full 8-intent space (`browse`, `search`, `recommend`, `compare`, `get_game`, `get_reviews`, `get_aspects`, `unsupported`); the smoke test checks a handful of hardcoded queries, not the whole space.
+- `conversation_id` is accepted by the API but never read anywhere; no multi-turn memory (shared with the plan-parsing route, see the other card).
+- No evaluation set covers the full 8-intent space (`browse`, `search`, `recommend`, `compare`, `get_game`, `get_reviews`, `get_aspects`, `unsupported`), and this specific route has no smoke test at all (above).
