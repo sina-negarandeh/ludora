@@ -1,0 +1,58 @@
+# OpenTelemetry Collector: the single ingestion point for the backend's
+# traces/logs/metrics. The app (running natively on the host, not in this
+# compose stack -- mlx-embeddings needs Apple Silicon) sends one OTLP
+# stream here via localhost:4317; the collector fans it out to Tempo,
+# Loki, and Prometheus. This is the standard shape -- the app never talks
+# to Tempo/Loki/Prometheus directly.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+  # Local-dev stack, single service today -- tagging deployment.environment
+  # now means dashboards/queries don't need to change if a second
+  # environment (or service) is ever added later.
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: local
+        action: upsert
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  # Loki's native OTLP log ingestion (Loki >= 3.0), not the older
+  # collector-side `loki` exporter -- that one is deprecated in favor of
+  # this, per Grafana's own current guidance.
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+
+  # Prometheus is pull-based by design; the collector exposes a /metrics
+  # endpoint here and prometheus.yml scrapes it, rather than fighting
+  # Prometheus's model with remote-write.
+  prometheus:
+    endpoint: 0.0.0.0:8889
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [otlp/tempo]
+    logs:
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [otlphttp/loki]
+    metrics:
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [prometheus]

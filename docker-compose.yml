@@ -56,6 +56,86 @@ services:
       - VITE_API_URL=http://localhost:8000
     command: npm run dev -- --host 0.0.0.0
 
+  # --- Observability stack -----------------------------------------------
+  # Opt-in via `docker compose --profile observability up -d` (or
+  # `make observability-up`), not part of plain `make up` / `docker compose
+  # up -d` -- this is 5 extra containers with no payoff until the backend
+  # actually emits OTLP, and shouldn't add startup weight to routine dev
+  # work. The backend runs natively on the host (see the `backend` service
+  # comment above), so it reaches the collector via the published
+  # localhost:4317/4318 ports, same as it reaches Postgres on localhost:5432.
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.114.0
+    container_name: ludora_otel_collector
+    profiles: ["observability"]
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./observability/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "4317:4317"  # OTLP gRPC -- the backend's OTEL_EXPORTER_OTLP_ENDPOINT
+      - "4318:4318"  # OTLP HTTP
+    depends_on:
+      - loki
+      - tempo
+      - prometheus
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: ludora_prometheus
+    profiles: ["observability"]
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+
+  loki:
+    image: grafana/loki:3.2.1
+    container_name: ludora_loki
+    profiles: ["observability"]
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      - ./observability/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    container_name: ludora_tempo
+    profiles: ["observability"]
+    command: -config.file=/etc/tempo/tempo.yaml
+    volumes:
+      - ./observability/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    ports:
+      - "3200:3200"  # Tempo query API, read by Grafana
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: ludora_grafana
+    profiles: ["observability"]
+    environment:
+      # No-auth, local-only dashboard -- consistent with the rest of this
+      # project's local-dev, no-auth posture (see AGENTS.md boundaries).
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+
 volumes:
   postgres_data:
   pgadmin_data:
+  prometheus_data:
+  loki_data:
+  tempo_data:
+  grafana_data:
