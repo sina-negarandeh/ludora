@@ -1,10 +1,15 @@
-.PHONY: help up down logs sync sync-ml backend migrate migration lint typecheck test check frontend frontend-build frontend-lint
+.PHONY: help up down logs sync sync-ml backend migrate migration lint typecheck test check frontend frontend-build frontend-lint observability-up observability-down observability-logs
 
 help:
 	@echo "Infra (docker compose: postgres, pgadmin, frontend dev server)"
 	@echo "  make up             start postgres, pgadmin, frontend"
 	@echo "  make down           stop them"
 	@echo "  make logs           tail docker compose logs"
+	@echo ""
+	@echo "Observability (opt-in, off by default -- see observability/README.md)"
+	@echo "  make observability-up    start otel-collector, prometheus, loki, tempo, grafana"
+	@echo "  make observability-down  stop them"
+	@echo "  make observability-logs  tail their logs"
 	@echo ""
 	@echo "Backend (native uv -- mlx-embeddings needs Apple Silicon, can't run in the docker containers)"
 	@echo "  make sync           install backend deps (main + dev group)"
@@ -32,6 +37,17 @@ down:
 
 logs:
 	docker compose logs -f
+
+## Observability (opt-in)
+
+observability-up:
+	docker compose --profile observability up -d otel-collector prometheus loki tempo grafana
+
+observability-down:
+	docker compose --profile observability down
+
+observability-logs:
+	docker compose --profile observability logs -f otel-collector prometheus loki tempo grafana
 
 ## Backend
 
