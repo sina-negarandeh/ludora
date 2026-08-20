@@ -1,19 +1,23 @@
-import os
-import pandas as pd
-import hashlib
 import argparse
+import hashlib
+import os
 import re
-import requests
-import fasttext
-import mlflow
 
+import fasttext
+import httpx
+import mlflow
+import pandas as pd
 from app.core.ml_config import ABSAConfig
 from app.core.mlflow_utils import tracked_run
+
 
 def download_fasttext_model(model_path):
     if not os.path.exists(model_path):
         print("Downloading fastText language model...")
-        r = requests.get(ABSAConfig.FASTTEXT_MODEL_URL, allow_redirects=True)
+        # No timeout: httpx defaults to 5s per phase, which would cut off
+        # this ~126MB download partway through on a real connection --
+        # requests (no default timeout) never had this problem.
+        r = httpx.get(ABSAConfig.FASTTEXT_MODEL_URL, follow_redirects=True, timeout=None)
         r.raise_for_status()
         tmp_path = model_path + ".tmp"
         with open(tmp_path, 'wb') as f:

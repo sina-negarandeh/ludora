@@ -1,16 +1,19 @@
 import time
-import requests
+
+import httpx
+
 from app.services.assistant_service import AssistantService
+
 
 def wait_for_server():
     print("Waiting for MLX server to boot on localhost:8080...")
     while True:
         try:
-            res = requests.get("http://localhost:8080/v1/models", timeout=2)
+            res = httpx.get("http://localhost:8080/v1/models", timeout=2)
             if res.status_code == 200:
                 print("Server is UP!")
                 break
-        except requests.exceptions.RequestException:
+        except httpx.RequestError:
             pass
         time.sleep(5)
 

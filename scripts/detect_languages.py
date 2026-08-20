@@ -1,18 +1,22 @@
+import argparse
 import os
 import time
-import argparse
-import requests
-import fasttext
 
-from sqlalchemy import text
+import fasttext
+import httpx
 from app.database.session import engine
+from sqlalchemy import text
+
 
 def download_fasttext_model(model_path):
     if os.path.exists(model_path):
         return
     print("Downloading fastText language model...")
     url = "https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.ftz"
-    r = requests.get(url, allow_redirects=True)
+    # No timeout: httpx defaults to 5s per phase, which would cut off this
+    # ~126MB download partway through on a real connection -- requests (no
+    # default timeout) never had this problem.
+    r = httpx.get(url, follow_redirects=True, timeout=None)
     r.raise_for_status()
     # Write to a temp file first and rename atomically, so a failed/interrupted
     # download can never leave a truncated file that a later run mistakes for
