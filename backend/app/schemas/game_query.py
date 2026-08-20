@@ -1,5 +1,29 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Literal
+
+# Shared sort vocabulary for both the plain browse endpoint
+# (GameService.get_games' sort_by/order params) and search (SearchQuery.sort
+# below) -- "year", not "year_published", to match the literal string the
+# frontend's GamesList.tsx sort dropdown has always sent as sort_by.
+SortField = Literal["rank", "rating", "year", "complexity", "name", "playtime"]
+SortDirection = Literal["asc", "desc"]
+
+# Single source of truth for which Game column each SortField maps to --
+# shared by GameService.get_games (SQL ORDER BY) and SearchService.search
+# (Python-side sort over already-fetched Game objects) so the two can't
+# drift apart on what "sort by rating" means.
+SORT_FIELD_TO_COLUMN = {
+    "rank": "rank",
+    "rating": "avg_rating",
+    "year": "year_published",
+    "complexity": "game_weight",
+    "name": "name",
+    "playtime": "mfg_playtime",
+}
+
+class SortSpec(BaseModel):
+    field: SortField
+    direction: SortDirection
 
 class GameFilter(BaseModel):
     subdomains: Optional[List[str]] = Field(None, description="List of subdomains to filter by (BGG's rank/leaderboard classification, e.g. 'Strategy', 'Family').")

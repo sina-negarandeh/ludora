@@ -102,7 +102,9 @@ class GameService:
             sort_column = getattr(Game, 'game_weight')
         elif sort_by == 'name':
             sort_column = getattr(Game, 'name')
-            
+        elif sort_by == 'playtime':
+            sort_column = getattr(Game, 'mfg_playtime')
+
         if order == 'desc':
             query = query.order_by(sort_column.desc().nulls_last())
         else:

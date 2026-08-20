@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.database.models import Game, Category, Mechanic, Theme, Subdomain, Subfamily, GameEmbedding, Designer, Artist, Publisher
 from app.schemas.search import SearchQuery, PaginatedSearchResults, SearchResult, SearchDebug
-from app.schemas.game_query import GameFilter
+from app.schemas.game_query import GameFilter, SortSpec, SORT_FIELD_TO_COLUMN
 from app.core.ml_config import SearchConfig
 from app.core import embeddings as embedding_model
 from typing import Dict
@@ -112,6 +112,22 @@ class SearchService:
 
         return {row.game_id: rank + 1 for rank, row in enumerate(results)}
 
+    def _sort_by_field(self, candidates: list, filtered_games: Dict[int, Game], sort: SortSpec) -> list:
+        """Reorders `candidates` by a Game column instead of relevance --
+        same field vocabulary and nulls-last placement as GameService.get_games'
+        SQL ORDER BY, just applied in Python since these candidates were
+        already fetched (and filtered/ranked by relevance) as a fixed list,
+        not a live query. A game missing the sorted-on value (e.g. no
+        rating yet) sorts after every game that has one, regardless of
+        direction, matching nulls_last() on the plain browse path.
+        """
+        attr = SORT_FIELD_TO_COLUMN[sort.field]
+        reverse = sort.direction == "desc"
+        with_value = [c for c in candidates if getattr(filtered_games[c["bgg_id"]], attr) is not None]
+        without_value = [c for c in candidates if getattr(filtered_games[c["bgg_id"]], attr) is None]
+        with_value.sort(key=lambda c: getattr(filtered_games[c["bgg_id"]], attr), reverse=reverse)
+        return with_value + without_value
+
     def search(self, search_query: SearchQuery, skip: int, limit: int) -> PaginatedSearchResults:
         lexical_ranks = {}
         semantic_ranks = {}
@@ -154,9 +170,19 @@ class SearchService:
         # 4. Final Ranking
         # Only keep candidates that passed the filter
         final_candidates = [c for c in scored_candidates if c["bgg_id"] in filtered_games]
-        
-        # Sort by RRF score descending
-        final_candidates.sort(key=lambda x: x["rrf_score"], reverse=True)
+
+        if search_query.sort:
+            # An explicit sort overrides relevance ordering, but only
+            # within a tight top-relevance slice, not the whole retrieval
+            # pool -- see SearchConfig.SORT_RELEVANCE_POOL_SIZE for why a
+            # marginal, barely-relevant match can't win purely by scoring
+            # well on the sort field.
+            final_candidates.sort(key=lambda x: x["rrf_score"], reverse=True)
+            final_candidates = final_candidates[:SearchConfig.SORT_RELEVANCE_POOL_SIZE]
+            final_candidates = self._sort_by_field(final_candidates, filtered_games, search_query.sort)
+        else:
+            # Default: sort by RRF score descending.
+            final_candidates.sort(key=lambda x: x["rrf_score"], reverse=True)
         
         # 5. Pagination
         total = len(final_candidates)
