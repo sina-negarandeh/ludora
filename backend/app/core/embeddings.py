@@ -9,8 +9,6 @@ Loads once per process (module-level cache), consistent with how the
 previous SentenceTransformer was loaded once at import time.
 """
 
-from mlx_embeddings.utils import load as _mlx_load
-
 from app.core.ml_config import SearchConfig
 
 _model = None
@@ -20,6 +18,15 @@ _tokenizer = None
 def _get_model():
     global _model, _tokenizer
     if _model is None:
+        # Imported here, not at module top-level: mlx_embeddings pulls in
+        # mlx.core, which requires Apple Silicon (libmlx.so) to even
+        # import, not just to run -- confirmed directly, not assumed:
+        # CI's pytest step failed importing this module at all on a
+        # GitHub-hosted Linux runner. Deferring the import means anything
+        # that only imports this module (the whole app.main chain, for
+        # instance) still works on any platform; only an actual call to
+        # _get_model()/encode() requires MLX, same as it always has.
+        from mlx_embeddings.utils import load as _mlx_load
         _model, _tokenizer = _mlx_load(SearchConfig.EMBEDDING_MODEL)
     # Narrows the return type past the module-level None default -- by
     # this point the load above has always run, whether just now or on

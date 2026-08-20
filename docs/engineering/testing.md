@@ -8,6 +8,8 @@ On every PR touching `backend/`, in order: `ruff check app/` (lint), `pyright` (
 
 `backend/tests/test_app_smoke.py` is the entire real automated suite today: two tests, both infra-free (no live DB, no local LLM server), using `TestClient` to hit `/health` and `/openapi.json`. Deliberately minimal but genuine -- it catches a broken import, a broken route/schema definition, or an app startup error, which is exactly what a GitHub-hosted Linux runner *can* check. It can't run anything requiring `mlx-embeddings` (Apple Silicon only, see `backend/AGENTS.md`) or a seeded Postgres instance, which is also why the CI job installs only the `dev` dependency group (`uv sync`, no `--group ml`) -- the offline pipeline's heavy ML libraries aren't needed for any of this.
 
+Neither test touches search or embeddings, but `from app.main import app` alone used to fail on Linux anyway: `app/core/embeddings.py` imported `mlx_embeddings` at module top-level, which imports `mlx.core`, which requires Apple Silicon (`libmlx.so`) to even *import*, not just run. Fixed by moving that one import inside the function that actually calls it (`_get_model()`) -- not an ML-testing workaround, just an eager import that had no reason to run before it was needed, confirmed directly: after the fix, importing `app.main` loads zero `mlx*` modules unless something actually calls `encode()`.
+
 Pyright and ruff both run clean today; pyright has one deliberate, tracked exception -- see [Known limitation: SQLAlchemy Column typing](#known-limitation-sqlalchemy-column-typing-under-pyright) below.
 
 ## Backend "tests" (all print-based scripts, not pytest suites)
