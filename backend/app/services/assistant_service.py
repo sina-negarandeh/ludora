@@ -3,7 +3,15 @@ import re
 import time
 
 import structlog
-from openai import OpenAI
+
+# Langfuse's drop-in OpenAI client, not the plain SDK -- traces every
+# chat.completions.create() call (prompt, completion, token usage,
+# latency) to Langfuse with no other code change, see
+# app.core.langfuse_config and langfuse/README.md. Falls back to
+# behaving exactly like the plain client if Langfuse isn't configured.
+# langfuse's own type stubs mark this re-export private; the runtime
+# import (confirmed directly) resolves to the real openai.OpenAI class.
+from langfuse.openai import OpenAI  # pyright: ignore[reportPrivateImportUsage]
 from pydantic import ValidationError
 
 from app.core.config import settings

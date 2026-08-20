@@ -6,14 +6,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 from app.api.routes import assistant, games, metadata, recommendations, search
+from app.core.langfuse_config import configure_langfuse
 from app.core.logging_config import configure_logging
 from app.core.otel_config import configure_otel
 
-# Order between these two doesn't matter: both just register global state
-# (structlog's processor chain, OTel's providers/handler) -- nothing
-# actually logs until a request comes in, well after both have run.
+# Order between these doesn't matter: all three just register global state
+# (structlog's processor chain, OTel's providers/handler, Langfuse's env
+# vars) -- nothing actually logs or traces until a request comes in and
+# constructs an AssistantService, well after all three have run.
 configure_logging()
 configure_otel()
+configure_langfuse()
 logger = structlog.get_logger("ludora.request")
 
 app = FastAPI(title="Ludora API", version="0.1.0")

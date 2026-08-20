@@ -46,6 +46,16 @@ class Settings(BaseSettings):
     OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://localhost:4317"
     OTEL_SERVICE_NAME: str = "ludora-backend"
 
+    # Langfuse (self-hosted, see langfuse/README.md) traces AssistantService's
+    # LLM calls specifically -- prompt/completion/token content the generic
+    # OTel setup above never captures. Empty by default (not committed --
+    # real values live in backend/.env, gitignored): the Langfuse SDK
+    # degrades to a no-op tracer with just a log warning when these are
+    # unset, same posture as every other optional-infra setting here.
+    LANGFUSE_PUBLIC_KEY: str = ""
+    LANGFUSE_SECRET_KEY: str = ""
+    LANGFUSE_BASE_URL: str = "http://localhost:3001"
+
     class Config:
         env_file = ".env"
 

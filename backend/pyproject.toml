@@ -24,6 +24,7 @@ dependencies = [
     "opentelemetry-instrumentation-sqlalchemy>=0.65b0",
     "opentelemetry-instrumentation-httpx>=0.65b0",
     "opentelemetry-instrumentation-logging>=0.65b0",
+    "langfuse>=4.14.4",
 ]
 
 [dependency-groups]
