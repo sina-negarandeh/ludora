@@ -176,10 +176,16 @@ class SearchService:
             # within a tight top-relevance slice, not the whole retrieval
             # pool -- see SearchConfig.SORT_RELEVANCE_POOL_SIZE for why a
             # marginal, barely-relevant match can't win purely by scoring
-            # well on the sort field.
+            # well on the sort field. Everything past that slice stays in
+            # the result set, just left in relevance order instead of
+            # re-sorted by field -- dropping it outright would both
+            # understate `total` below the real match count and make any
+            # page past the slice come back empty even though more real
+            # matches exist.
             final_candidates.sort(key=lambda x: x["rrf_score"], reverse=True)
-            final_candidates = final_candidates[:SearchConfig.SORT_RELEVANCE_POOL_SIZE]
-            final_candidates = self._sort_by_field(final_candidates, filtered_games, search_query.sort)
+            floor = SearchConfig.SORT_RELEVANCE_POOL_SIZE
+            reranked_head = self._sort_by_field(final_candidates[:floor], filtered_games, search_query.sort)
+            final_candidates = reranked_head + final_candidates[floor:]
         else:
             # Default: sort by RRF score descending.
             final_candidates.sort(key=lambda x: x["rrf_score"], reverse=True)

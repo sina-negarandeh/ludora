@@ -281,7 +281,13 @@ Planning rules (how many steps, and how they connect):
         instead of a single intent -- see _build_plan_system_prompt().
         Steps beyond AssistantConfig.MAX_PLAN_STEPS are dropped here,
         deterministically, rather than trusting the model's own restraint
-        or re-prompting for a shorter plan.
+        or re-prompting for a shorter plan. Sorted by step_id before
+        truncating, not truncated in raw JSON-array order: a later,
+        surviving step can only ever reference an earlier step_id (see
+        plan_graph.compile_plan), so dropping the highest step_ids first
+        guarantees truncation can never orphan a reference a kept step
+        depends on -- truncating by array order instead could keep an
+        arbitrary subset and silently strand a dependency.
 
         Runs on self.plan_model (the larger model, see PLAN_MODEL_NAME)
         with thinking mode always allowed, not gated behind a retry.
@@ -312,7 +318,7 @@ Planning rules (how many steps, and how they connect):
             try:
                 plan = ParsedPlan.model_validate(self._parse_leading_json(raw_content))
                 if len(plan.steps) > AssistantConfig.MAX_PLAN_STEPS:
-                    plan.steps = plan.steps[:AssistantConfig.MAX_PLAN_STEPS]
+                    plan.steps = sorted(plan.steps, key=lambda s: s.step_id)[:AssistantConfig.MAX_PLAN_STEPS]
                 return plan
             except (ValidationError, json.JSONDecodeError) as e:
                 last_error = e

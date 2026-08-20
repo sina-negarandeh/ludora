@@ -55,7 +55,22 @@ def compile_plan(plan: ParsedPlan) -> PlanGraph:
     cycle, so position order is always a valid topological order for
     free, without needing a general graph algorithm for a problem this
     constrained (plans top out at MAX_PLAN_STEPS steps).
+
+    step_id is required to be unique across the plan before any of
+    this runs. A "$stepN" reference is validated against N as a
+    POSITION, not by looking up which step declared step_id==N (see
+    PlanStep's docstring on why position, not step_id, is the
+    orchestrator's identity) -- so a duplicate step_id would let the
+    bounds check above pass while silently binding a reference to
+    whichever of the two duplicates happens to sort first, instead of
+    the one the model meant. Rejecting the duplicate outright, the same
+    way a self-reference or forward reference is rejected, turns that
+    into a clean error instead of a silent wrong answer.
     """
+    step_ids = [s.step_id for s in plan.steps]
+    if len(set(step_ids)) != len(step_ids):
+        raise PlanValidationError("plan has two or more steps with the same step_id")
+
     ordered = sorted(plan.steps, key=lambda s: s.step_id)
     steps: list[PlanStep] = []
 

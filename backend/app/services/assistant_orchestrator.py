@@ -276,15 +276,14 @@ class AssistantOrchestrator:
         return step.model_copy(update=updates) if updates else step
 
     def _extract_chainable_values(self, response: AssistantResponse) -> list:
-        """Like _extract_chainable_value, but pulls every (name, bgg_id)
-        pair out of a step's result instead of requiring exactly one --
-        used when the dependent step needs every game an earlier
-        browse/search step found (a "compare" one-to-many placeholder),
-        or just to check how many games a dependency resolved to when
-        deciding whether a substitution is unambiguous (see
-        _resolve_step). The bgg_id travels with the name so
-        _resolve_step can let _handle_compare skip re-resolving a title
-        that's already exact -- see the note there for why that matters.
+        """Pulls every (name, bgg_id) pair out of a step's result --
+        used when a dependent step needs every game an earlier step
+        found (a "compare" one-to-many placeholder), or just to check
+        how many games a dependency resolved to when deciding whether a
+        substitution is unambiguous (see _resolve_step). The bgg_id
+        travels with the name so _resolve_step can let the handlers
+        below skip re-resolving a title that's already exact -- see
+        _resolve_bgg_id for why that matters.
         """
         if not response.data:
             return []
@@ -294,10 +293,24 @@ class AssistantOrchestrator:
         results = response.data.get("results")
         if results:
             return [(r["game"]["name"], r["game"]["bgg_id"]) for r in results if r.get("game", {}).get("name") and r.get("game", {}).get("bgg_id")]
+        recommendations = response.data.get("recommendations")
+        if recommendations:
+            return [(r["game"]["name"], r["game"]["bgg_id"]) for r in recommendations if r.get("game", {}).get("name") and r.get("game", {}).get("bgg_id")]
         game = response.data.get("game")
         if game and game.get("name") and game.get("bgg_id"):
             return [(game["name"], game["bgg_id"])]
         return []
+
+    def _resolve_bgg_id(self, name: str) -> int:
+        """Resolves a game name to its bgg_id, preferring an already-known
+        exact id (populated by _resolve_step for every name substituted
+        from an earlier step's result) over the fuzzy EntityResolver.
+        Skipping the resolver for an already-exact name matters because
+        re-running it through EntityResolver.resolve_game() -- built for
+        fuzzy, typed-in user text -- can still spuriously raise
+        AmbiguousEntityError on it (measured: "Witch Hunt" did this).
+        """
+        return self._known_bgg_ids.get(name) or self.resolver.resolve_game(name)
 
     def _map_filters(self, assistant_filters) -> GameFilter:
         if not assistant_filters:
@@ -453,7 +466,7 @@ class AssistantOrchestrator:
                 data={}
             )
 
-        bgg_id = self.resolver.resolve_game(intent.game_name)
+        bgg_id = self._resolve_bgg_id(intent.game_name)
         
         # Default to hybrid if not specified
         model_name = intent.recommendation_model or "hybrid"
@@ -482,12 +495,7 @@ class AssistantOrchestrator:
             )
 
         names = intent.game_names[:self.MAX_COMPARE_GAMES]
-        # Skip the fuzzy resolver for names we already know the bgg_id
-        # for -- these came from a placeholder expansion (already exact,
-        # straight off a GameResponse), and re-running an exact title
-        # through EntityResolver can still spuriously raise
-        # AmbiguousEntityError on it (measured: "Witch Hunt" did this).
-        bgg_ids = [self._known_bgg_ids.get(name) or self.resolver.resolve_game(name) for name in names]
+        bgg_ids = [self._resolve_bgg_id(name) for name in names]
         games = [self.game_service.get_game(bgg_id) for bgg_id in bgg_ids]
         games = [g for g in games if g is not None]
 
@@ -517,7 +525,7 @@ class AssistantOrchestrator:
                 data={}
             )
 
-        bgg_id = self.resolver.resolve_game(intent.game_name)
+        bgg_id = self._resolve_bgg_id(intent.game_name)
         game = self.game_service.get_game(bgg_id)
 
         if not game:
@@ -603,7 +611,7 @@ class AssistantOrchestrator:
                 data={}
             )
 
-        bgg_id = self.resolver.resolve_game(intent.game_name)
+        bgg_id = self._resolve_bgg_id(intent.game_name)
         game = self.game_service.get_game(bgg_id)
         if not game:
             return AssistantResponse(message="I couldn't find that game.", type="error", parsed_intent=intent, data={})
@@ -665,7 +673,7 @@ class AssistantOrchestrator:
                 data={}
             )
 
-        bgg_id = self.resolver.resolve_game(intent.game_name)
+        bgg_id = self._resolve_bgg_id(intent.game_name)
         game = self.game_service.get_game(bgg_id)
         if not game:
             return AssistantResponse(message="I couldn't find that game.", type="error", parsed_intent=intent, data={})
