@@ -36,7 +36,7 @@ flowchart LR
     end
 
     TBLS <--> SVC
-    SVC -- "intent parsing\n(OpenAI-compatible calls, separate config from summarization)" --> MLX["Local MLX server\nQwen3-4B-MLX-4bit\n(assistant)"]
+    SVC -- "/chat -> parse_plan()\nQwen3-30B-A3B, thinking on\n(OpenAI-compatible, separate config from summarization)" --> MLX["Local MLX server\nserves Qwen3-30B-A3B (/chat, live)\nand Qwen3-4B (/parse, debug only)"]
 
     FE["React 19 frontend\nGamesList · GameDetail · AssistantDrawer"] -- "HTTP (axios / fetch)" --> API
 ```
@@ -85,7 +85,7 @@ Full detail on the ML-relevant services (`SearchService`, `RecommendationService
 
 **Game detail.** `GameDetail.tsx` mounts and independently fires `GET /api/games/{id}` (detail plus a manually-attached `GameSummary`), `GET /api/games/{id}/recommendations?model=hybrid` (default model), `GET /api/games/{id}/reviews` (paginated, 4 per page), and `GET /api/games/{id}/aspects`. These are four independent requests, not one aggregated payload.
 
-**AI Assistant.** `AssistantDrawer.tsx` posts to `POST /api/assistant/chat`. `AssistantService.parse_query()` sends the message plus the `ParsedIntent` JSON schema to the local LLM (`response_format={"type":"json_object"}`, up to 2 retries on a malformed or empty completion), then `AssistantOrchestrator.execute()` pattern-matches on `intent.intent` and calls whichever of `GameService`, `SearchService`, `RecommendationService`, `AspectService`, `ReviewService`, or `EntityResolver` the intent needs, and returns an `AssistantResponse` rendered by `AssistantMessageBubble`. See [docs/ml/assistant.md](../ml/assistant.md) for intent coverage and known gaps.
+**AI Assistant.** `AssistantDrawer.tsx` posts to `POST /api/assistant/chat`. `AssistantService.parse_plan()` sends the message plus the `ParsedPlan` JSON schema to the local LLM (Qwen3-30B-A3B, up to 2 retries on a malformed or empty completion), returning one or more dependent steps rather than a single intent. `AssistantOrchestrator.execute_plan()` compiles the plan into a validated dependency graph (`plan_graph.compile_plan()`), then walks it in order, substituting any earlier step's result into a later step's placeholder before calling whichever of `GameService`, `SearchService`, `RecommendationService`, `AspectService`, `ReviewService`, or `EntityResolver` that step needs, and returns an `AssistantResponse` rendered by `AssistantMessageBubble`. See [docs/ml/assistant.md](../ml/assistant.md) for intent coverage, the multi-step mechanism, and known gaps.
 
 **Offline pipeline.** See [data-pipeline.md](data-pipeline.md) for the full script-by-script trace and run order.
 

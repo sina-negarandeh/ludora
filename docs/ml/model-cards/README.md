@@ -36,4 +36,5 @@ Hybrid search is RRF fusion of the two at request time, no separate model, docum
 
 | Card | Covers |
 |---|---|
-| [assistant-intent-parse.md](assistant-intent-parse.md) | Natural-language → structured intent parsing |
+| [assistant-intent-parse.md](assistant-intent-parse.md) | `POST /parse` debug route, single-intent parsing, `Qwen/Qwen3-4B-MLX-4bit` |
+| [assistant-plan-parse.md](assistant-plan-parse.md) | `POST /chat`, the route the frontend calls; multi-step plan parsing and dependency-graph execution, `Qwen/Qwen3-30B-A3B-MLX-4bit` |

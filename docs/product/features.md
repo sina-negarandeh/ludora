@@ -46,9 +46,9 @@ Some users would rather describe what they want ("economic games for 2-4 players
 
 ![Game catalog page with the AI Assistant drawer open](../assets/images/game_catalog_page.ai_assistant.drawer.png)
 
-A floating chat drawer, present on every page, accepts natural-language messages and renders structured responses as inline cards instead of a plain chat transcript. `AssistantDrawer.tsx` posts to `POST /api/assistant/chat`, which `AssistantService.parse_query()` turns into structured JSON (a local LLM constrained to a `ParsedIntent` Pydantic schema), and `AssistantOrchestrator.execute()` dispatches to the same `GameService` / `SearchService` / `RecommendationService` / `AspectService` / `ReviewService` used by direct browsing. The assistant doesn't have its own separate data path.
+A floating chat drawer, present on every page, accepts natural-language messages and renders structured responses as inline cards instead of a plain chat transcript. `AssistantDrawer.tsx` posts to `POST /api/assistant/chat`, which `AssistantService.parse_plan()` turns into structured JSON (a local LLM constrained to a `ParsedPlan` Pydantic schema, one or more dependent steps), and `AssistantOrchestrator.execute_plan()` dispatches each step to the same `GameService` / `SearchService` / `RecommendationService` / `AspectService` / `ReviewService` used by direct browsing. The assistant doesn't have its own separate data path.
 
-This is a single-shot intent parser with a deterministic dispatcher, not an open-ended agent loop: one LLM call classifies the request into one of eight intents, then a fixed handler runs for that intent. Every intent resolves in one round trip, and there's nothing here that benefits from multi-step planning, since the handlers themselves are the plan.
+This is a structured intent parser with a deterministic dispatcher, not an open-ended agent loop: the LLM plans and understands, everything else is ordinary application code. Most requests resolve in one step, but a request that names a game only by criterion ("the highest-rated strategy game," "the heaviest game vs. the top ranked party game") decomposes into a short, dependency-validated chain of up to 3 steps, an earlier step's result substituted into a later step's placeholder before that step runs. See [docs/ml/assistant.md](../ml/assistant.md) for the mechanism.
 
 **Comparing two games** renders as a side-by-side table instead of two separate cards:
 
@@ -82,7 +82,7 @@ Full intent-parsing and orchestration design: [docs/ml/assistant.md](../ml/assis
 
 **Evidence**: `backend/test_assistant.py`, `test_orchestrator.py` (print-only, need a live LLM server and/or DB; [docs/engineering/testing.md](../engineering/testing.md)).
 
-**Known limitations**: there's no memory across turns; every message is parsed independently, despite a `conversation_id` field existing in the request schema. `compare` needs two or more named titles; a franchise or series reference ("compare the Brass games") doesn't resolve to a concrete pair yet. Detail: [docs/ml/assistant.md](../ml/assistant.md#known-limitation-no-multi-turn-memory).
+**Known limitations**: there's no memory across turns; every message is parsed independently, despite a `conversation_id` field existing in the request schema. A plan's steps can reference each other, but only within the one message that produced them. No grammar-constrained structured output either; the local serving stack has no schema-aware decode hook, so validity relies on prompting plus repair/retry, not a token-level guarantee. Detail: [docs/ml/assistant.md](../ml/assistant.md#known-limitation-no-multi-turn-memory).
 
 ---
 

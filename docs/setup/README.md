@@ -70,11 +70,15 @@ ABSA extraction, LLM summarization, and recommendation precompute are additional
 
 ## Local LLM server
 
-The AI Assistant and LLM summarization features call an OpenAI-compatible local server, with separate config for each rather than shared, since the assistant serves live requests and summarization is an offline precompute job that can point at a different server or instance entirely. Both default to the same `http://localhost:8080/v1` and `Qwen/Qwen3-4B-MLX-4bit`: the assistant via `OPENAI_BASE_URL`/`OPENAI_API_KEY`/`LLM_MODEL_NAME`, summarization via `SUMMARIZATION_OPENAI_BASE_URL`/`SUMMARIZATION_OPENAI_API_KEY`/`SUMMARIZATION_MODEL_NAME`. See `backend/app/core/config.py`, `assistant_service.py`, `summarization_service.py`. Since both currently default to the same model, one `mlx_lm.server` instance covers both features; point the two `*_BASE_URL` settings at separate instances if you want to run different models for each. To run it (Apple Silicon only):
+The AI Assistant and LLM summarization features call an OpenAI-compatible local server, with separate config for each rather than shared, since the assistant serves live requests and summarization is an offline precompute job that can point at a different server or instance entirely. The assistant itself uses two models for two different routes: `LLM_MODEL_NAME` (`Qwen/Qwen3-4B-MLX-4bit`) serves only the `/api/assistant/parse` debug route; `PLAN_MODEL_NAME` (`Qwen/Qwen3-30B-A3B-MLX-4bit`) serves the live `/api/assistant/chat` route the frontend actually calls. See [docs/ml/assistant.md](../ml/assistant.md) for why two models. Summarization uses its own `SUMMARIZATION_MODEL_NAME` (`Qwen/Qwen3-4B-MLX-4bit`), independent of both. All three default to `http://localhost:8080/v1` (`OPENAI_BASE_URL`/`SUMMARIZATION_OPENAI_BASE_URL`). See `backend/app/core/config.py`, `assistant_service.py`, `summarization_service.py`.
+
+`mlx_lm.server` isn't pinned to whichever model is passed to `--model` at startup. It loads any HuggingFace repo id named in a request's `model` field on first use and keeps it resident, so one running instance transparently serves all three model names above without needing to be started three times. Point the different `*_BASE_URL` settings at separate instances only if you actually want to isolate them (e.g. different hardware). To run it (Apple Silicon only):
 
 ```bash
 mlx_lm.server --model "Qwen/Qwen3-4B-MLX-4bit"
 ```
+
+The `--model` flag just sets which model is resident before the first request; a `/chat` call still transparently loads `Qwen/Qwen3-30B-A3B-MLX-4bit` on demand.
 
 Without this running, every other feature (catalog, search, recommendations, ABSA aspect cards) still works. Only the AI Assistant chat and any new Community Consensus generation require it. Existing `game_summaries` rows still display without the LLM server running.
 
@@ -87,7 +91,8 @@ Since the backend runs natively (see above), it reaches this at the default `htt
 | `DATABASE_URL` | Local dev connection string (see `backend/app/core/config.py`) | Backend, overridable via `.env` (not committed) or environment |
 | `OPENAI_BASE_URL` | `http://localhost:8080/v1` | Backend (AI Assistant, live requests) |
 | `OPENAI_API_KEY` | `not-needed-for-local` (placeholder, not a real key) | Backend (AI Assistant) |
-| `LLM_MODEL_NAME` | `Qwen/Qwen3-4B-MLX-4bit` | Backend (AI Assistant) |
+| `LLM_MODEL_NAME` | `Qwen/Qwen3-4B-MLX-4bit` | Backend (AI Assistant, `/parse` debug route only) |
+| `PLAN_MODEL_NAME` | `Qwen/Qwen3-30B-A3B-MLX-4bit` | Backend (AI Assistant, live `/chat` route) |
 | `SUMMARIZATION_OPENAI_BASE_URL` | `http://localhost:8080/v1` | Backend (offline summarization precompute) |
 | `SUMMARIZATION_OPENAI_API_KEY` | `not-needed-for-local` (placeholder) | Backend (summarization) |
 | `SUMMARIZATION_MODEL_NAME` | `Qwen/Qwen3-4B-MLX-4bit` | Backend (summarization) |
