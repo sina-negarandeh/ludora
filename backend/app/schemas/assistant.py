@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import List, Literal, Optional
+from app.schemas.game_query import SortSpec
 
 IntentEnum = Literal[
     "browse",
@@ -14,17 +15,11 @@ IntentEnum = Literal[
 
 SearchMode = Literal["lexical", "semantic", "hybrid"]
 RecommendationFamily = Literal["popularity", "content", "collaborative", "hybrid"]
-SortDirection = Literal["asc", "desc"]
-SortField = Literal["rank", "rating", "year_published", "complexity", "name"]
 # Official (manufacturer-stated / BGG-computed single-value) facts about one
 # game -- deliberately not the "Community" percentile/poll stats shown
 # alongside these on the game detail page (e.g. suggested_num_players,
 # "better than X% of Strategy Games"), which have no single answer to state.
 GameFactEnum = Literal["rank", "rating", "complexity", "player_count", "age", "playtime"]
-
-class SortSpec(BaseModel):
-    field: SortField
-    direction: SortDirection
 
 class GameFilters(BaseModel):
     themes: Optional[List[str]] = Field(default=None, description="Narrow setting/franchise tags, e.g. 'Zombies', 'Cthulhu Mythos', 'Science Fiction'.")
@@ -42,6 +37,8 @@ class GameFilters(BaseModel):
     max_complexity: Optional[float] = Field(default=None, description="Maximum weight/complexity (1.0 to 5.0).")
     min_year: Optional[int] = Field(default=None, description="Published after this year.")
     max_year: Optional[int] = Field(default=None, description="Published before this year.")
+    min_playtime: Optional[int] = Field(default=None, description="Minimum manufacturer-stated playtime in minutes.")
+    max_playtime: Optional[int] = Field(default=None, description="Maximum manufacturer-stated playtime in minutes.")
 
 class ParsedIntent(BaseModel):
     intent: IntentEnum = Field(description="The primary intent of the user.")
@@ -65,6 +62,18 @@ class ParsedIntent(BaseModel):
     recommendation_family: Optional[RecommendationFamily] = Field(default=None, description="The family of recommendation algorithm to use.")
     recommendation_model: Optional[str] = Field(default=None, description="Specific recommendation model name if requested (e.g. 'cf_als', 'embedding').")
     limit: Optional[int] = Field(default=None, description="The number of results requested.")
+
+    # Multi-step plan fields. Unused (defaults only) for the overwhelming
+    # majority of requests, which are a single independent intent -- see
+    # ParsedPlan below. Kept on ParsedIntent itself, not a separate
+    # subclass, so a bare single-step ParsedIntent (e.g. from the /parse
+    # debug endpoint) is still exactly today's shape with two inert extra
+    # fields, not a breaking change.
+    step_id: int = Field(default=0, description="0-based position of this step within its plan, in execution order. Always 0 for a single-step plan.")
+    depends_on_step: Optional[int] = Field(default=None, description="The step_id of an earlier step this one needs completed first, or null if independent. Only set when this step's game_name/game_names references that earlier step's result via a '$stepN' placeholder (see ParsedPlan).")
+
+class ParsedPlan(BaseModel):
+    steps: List[ParsedIntent] = Field(description="One or more steps to execute in order. Most requests need exactly one step -- only decompose into more when a later step genuinely cannot be filled in without an earlier step's result.")
 
 class AssistantResponse(BaseModel):
     message: str = Field(description="Deterministic natural language message for the user.")

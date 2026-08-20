@@ -8,13 +8,23 @@ class Settings(BaseSettings):
     # hyperparameters — see app.core.ml_config for those.
     OPENAI_BASE_URL: str = "http://localhost:8080/v1"
     OPENAI_API_KEY: str = "not-needed-for-local"
-    # Small and fast, not the larger reasoning-capable Qwen3-30B-A3B this used
-    # to point at -- intent parsing is single-shot JSON classification, not a
-    # task that benefits from a bigger "thinking" model. Same model
-    # SUMMARIZATION_MODEL_NAME below uses; kept as its own independent
-    # setting rather than merged with it, so the two can diverge again later
-    # without needing to agree on what serves live traffic.
+    # Used by AssistantService.parse_query() -- single-shot, single-intent
+    # JSON classification, exercised directly only by the /parse debug
+    # route today (the live /chat path uses PLAN_MODEL_NAME below for
+    # everything, single-step requests included). Kept small: this task
+    # has never shown a reliability problem at this size.
     LLM_MODEL_NAME: str = "Qwen/Qwen3-4B-MLX-4bit"
+    # Used by AssistantService.parse_plan() -- the model actually serving
+    # /api/assistant/chat. Deliberately the larger reasoning-capable
+    # model, not the small one above: parse_plan() has to decide whether
+    # a request decomposes into multiple dependent steps and keep a
+    # multi-object JSON plan structurally correct, and measured directly
+    # against this server the small model produced real, repeated
+    # failures on that harder task (a structural JSON bug, and more than
+    # one intent misclassification) that the larger model didn't. Latency
+    # is not a constraint for this project, so there's no reason to trade
+    # correctness for speed here.
+    PLAN_MODEL_NAME: str = "Qwen/Qwen3-30B-A3B-MLX-4bit"
 
     # Separate config for summarization (scripts/generate_summaries.py) —
     # deliberately not shared with the assistant settings above. Summarization

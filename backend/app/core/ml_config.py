@@ -417,3 +417,15 @@ class AssistantConfig:
     # real, reproduced flake, not a broken prompt. One bad call shouldn't
     # fail an entire user request.
     MAX_LLM_RETRIES = 2
+    # Measured, not assumed: on the deeper-nested plan schema, Qwen3-4B
+    # produced a JSON syntax error (one extra closing brace) that
+    # reproduced identically on every retry at TEMPERATURE=0 -- a
+    # deterministic bug retries at the same temperature can never escape.
+    # Retries (attempt > 0) use this instead; the first attempt still
+    # runs at TEMPERATURE for reproducible primary behavior.
+    RETRY_TEMPERATURE = 0.3
+    # A hard ceiling on plan length, enforced in the orchestrator, not
+    # requested of the model -- caps a runaway decomposition (or a
+    # confidently-wrong one) at a size that's still cheap and legible to
+    # execute, rather than trusting the LLM's own restraint.
+    MAX_PLAN_STEPS = 3
