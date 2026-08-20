@@ -3,14 +3,21 @@ import time
 import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 from app.api.routes import assistant, games, metadata, recommendations, search
 from app.core.logging_config import configure_logging
+from app.core.otel_config import configure_otel
 
+# Order between these two doesn't matter: both just register global state
+# (structlog's processor chain, OTel's providers/handler) -- nothing
+# actually logs until a request comes in, well after both have run.
 configure_logging()
+configure_otel()
 logger = structlog.get_logger("ludora.request")
 
 app = FastAPI(title="Ludora API", version="0.1.0")
+FastAPIInstrumentor.instrument_app(app)
 
 # Set all CORS enabled origins
 app.add_middleware(
