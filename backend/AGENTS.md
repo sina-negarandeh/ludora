@@ -4,7 +4,7 @@ Scope: `backend/`. Read [../AGENTS.md](../AGENTS.md) first.
 
 ## Stack
 
-Python >=3.10, managed with `uv`. FastAPI >=0.111, SQLAlchemy >=2.0.30, Alembic >=1.13.1, Pydantic >=2.7.4 + pydantic-settings, `psycopg[binary]` (psycopg3), PostgreSQL 15 + pgvector, `structlog` (request + assistant LLM-call logging, see `docs/architecture/README.md`). ML: `mlx-embeddings` (search embeddings, Qwen3-Embedding-0.6B on Apple MLX), sentence-transformers (used only by `scripts/count_clusters.py`'s review-dedup path), scikit-learn, `implicit` (ALS), fastText, HuggingFace `transformers`. LLM: `openai` SDK against a local OpenAI-compatible server, not OpenAI's API.
+Python >=3.10, managed with `uv`. FastAPI >=0.111, SQLAlchemy >=2.0.30, Alembic >=1.13.1, Pydantic >=2.7.4 + pydantic-settings, `psycopg[binary]` (psycopg3), PostgreSQL 15 + pgvector, `structlog` (request + assistant LLM-call logging), OpenTelemetry (FastAPI/SQLAlchemy/httpx traces + metrics, logs bridge -- opt-in local Grafana/Loki/Tempo/Prometheus stack, see `docs/engineering/observability.md`). ML: `mlx-embeddings` (search embeddings, Qwen3-Embedding-0.6B on Apple MLX), sentence-transformers (used only by `scripts/count_clusters.py`'s review-dedup path), scikit-learn, `implicit` (ALS), fastText, HuggingFace `transformers`. LLM: `openai` SDK against a local OpenAI-compatible server, not OpenAI's API.
 
 ## Commands
 
