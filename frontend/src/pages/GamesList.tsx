@@ -797,9 +797,10 @@ export const GamesList: React.FC = () => {
                   onClick={() => setOpenDropdown(openDropdown === 'sort' ? null : 'sort')}
                   className="bg-transparent border-none text-text font-bold text-sm focus:ring-0 cursor-pointer py-0 pl-5 pr-9 outline-none hover:bg-neutral/5 transition-colors h-full flex items-center w-[160px] text-left rounded-l-full"
                 >
-                  {query.sort_by === 'rating' ? 'Rating' : 
+                  {query.sort_by === 'rating' ? 'Rating' :
                    query.sort_by === 'year' ? 'Year Published' :
                    query.sort_by === 'complexity' ? 'Complexity' :
+                   query.sort_by === 'playtime' ? 'Playtime' :
                    query.sort_by === 'name' ? 'Name' : 'Rank'}
                 </button>
                 <div className="absolute right-3 flex items-center pointer-events-none text-secondary-text">
@@ -813,6 +814,7 @@ export const GamesList: React.FC = () => {
                       { id: 'rating', label: 'Rating' },
                       { id: 'year', label: 'Year Published' },
                       { id: 'complexity', label: 'Complexity' },
+                      { id: 'playtime', label: 'Playtime' },
                       { id: 'name', label: 'Name' }
                     ].map(opt => (
                       <button
