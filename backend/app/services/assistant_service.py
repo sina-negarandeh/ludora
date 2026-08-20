@@ -1,13 +1,17 @@
 import json
 import re
-from typing import Optional
+import time
+
+import structlog
 from openai import OpenAI
 from pydantic import ValidationError
+
 from app.core.config import settings
 from app.core.ml_config import AssistantConfig
 from app.schemas.assistant import ParsedIntent, ParsedPlan
 
 _THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+logger = structlog.get_logger("ludora.assistant")
 
 class AssistantService:
     def __init__(self):
@@ -253,8 +257,9 @@ Planning rules (how many steps, and how they connect):
         # prompt occasionally comes back with an empty completion and
         # succeeds on a byte-identical retry. One bad call shouldn't fail
         # an entire user request.
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
         for attempt in range(AssistantConfig.MAX_LLM_RETRIES + 1):
+            start = time.perf_counter()
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -265,15 +270,35 @@ Planning rules (how many steps, and how they connect):
                 temperature=self._temperature_for_attempt(attempt),
                 max_tokens=AssistantConfig.MAX_TOKENS
             )
+            duration_ms = round((time.perf_counter() - start) * 1000, 1)
 
             raw_content = self._strip_markdown_json(response.choices[0].message.content or "{}")
 
             try:
-                return ParsedIntent.model_validate(self._parse_leading_json(raw_content))
+                parsed = ParsedIntent.model_validate(self._parse_leading_json(raw_content))
+                logger.info(
+                    "assistant.parse_query", model=self.model, attempt=attempt,
+                    duration_ms=duration_ms, outcome="ok", intent=parsed.intent,
+                )
+                return parsed
             except (ValidationError, json.JSONDecodeError) as e:
+                logger.warning(
+                    "assistant.parse_query", model=self.model, attempt=attempt,
+                    duration_ms=duration_ms, outcome="retry", error=str(e)[:300],
+                )
                 last_error = e
                 continue
 
+        # Unreachable in practice: the loop above always either returns or
+        # sets last_error before falling through here, since range(...) is
+        # never empty. The assert documents that guarantee for the type
+        # checker rather than asserting it can't fail.
+        assert last_error is not None
+        logger.error(
+            "assistant.parse_query", model=self.model,
+            attempts=AssistantConfig.MAX_LLM_RETRIES + 1, outcome="failed",
+            error=str(last_error)[:300], query=user_message[:200],
+        )
         raise last_error
 
     def parse_plan(self, user_message: str) -> ParsedPlan:
@@ -299,9 +324,10 @@ Planning rules (how many steps, and how they connect):
         genuinely stochastic flakes (an empty completion), not as the
         primary reliability mechanism anymore.
         """
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
         for attempt in range(AssistantConfig.MAX_LLM_RETRIES + 1):
             system_prompt = self._build_plan_system_prompt(allow_thinking=True)
+            start = time.perf_counter()
             response = self.client.chat.completions.create(
                 model=self.plan_model,
                 messages=[
@@ -312,6 +338,7 @@ Planning rules (how many steps, and how they connect):
                 temperature=self._temperature_for_attempt(attempt),
                 max_tokens=AssistantConfig.MAX_TOKENS
             )
+            duration_ms = round((time.perf_counter() - start) * 1000, 1)
 
             raw_content = self._strip_markdown_json(response.choices[0].message.content or "{}")
 
@@ -319,9 +346,25 @@ Planning rules (how many steps, and how they connect):
                 plan = ParsedPlan.model_validate(self._parse_leading_json(raw_content))
                 if len(plan.steps) > AssistantConfig.MAX_PLAN_STEPS:
                     plan.steps = sorted(plan.steps, key=lambda s: s.step_id)[:AssistantConfig.MAX_PLAN_STEPS]
+                logger.info(
+                    "assistant.parse_plan", model=self.plan_model, attempt=attempt,
+                    duration_ms=duration_ms, outcome="ok", step_count=len(plan.steps),
+                )
                 return plan
             except (ValidationError, json.JSONDecodeError) as e:
+                logger.warning(
+                    "assistant.parse_plan", model=self.plan_model, attempt=attempt,
+                    duration_ms=duration_ms, outcome="retry", error=str(e)[:300],
+                )
                 last_error = e
                 continue
 
+        # Same guarantee as parse_query() above: unreachable with last_error
+        # still None, since the loop always either returns or sets it.
+        assert last_error is not None
+        logger.error(
+            "assistant.parse_plan", model=self.plan_model,
+            attempts=AssistantConfig.MAX_LLM_RETRIES + 1, outcome="failed",
+            error=str(last_error)[:300], query=user_message[:200],
+        )
         raise last_error
