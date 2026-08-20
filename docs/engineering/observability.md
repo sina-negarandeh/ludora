@@ -1,6 +1,6 @@
 # Observability
 
-**Status: real, verified, end-to-end for the live API process only.** Structured logging (`structlog`), distributed tracing, metrics, and log export all run and were confirmed against actual exported data, not just "the code imports the SDK." The offline pipeline (`scripts/`) and the AI Assistant's LLM-specific tracing (Langfuse) are not instrumented -- see "What's not wired" below.
+**Status: real, verified, end-to-end for the live API process only.** Structured logging (`structlog`), distributed tracing, metrics, log export, and LLM-call tracing (Langfuse) all run and were confirmed against actual exported data, not just "the code imports the SDK." The offline pipeline (`scripts/`) is not instrumented -- see "What's not wired" below.
 
 ## What's wired
 
@@ -15,10 +15,12 @@
 
 Degrades the same way the local LLM server does (`backend/AGENTS.md`): if the collector isn't running, OTLP exports fail/retry in the background and every endpoint keeps working exactly as before. Nothing here is required to run the app.
 
+**Langfuse** (`langfuse/`, opt-in via `make langfuse-up`, see `langfuse/README.md`): `AssistantService` imports `from langfuse.openai import OpenAI` instead of the plain SDK, tracing every `parse_query()`/`parse_plan()` call with the full prompt, completion, token usage, latency, and model params -- content the generic OTel setup above never captures. Composes with, doesn't fight, the OTel setup above: Langfuse's SDK detects the real `TracerProvider` `configure_otel()` already registered and adds its own span processor to it rather than replacing it, and that processor only exports spans it recognizes as its own, so LLM traces go to Langfuse and HTTP/DB traces go to Tempo, never crossed. Verified with a real call, same `trace_id` correlation as everything else in this doc.
+
 ## What's not wired
 
-- **Langfuse / LLM-specific tracing.** The assistant's own two OTel-free things -- prompt/completion content, token counts, model-quality signal -- aren't captured anywhere. `AssistantService`'s structlog lines record duration and pass/fail per attempt, nothing about the prompt or response itself.
-- **The offline pipeline** (`scripts/`, `backend/evaluation/`) emits no telemetry at all. Only the live `uvicorn` process is instrumented; a script run is invisible to this stack.
+- **`SummarizationService`** (the offline `scripts/generate_summaries.py` batch job) still uses the plain `openai.OpenAI` client, not Langfuse's wrapper -- out of scope since it isn't "the AI Assistant," and an offline job the rest of this stack doesn't cover either.
+- **The offline pipeline** (`scripts/`, `backend/evaluation/`) emits no telemetry at all otherwise. Only the live `uvicorn` process is instrumented; a script run is invisible to this stack.
 - **No Grafana dashboards.** The `observability/grafana/provisioning/dashboards/` directory exists (so Grafana's provisioner doesn't error on startup) but is empty -- Explore-view queries only, no saved dashboard.
 - **No alerting, no retention policy, no auth on Grafana** (anonymous admin login) -- a local-dev/demo posture, consistent with this project's no-auth stance elsewhere (`AGENTS.md` boundaries), not a production configuration.
 
@@ -34,10 +36,11 @@ Verified directly against a running stack (`make observability-up` + `uv run uvi
 
 ```bash
 make observability-up   # collector + prometheus + loki + tempo + grafana
+make langfuse-up        # optional -- only if you want LLM call tracing too
 cd backend && uv run uvicorn app.main:app --reload
 ```
 
-Grafana: http://localhost:3000 (Explore, pick a datasource). Full port/URL table and data-flow diagram: `observability/README.md`.
+Grafana: http://localhost:3000 (Explore, pick a datasource). Langfuse: http://localhost:3001. Full port/URL tables and data-flow diagrams: `observability/README.md`, `langfuse/README.md`.
 
 ## Known limitations
 
@@ -47,7 +50,9 @@ Grafana: http://localhost:3000 (Explore, pick a datasource). Full port/URL table
 
 ## Related code
 
-- `backend/app/core/logging_config.py`, `backend/app/core/otel_config.py`, `backend/app/core/config.py` (`OTEL_EXPORTER_OTLP_ENDPOINT`)
-- `backend/app/main.py` (`FastAPIInstrumentor`), `backend/app/database/session.py` (`SQLAlchemyInstrumentor`)
+- `backend/app/core/logging_config.py`, `backend/app/core/otel_config.py`, `backend/app/core/langfuse_config.py`, `backend/app/core/config.py` (`OTEL_EXPORTER_OTLP_ENDPOINT`, `LANGFUSE_PUBLIC_KEY`/`SECRET_KEY`/`BASE_URL`)
+- `backend/app/main.py` (`FastAPIInstrumentor`, `configure_langfuse()`), `backend/app/database/session.py` (`SQLAlchemyInstrumentor`), `backend/app/services/assistant_service.py` (`from langfuse.openai import OpenAI`)
 - `observability/` (`README.md`, `otel-collector-config.yaml`, `prometheus.yml`, `loki-config.yaml`, `tempo.yaml`, `grafana/provisioning/`)
-- `docker-compose.yml` (`observability` profile), `Makefile` (`observability-up`/`-down`/`-logs`)
+- `langfuse/README.md`
+- `docker-compose.yml` (`observability` and `langfuse` profiles), `Makefile` (`observability-*`/`langfuse-*` targets)
+- `.env.example`, `backend/.env.example`
