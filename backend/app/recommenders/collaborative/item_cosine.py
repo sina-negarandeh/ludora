@@ -69,7 +69,7 @@ class ItemCosineRecommender(BaseRecommender):
         valid_mask = co_occurrences >= self.min_shared_users
         
         # Element-wise multiply the sim_matrix with the valid mask
-        self.item_sim_matrix = sim_matrix.multiply(valid_mask)  # pyright: ignore[reportAttributeAccessIssue] -- scipy sparse matrix .multiply() exists at runtime, just missing from its stub
+        self.item_sim_matrix = sim_matrix.multiply(valid_mask)
         
         # Zero out diagonal (self similarity)
         self.item_sim_matrix.setdiag(0)

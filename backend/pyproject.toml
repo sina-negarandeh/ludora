@@ -98,6 +98,22 @@ testpaths = ["tests"]
 
 [tool.pyright]
 include = ["app", "tests"]
+# These four files live under app/ (shared code the offline pipeline's
+# scripts import directly -- see their own module comments) but are never
+# imported by the live API itself, and import ml-group-only packages
+# (mlflow, nltk, scikit-learn, implicit, pandas) that a lean `uv sync`
+# deliberately doesn't install (see the ml group's own comment). CI runs
+# pyright against exactly that lean install, not `--all-groups`, so
+# without this exclude every one of those imports fails as
+# reportMissingImports -- measured directly (11 real CI failures on a
+# fresh Ubuntu runner), not assumed; local runs never caught it because
+# `--all-groups` was synced throughout development.
+exclude = [
+    "app/core/mlflow_utils.py",
+    "app/core/review_quality.py",
+    "app/recommenders/collaborative/als.py",
+    "app/recommenders/collaborative/item_cosine.py",
+]
 # "basic", not "strict": nothing in this codebase has ever been type-checked.
 # Strict mode on a first pass would mostly flag third-party libraries with
 # no stubs (e.g. implicit) and SQLAlchemy's dynamic attribute access,

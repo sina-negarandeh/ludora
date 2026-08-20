@@ -44,7 +44,7 @@ class ALSRecommender(BaseRecommender):
         # the raw 1-10 rating straight through would read a low rating as
         # "low-confidence positive" instead of "confident dislike", since
         # implicit feedback has no concept of a negative observation.
-        confidence = 1.0 + self.confidence_alpha * df['rating'].values  # pyright: ignore[reportOperatorIssue] -- pandas' .values stub is imprecise here, not a real type error
+        confidence = 1.0 + self.confidence_alpha * df['rating'].values
 
         n_users = len(user_ids.cat.categories)
         n_items = len(item_ids.cat.categories)
