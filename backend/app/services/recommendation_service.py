@@ -1,14 +1,26 @@
+# Known limitation, tracked in docs/roadmap.md: app/database/models.py uses
+# SQLAlchemy's legacy Column(...) declarative style, not 2.0's typed
+# Mapped[]/mapped_column(). Pyright can't tell an instance attribute like
+# `game.rank` apart from the class-level Column descriptor, so it reports
+# every read of a model attribute as Column[X] instead of X. These are
+# false positives, not real bugs -- confirmed by direct behavior at
+# runtime throughout this session -- and this file is unusually dense with
+# them since it's mostly model-attribute plumbing. Suppressed here rather
+# than project-wide so a real error of the same rule elsewhere still surfaces.
+# pyright: reportArgumentType=false, reportCallIssue=false, reportGeneralTypeIssues=false
+
 from sqlalchemy.orm import Session, joinedload
-from app.database.models import GameRecommendation, Game, GameEmbedding
-from app.core.ml_config import SearchConfig, RecommenderConfig, RECOMMENDATION_MODELS
+
+from app.core.ml_config import RECOMMENDATION_MODELS, RecommenderConfig, SearchConfig
+from app.database.models import Game, GameEmbedding, GameRecommendation
 from app.recommenders.utils import minmax_normalize_scores
-from typing import List, Dict
+
 
 class RecommendationService:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_recommendation_models(self) -> List[Dict]:
+    def get_recommendation_models(self) -> list[dict]:
         # Single source of truth in ml_config.py -- previously a stale,
         # disagreeing 3-entry list nothing else matched (the frontend
         # hardcoded its own separate 10-entry array instead of calling this).
@@ -78,8 +90,10 @@ class RecommendationService:
                 if g is None:
                     continue
                 sources = []
-                if cid in collab_scores: sources.append("collaborative")
-                if cid in content_scores: sources.append("content")
+                if cid in collab_scores:
+                    sources.append("collaborative")
+                if cid in content_scores:
+                    sources.append("content")
                 recs.append({"game": g, "score": round(blended[cid], 4), "reason": [f"Blended {' + '.join(sources)} match"]})
             return source_game, recs
 
@@ -134,7 +148,8 @@ class RecommendationService:
 
         recs = []
         for r in db_recs:
-            if not r.recommended_game: continue
+            if not r.recommended_game:
+                continue
             recs.append({
                 "game": r.recommended_game,
                 "score": round(r.score, 4),

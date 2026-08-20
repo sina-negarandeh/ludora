@@ -1,9 +1,12 @@
+from typing import Any
+
 from sqlalchemy.orm import Session
-from app.services.search_service import SearchService
-from app.schemas.search import SearchQuery, SearchMode
+
+from app.database.models import Artist, Category, Designer, Mechanic, Publisher, Subdomain, Subfamily, Theme
 from app.schemas.game_query import GameFilter
-from app.database.models import Category, Theme, Mechanic, Subdomain, Subfamily, Designer, Artist, Publisher
-from typing import List, Dict, Any
+from app.schemas.search import SearchMode, SearchQuery
+from app.services.search_service import SearchService
+
 
 class EntityNotFoundError(Exception):
     def __init__(self, query: str):
@@ -11,7 +14,7 @@ class EntityNotFoundError(Exception):
         super().__init__(f"Could not resolve any game or tag for query: '{query}'")
 
 class AmbiguousEntityError(Exception):
-    def __init__(self, query: str, matches: List[Dict[str, Any]]):
+    def __init__(self, query: str, matches: list[dict[str, Any]]):
         self.query = query
         self.matches = matches
         super().__init__(f"Ambiguous match for query: '{query}'. Provide matches for clarification.")
@@ -45,7 +48,7 @@ class EntityResolver:
     }
     _ALL_TAG_TYPES = {**_CONTENT_TAG_TYPES, **_CREDIT_TAG_TYPES}
 
-    _caches: Dict[str, Dict[str, str]] = {}
+    _caches: dict[str, dict[str, str]] = {}
     _caches_loaded: bool = False
 
     def __init__(self, db: Session):
@@ -86,7 +89,7 @@ class EntityResolver:
             if values:
                 all_content_tags.extend(values)
 
-        resolved_content: Dict[str, list] = {field_name: [] for field_name in self._CONTENT_TAG_TYPES}
+        resolved_content: dict[str, list] = {field_name: [] for field_name in self._CONTENT_TAG_TYPES}
 
         for tag in all_content_tags:
             norm = self._normalize(tag)

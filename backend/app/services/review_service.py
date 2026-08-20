@@ -1,7 +1,9 @@
-from sqlalchemy.orm import Session
+
 from sqlalchemy import func
-from typing import Optional
+from sqlalchemy.orm import Session
+
 from app.database.models import Review
+
 
 class ReviewService:
     def __init__(self, db: Session):
@@ -12,9 +14,9 @@ class ReviewService:
         bgg_id: int, 
         page: int = 1, 
         page_size: int = 10,
-        min_rating: Optional[float] = None,
-        max_rating: Optional[float] = None,
-        language: Optional[str] = None
+        min_rating: float | None = None,
+        max_rating: float | None = None,
+        language: str | None = None
     ):
         skip = (page - 1) * page_size
         

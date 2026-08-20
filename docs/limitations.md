@@ -18,11 +18,11 @@ Grouped by area. Each item links to the doc with full evidence and detail; this 
 
 ## Engineering
 
-- **No automated test suite.** Every `test_*.py` file in `backend/` is a print-only script with zero `assert` statements, and several require a live database and/or a live local LLM server to run meaningfully. No frontend test framework is installed. No CI is configured. Detail: [docs/engineering/testing.md](engineering/testing.md).
+- **Automated test coverage is minimal.** `backend/tests/` has two genuinely infra-free `pytest` tests, run in CI on every PR. Every original `test_*.py` file in `backend/` is still a print-only script with zero `assert` statements, several requiring a live database and/or a live local LLM server to run meaningfully, and none of them run in CI. No frontend test framework is installed. Detail: [docs/engineering/testing.md](engineering/testing.md).
 - **No authentication on any route.**
 - **CORS is fully open** (`allow_origins=["*"]`, `allow_credentials=True`), marked `# For development` in source but not conditionally disabled for any other environment.
 - **`DATABASE_URL` has a hardcoded local-development default credential** in `backend/app/core/config.py`, mirrored in `docker-compose.yml`. Low severity for a local portfolio project; would need to move to environment-only configuration (with a committed `.env.example` and no default) before any public deployment. No credential values are reproduced anywhere in this documentation set.
-- **No CI/CD pipeline** of any kind.
+- **CI/CD is backend-only and partial.** `.github/workflows/backend-ci.yml` runs lint, type check, and the minimal test suite above on every PR touching `backend/`. No frontend CI (`npm run build`/`npm run lint`) exists yet, and nothing deploys anything.
 - **The commit history spans five calendar days** (2026-08-15 to 2026-08-19). This is a concentrated build, not a project that has weathered long-lived production usage. Framing should reflect that honestly; see [docs/case-study.md](case-study.md).
 
 ## Data

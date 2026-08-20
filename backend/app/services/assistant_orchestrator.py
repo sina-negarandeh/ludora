@@ -1,17 +1,19 @@
-from typing import Optional
+
 from sqlalchemy.orm import Session
-from app.schemas.assistant import ParsedIntent, ParsedPlan, AssistantResponse
-from app.schemas.game_query import GameFilter
-from app.schemas.search import SearchQuery, SearchMode
-from app.schemas.game import GameResponse
+
 from app.core.ml_config import ABSAConfig
+from app.schemas.assistant import AssistantResponse, ParsedIntent, ParsedPlan
+from app.schemas.game import GameResponse
+from app.schemas.game_query import GameFilter
+from app.schemas.search import SearchMode, SearchQuery
+from app.services.aspect_service import AspectAggregateResponse, AspectService
+from app.services.entity_resolver import AmbiguousEntityError, EntityNotFoundError, EntityResolver
 from app.services.game_service import GameService
-from app.services.search_service import SearchService
-from app.services.recommendation_service import RecommendationService
-from app.services.aspect_service import AspectService, AspectAggregateResponse
-from app.services.review_service import ReviewService
-from app.services.entity_resolver import EntityResolver, AmbiguousEntityError, EntityNotFoundError
 from app.services.plan_graph import PlanStep, PlanValidationError, compile_plan
+from app.services.recommendation_service import RecommendationService
+from app.services.review_service import ReviewService
+from app.services.search_service import SearchService
+
 
 class AssistantOrchestrator:
     # Cap on how many games a "compare" request will fetch/render -- past
@@ -193,9 +195,13 @@ class AssistantOrchestrator:
                 elif len(chained_names) > 1:
                     final = final.model_copy(update={"message": f"Based on {len(chained_names)} suggestions ({', '.join(chained_names)}): {final.message}"})
 
+        # graph.steps is non-empty here (the len == 1 case already
+        # returned above), so the loop runs at least once and every
+        # iteration sets final before continuing or breaking.
+        assert final is not None
         return final
 
-    def _resolve_step(self, node: PlanStep, results: dict) -> Optional[ParsedIntent]:
+    def _resolve_step(self, node: PlanStep, results: dict) -> ParsedIntent | None:
         """Substitutes every "$stepN" placeholder in node.intent's
         game_name/game_names with real values drawn from `results`, per
         node.depends_on (already validated non-empty and, by
@@ -252,6 +258,10 @@ class AssistantOrchestrator:
             updates["game_name"] = name
 
         if node.game_names_refs:
+            # game_names_refs is only populated by compile_plan when it
+            # found placeholder matches while iterating step.game_names,
+            # so game_names is guaranteed non-None here.
+            assert step.game_names is not None
             new_names = list(step.game_names)
             if len(node.game_names_refs) == 1:
                 (idx, position), = node.game_names_refs.items()

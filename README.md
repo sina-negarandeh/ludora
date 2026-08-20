@@ -74,6 +74,8 @@ cd backend && uv sync && uv run uvicorn app.main:app --reload
 - API + Swagger docs: http://localhost:8000/docs
 - Postgres: `localhost:5432`
 
+A root `Makefile` wraps both of the above plus lint/typecheck/test (`make help` for the full list).
+
 This brings up an **empty** database; nothing here seeds it. To populate the catalog, run the data pipeline (raw CSVs, then a master dataset, then Postgres, then embeddings and search vectors). See [docs/setup/README.md](docs/setup/README.md) for exact commands and [docs/architecture/data-pipeline.md](docs/architecture/data-pipeline.md) for what each of the 27 scripts does. The AI assistant and "Community Consensus" generation also need a local MLX server (Apple Silicon only); everything else works without it.
 
 ## Data
@@ -93,7 +95,7 @@ All of it traces back to [BoardGameGeek](https://boardgamegeek.com/) and its com
 | [docs/data/README.md](docs/data/README.md) | Dataset provenance, schema, taxonomy, data quality rules |
 | [docs/ml/README.md](docs/ml/README.md) | Search, recommenders, ABSA, and the assistant, one doc per system |
 | [docs/ml/evaluation.md](docs/ml/evaluation.md) | What's measured, what's observed but unverified, what isn't evaluated at all |
-| [docs/engineering/testing.md](docs/engineering/testing.md) | The actual state of test coverage: no assertions, no CI |
+| [docs/engineering/testing.md](docs/engineering/testing.md) | The actual state of test coverage: minimal but real backend CI, everything else still manual |
 | [docs/setup/README.md](docs/setup/README.md) | Verified setup and environment variable reference |
 | [docs/roadmap.md](docs/roadmap.md) | Concretely evidenced planned or unfinished work |
 | [docs/limitations.md](docs/limitations.md) | Every known gap, in one place |

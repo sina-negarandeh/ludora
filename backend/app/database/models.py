@@ -1,8 +1,10 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, JSON, Text, func, UniqueConstraint
-from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import TSVECTOR
 from pgvector.sqlalchemy import Vector
+from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import TSVECTOR
+from sqlalchemy.orm import relationship
+
 from app.database.session import Base
+
 
 # --- Join Tables ---
 class GameCategory(Base):

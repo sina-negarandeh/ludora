@@ -1,10 +1,13 @@
+from typing import Any
+
 import numpy as np
 import pandas as pd
 from scipy.sparse import csr_matrix
 from sklearn.metrics.pairwise import cosine_similarity
-from typing import List, Dict, Any
-from app.recommenders.base import BaseRecommender
+
 from app.core.ml_config import RecommenderConfig
+from app.recommenders.base import BaseRecommender
+
 
 class ItemCosineRecommender(BaseRecommender):
     def __init__(self, min_shared_users: int = RecommenderConfig.CF_ITEM_COSINE_MIN_SHARED_USERS):
@@ -66,12 +69,12 @@ class ItemCosineRecommender(BaseRecommender):
         valid_mask = co_occurrences >= self.min_shared_users
         
         # Element-wise multiply the sim_matrix with the valid mask
-        self.item_sim_matrix = sim_matrix.multiply(valid_mask)
+        self.item_sim_matrix = sim_matrix.multiply(valid_mask)  # pyright: ignore[reportAttributeAccessIssue] -- scipy sparse matrix .multiply() exists at runtime, just missing from its stub
         
         # Zero out diagonal (self similarity)
         self.item_sim_matrix.setdiag(0)
 
-    def recommend(self, item_id: int, limit: int = 10) -> List[Dict[str, Any]]:
+    def recommend(self, item_id: int, limit: int = 10) -> list[dict[str, Any]]:
         if self.item_sim_matrix is None:
             raise ValueError("Model has not been fitted.")
 

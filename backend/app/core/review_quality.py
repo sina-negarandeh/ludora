@@ -23,12 +23,12 @@ import json
 import os
 import re
 import unicodedata
-from typing import Iterable, List, Optional, Set, Tuple
+from collections.abc import Iterable
 
 import nltk
 from nltk.corpus import stopwords as nltk_stopwords
-from nltk.stem import SnowballStemmer
 from nltk.sentiment import SentimentIntensityAnalyzer
+from nltk.stem import SnowballStemmer
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 
 from app.core.ml_config import ABSAConfig
@@ -51,7 +51,7 @@ _ensure_nltk_stopwords()
 # Union of both, not either alone — sklearn's and NLTK's English stopword
 # lists don't fully overlap; combining them is a strict improvement in
 # coverage for zero extra runtime cost (still just a frozenset lookup).
-STOPWORDS: Set[str] = set(ENGLISH_STOP_WORDS) | set(nltk_stopwords.words("english"))
+STOPWORDS: set[str] = set(ENGLISH_STOP_WORDS) | set(nltk_stopwords.words("english"))
 
 _stemmer = SnowballStemmer("english")
 
@@ -90,7 +90,7 @@ def stem(token: str) -> str:
     return _stemmer.stem(token)
 
 
-def tokenize(text: str) -> List[str]:
+def tokenize(text: str) -> list[str]:
     if not text:
         return []
     return _TOKEN_PATTERN.findall(text.lower())
@@ -120,7 +120,7 @@ def has_valid_unicode(text: str) -> bool:
     return (bad / len(text)) < ABSAConfig.QUALITY_MAX_BAD_UNICODE_RATIO
 
 
-def passes_language_filter(language: Optional[str], confidence: Optional[float]) -> bool:
+def passes_language_filter(language: str | None, confidence: float | None) -> bool:
     """Reads the already-computed reviews.language/language_confidence
     columns (scripts/detect_languages.py) — does not run fastText itself.
     The old compute_quality_score() re-ran language ID from scratch on every
@@ -160,7 +160,7 @@ def _feature_hash(token: str) -> int:
     return int(hashlib.md5(token.encode("utf-8")).hexdigest(), 16)
 
 
-def simhash(tokens: List[str], bits: int = None) -> int:
+def simhash(tokens: list[str], bits: int | None = None) -> int:
     bits = bits or ABSAConfig.QUALITY_SIMHASH_BITS
     if not tokens:
         return 0
@@ -180,14 +180,14 @@ def hamming_distance(a: int, b: int) -> int:
     return bin(a ^ b).count("1")
 
 
-def is_near_duplicate(fingerprint: int, seen_fingerprints: Iterable[int], max_distance: int = None) -> bool:
+def is_near_duplicate(fingerprint: int, seen_fingerprints: Iterable[int], max_distance: int | None = None) -> bool:
     max_distance = ABSAConfig.QUALITY_SIMHASH_MAX_DISTANCE if max_distance is None else max_distance
     return any(hamming_distance(fingerprint, other) <= max_distance for other in seen_fingerprints)
 
 
 # --- Continuous quality signals ---
 
-def information_density(tokens: List[str]) -> float:
+def information_density(tokens: list[str]) -> float:
     """content tokens / total tokens — non-stopword share of the review."""
     if not tokens:
         return 0.0
@@ -195,7 +195,7 @@ def information_density(tokens: List[str]) -> float:
     return len(content) / len(tokens)
 
 
-def lexical_diversity(tokens: List[str]) -> float:
+def lexical_diversity(tokens: list[str]) -> float:
     """unique tokens / total tokens (type-token ratio) — catches padded,
     repetitive text long enough to pass a pure length check
     ("good good good fun fun")."""
@@ -204,7 +204,7 @@ def lexical_diversity(tokens: List[str]) -> float:
     return len(set(tokens)) / len(tokens)
 
 
-def specificity_score(tokens: List[str], domain_vocab: Optional[Set[str]] = None) -> float:
+def specificity_score(tokens: list[str], domain_vocab: set[str] | None = None) -> float:
     """Fraction of (stemmed) tokens that are game-specific/content-bearing
     terms, per ABSAConfig.DOMAIN_VOCABULARY — a corpus-derived,
     human-curated list (see scripts/build_review_quality_vocab.py), not a
@@ -221,9 +221,9 @@ def specificity_score(tokens: List[str], domain_vocab: Optional[Set[str]] = None
 
 
 def boilerplate_fraction(
-    tokens: List[str],
-    boilerplate_ngrams: Optional[Set[Tuple[str, ...]]] = None,
-    n: Optional[int] = None,
+    tokens: list[str],
+    boilerplate_ngrams: set[tuple[str, ...]] | None = None,
+    n: int | None = None,
 ) -> float:
     """Fraction of tokens falling inside a corpus-frequent n-gram — catches
     templated phrases reused across *different* users' reviews, not just
@@ -244,7 +244,7 @@ _BOILERPLATE_NGRAMS_PATH = os.path.join(
 )
 
 
-def load_boilerplate_ngrams() -> Set[Tuple[str, ...]]:
+def load_boilerplate_ngrams() -> set[tuple[str, ...]]:
     """Optional precomputed artifact (scripts/build_review_quality_vocab.py)
     — if it hasn't been built yet, the boilerplate signal just contributes
     nothing rather than failing. Shared by every script that scores review
@@ -257,8 +257,8 @@ def load_boilerplate_ngrams() -> Set[Tuple[str, ...]]:
 
 def compute_quality_score(
     text: str,
-    domain_vocab: Optional[Set[str]] = None,
-    boilerplate_ngrams: Optional[Set[Tuple[str, ...]]] = None,
+    domain_vocab: set[str] | None = None,
+    boilerplate_ngrams: set[tuple[str, ...]] | None = None,
 ) -> float:
     """Weighted combination of the four continuous signals. Hard gates,
     language filtering, and dedup are applied separately upstream — they're

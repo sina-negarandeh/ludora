@@ -1,7 +1,9 @@
-from sqlalchemy.orm import Session
+
 from sqlalchemy import func
-from typing import Tuple, List, Optional
-from app.database.models import Game, Category, Theme, Subdomain, Mechanic, Subfamily, Designer, Artist, Publisher, GameSummary
+from sqlalchemy.orm import Session
+
+from app.database.models import Artist, Category, Designer, Game, GameSummary, Mechanic, Publisher, Subdomain, Subfamily, Theme
+
 
 class GameService:
     def __init__(self, db: Session):
@@ -13,25 +15,25 @@ class GameService:
         limit: int = 50,
         sort_by: str = "rank",
         order: str = "asc",
-        query_str: Optional[str] = None,
-        subdomains: Optional[List[str]] = None,
-        categories: Optional[List[str]] = None,
-        themes: Optional[List[str]] = None,
-        families: Optional[List[str]] = None,
-        mechanics: Optional[List[str]] = None,
-        designers: Optional[List[str]] = None,
-        artists: Optional[List[str]] = None,
-        publishers: Optional[List[str]] = None,
-        exact_players: Optional[int] = None,
-        min_players: Optional[int] = None,
-        max_players: Optional[int] = None,
-        min_weight: Optional[float] = None,
-        max_weight: Optional[float] = None,
-        min_playtime: Optional[int] = None,
-        max_playtime: Optional[int] = None,
-        min_year: Optional[int] = None,
-        max_year: Optional[int] = None
-    ) -> Tuple[int, List[Game]]:
+        query_str: str | None = None,
+        subdomains: list[str] | None = None,
+        categories: list[str] | None = None,
+        themes: list[str] | None = None,
+        families: list[str] | None = None,
+        mechanics: list[str] | None = None,
+        designers: list[str] | None = None,
+        artists: list[str] | None = None,
+        publishers: list[str] | None = None,
+        exact_players: int | None = None,
+        min_players: int | None = None,
+        max_players: int | None = None,
+        min_weight: float | None = None,
+        max_weight: float | None = None,
+        min_playtime: int | None = None,
+        max_playtime: int | None = None,
+        min_year: int | None = None,
+        max_year: int | None = None
+    ) -> tuple[int, list[Game]]:
 
         query = self.db.query(Game)
 
@@ -93,17 +95,17 @@ class GameService:
         total = query.with_entities(func.count(Game.bgg_id)).scalar()
 
         # Sorting
-        sort_column = getattr(Game, 'rank')
+        sort_column = Game.rank
         if sort_by == 'rating':
-            sort_column = getattr(Game, 'avg_rating')
+            sort_column = Game.avg_rating
         elif sort_by == 'year':
-            sort_column = getattr(Game, 'year_published')
+            sort_column = Game.year_published
         elif sort_by == 'complexity':
-            sort_column = getattr(Game, 'game_weight')
+            sort_column = Game.game_weight
         elif sort_by == 'name':
-            sort_column = getattr(Game, 'name')
+            sort_column = Game.name
         elif sort_by == 'playtime':
-            sort_column = getattr(Game, 'mfg_playtime')
+            sort_column = Game.mfg_playtime
 
         if order == 'desc':
             query = query.order_by(sort_column.desc().nulls_last())
@@ -115,7 +117,7 @@ class GameService:
 
         return total, games
 
-    def get_game(self, bgg_id: int) -> Optional[Game]:
+    def get_game(self, bgg_id: int) -> Game | None:
         game = self.db.query(Game).filter(Game.bgg_id == bgg_id).first()
         if game is None:
             return None

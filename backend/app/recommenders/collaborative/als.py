@@ -1,11 +1,14 @@
+from typing import Any
+
+import implicit
 import numpy as np
 import pandas as pd
 from scipy.sparse import csr_matrix
-import implicit
 from sklearn.metrics.pairwise import cosine_similarity
-from typing import List, Dict, Any
-from app.recommenders.base import BaseRecommender
+
 from app.core.ml_config import RANDOM_SEED, RecommenderConfig
+from app.recommenders.base import BaseRecommender
+
 
 class ALSRecommender(BaseRecommender):
     def __init__(
@@ -41,7 +44,7 @@ class ALSRecommender(BaseRecommender):
         # the raw 1-10 rating straight through would read a low rating as
         # "low-confidence positive" instead of "confident dislike", since
         # implicit feedback has no concept of a negative observation.
-        confidence = 1.0 + self.confidence_alpha * df['rating'].values
+        confidence = 1.0 + self.confidence_alpha * df['rating'].values  # pyright: ignore[reportOperatorIssue] -- pandas' .values stub is imprecise here, not a real type error
 
         n_users = len(user_ids.cat.categories)
         n_items = len(item_ids.cat.categories)
@@ -63,7 +66,7 @@ class ALSRecommender(BaseRecommender):
         # The item factors represent our game embeddings
         self.item_factors = model.item_factors
 
-    def recommend(self, item_id: int, limit: int = 10) -> List[Dict[str, Any]]:
+    def recommend(self, item_id: int, limit: int = 10) -> list[dict[str, Any]]:
         if self.item_factors is None:
             raise ValueError("Model has not been fitted.")
 

@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any
+from typing import Any
+
 
 class BaseRecommender(ABC):
     @abstractmethod
@@ -11,7 +12,7 @@ class BaseRecommender(ABC):
         pass
 
     @abstractmethod
-    def recommend(self, item_id: int, limit: int = 10) -> List[Dict[str, Any]]:
+    def recommend(self, item_id: int, limit: int = 10) -> list[dict[str, Any]]:
         """
         Return top N similar items for a given item_id.
         Returns a list of dicts: [{'item_id': int, 'score': float}, ...]

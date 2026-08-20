@@ -8,7 +8,6 @@ can't drift on load args, instruction-prefix handling, or tokenization.
 Loads once per process (module-level cache), consistent with how the
 previous SentenceTransformer was loaded once at import time.
 """
-from typing import List
 
 from mlx_embeddings.utils import load as _mlx_load
 
@@ -22,10 +21,14 @@ def _get_model():
     global _model, _tokenizer
     if _model is None:
         _model, _tokenizer = _mlx_load(SearchConfig.EMBEDDING_MODEL)
+    # Narrows the return type past the module-level None default -- by
+    # this point the load above has always run, whether just now or on
+    # an earlier call.
+    assert _model is not None and _tokenizer is not None
     return _model, _tokenizer
 
 
-def encode(texts: List[str], is_query: bool = False) -> List[List[float]]:
+def encode(texts: list[str], is_query: bool = False) -> list[list[float]]:
     """Encode a batch of texts to L2-normalized embedding vectors.
 
     `is_query=True` applies SearchConfig.QUERY_INSTRUCTION — the asymmetric

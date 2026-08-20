@@ -1,0 +1,47 @@
+name: Backend CI
+
+# The backend's own live-request path (search, the assistant) needs mlx-embeddings,
+# which only runs on Apple Silicon (see backend/AGENTS.md) -- not something a
+# GitHub-hosted runner can do. This workflow checks what a Linux runner actually
+# can: static analysis and the infra-free test suite under backend/tests/, not
+# a live end-to-end run against a real database or local LLM server.
+"on":
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+
+jobs:
+  lint-typecheck-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      # Plain `uv sync` installs main deps + the dev group only -- the ml
+      # group (torch, transformers, ...) is opt-in (`--group ml`), and not
+      # needed for lint/type-check/the infra-free test suite here; see the
+      # group's own comment in pyproject.toml.
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Lint (ruff)
+        run: uv run ruff check app/
+
+      - name: Type check (pyright)
+        run: uv run pyright
+
+      - name: Test (pytest)
+        run: uv run pytest

@@ -1,5 +1,6 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
-from typing import Optional, List, Literal
 
 # Shared sort vocabulary for both the plain browse endpoint
 # (GameService.get_games' sort_by/order params) and search (SearchQuery.sort
@@ -26,20 +27,20 @@ class SortSpec(BaseModel):
     direction: SortDirection
 
 class GameFilter(BaseModel):
-    subdomains: Optional[List[str]] = Field(None, description="List of subdomains to filter by (BGG's rank/leaderboard classification, e.g. 'Strategy', 'Family').")
-    categories: Optional[List[str]] = Field(None, description="List of categories to filter by.")
-    themes: Optional[List[str]] = Field(None, description="List of themes to filter by.")
-    families: Optional[List[str]] = Field(None, description="List of family tags to filter by (full 'Group: Value' form, e.g. 'Animals: Bears').")
-    mechanics: Optional[List[str]] = Field(None, description="List of mechanics to filter by.")
-    designers: Optional[List[str]] = Field(None, description="List of designers to filter by.")
-    artists: Optional[List[str]] = Field(None, description="List of artists to filter by.")
-    publishers: Optional[List[str]] = Field(None, description="List of publishers to filter by.")
-    exact_players: Optional[int] = Field(None, description="Exact number of players supported.")
-    min_players: Optional[int] = Field(None, description="Minimum number of players supported.")
-    max_players: Optional[int] = Field(None, description="Maximum number of players supported.")
-    min_weight: Optional[float] = Field(None, description="Minimum complexity weight (1.0 to 5.0).")
-    max_weight: Optional[float] = Field(None, description="Maximum complexity weight (1.0 to 5.0).")
-    min_playtime: Optional[int] = Field(None, description="Minimum manufacturer-stated playtime in minutes.")
-    max_playtime: Optional[int] = Field(None, description="Maximum manufacturer-stated playtime in minutes.")
-    min_year: Optional[int] = Field(None, description="Minimum year published.")
-    max_year: Optional[int] = Field(None, description="Maximum year published.")
+    subdomains: list[str] | None = Field(default=None, description="List of subdomains to filter by (BGG's rank/leaderboard classification, e.g. 'Strategy', 'Family').")
+    categories: list[str] | None = Field(default=None, description="List of categories to filter by.")
+    themes: list[str] | None = Field(default=None, description="List of themes to filter by.")
+    families: list[str] | None = Field(default=None, description="List of family tags to filter by (full 'Group: Value' form, e.g. 'Animals: Bears').")
+    mechanics: list[str] | None = Field(default=None, description="List of mechanics to filter by.")
+    designers: list[str] | None = Field(default=None, description="List of designers to filter by.")
+    artists: list[str] | None = Field(default=None, description="List of artists to filter by.")
+    publishers: list[str] | None = Field(default=None, description="List of publishers to filter by.")
+    exact_players: int | None = Field(default=None, description="Exact number of players supported.")
+    min_players: int | None = Field(default=None, description="Minimum number of players supported.")
+    max_players: int | None = Field(default=None, description="Maximum number of players supported.")
+    min_weight: float | None = Field(default=None, description="Minimum complexity weight (1.0 to 5.0).")
+    max_weight: float | None = Field(default=None, description="Maximum complexity weight (1.0 to 5.0).")
+    min_playtime: int | None = Field(default=None, description="Minimum manufacturer-stated playtime in minutes.")
+    max_playtime: int | None = Field(default=None, description="Maximum manufacturer-stated playtime in minutes.")
+    min_year: int | None = Field(default=None, description="Minimum year published.")
+    max_year: int | None = Field(default=None, description="Maximum year published.")

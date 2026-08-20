@@ -4,6 +4,9 @@ version = "0.1.0"
 description = "Ludora API Backend"
 requires-python = ">=3.10"
 dependencies = [
+    # Everything a live `uvicorn app.main:app` process actually imports --
+    # verified against app/ directly (grepped every import, not assumed),
+    # not what the offline pipeline under scripts/ happens to also need.
     "fastapi>=0.111.0",
     "uvicorn>=0.30.1",
     "sqlalchemy>=2.0.30",
@@ -11,20 +14,50 @@ dependencies = [
     "pydantic>=2.7.4",
     "pydantic-settings>=2.3.4",
     "psycopg[binary]>=3.1.19",
-    "pandas>=2.2.2",
     "pgvector>=0.2.1",
+    "openai>=3.1.0",
+    "mlx-embeddings>=0.0.5",
+    "structlog>=24.4.0",
+]
+
+[dependency-groups]
+# Not needed to run the API or any offline pipeline script -- only for
+# working on this codebase. Synced by default with plain `uv sync`
+# (matches every other dependency group's opt-in-except-dev default);
+# excluded with `uv sync --no-dev` for a lean/production-style install.
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.6.0",
+    "pyright>=1.1.380",
+    # backend/test_assistant_retry.py's server-readiness poll. Pinned to
+    # the classic 0.x line explicitly -- the resolver also offers a
+    # separate, newer "httpx2" package now (pulled in transitively via
+    # openai>=3.1.0), but the code here is written against the classic
+    # httpx API (httpx.get(..., follow_redirects=...), httpx.RequestError),
+    # already proven resolvable in this exact dependency graph via
+    # huggingface_hub's own transitive pin. Not httpx2 -- unverified API,
+    # postdates this codebase's familiarity with it.
+    "httpx>=0.28.0",
+]
+# The offline ETL/ML pipeline (scripts/) and backend/evaluation/ -- never
+# imported by the live API itself (app/recommenders/collaborative/*.py and
+# app/core/review_quality.py/mlflow_utils.py define shared code these
+# heavier libraries back, but nothing on the live request path imports
+# those modules; only the offline scripts that use them directly do).
+# NOT installed by plain `uv sync` -- run `uv sync --group ml` (or
+# `--all-groups` for dev+ml together) before running anything in scripts/.
+ml = [
+    "pandas>=2.2.2",
     "sentence-transformers>=3.0.1",
     "scikit-learn>=1.5.0",
     "networkx>=3.0",
     "implicit>=0.7.3",
     "fasttext-wheel>=0.9.2",
-    "requests>=2.34.2",
-    "openai>=3.1.0",
+    "httpx>=0.28.0",  # absa_filter.py / detect_languages.py's fastText model download -- see the note on the dev group's own httpx pin
     "mlflow>=2.14.1",
     "torch>=2.13.0",
     "transformers>=5.15.0",
     "gensim>=4.4.0",
-    "mlx-embeddings>=0.0.5",
     "nltk>=3.10.3",
 ]
 
@@ -34,3 +67,43 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
+
+[tool.ruff]
+line-length = 200
+target-version = "py310"
+
+[tool.ruff.lint]
+# Deliberately not "ALL" or a maximal preset: this codebase has never been
+# linted before, so starting from a curated, high-signal set (unused
+# imports/variables, undefined names, bare excepts) catches real bugs
+# without a wall of unrelated style findings on the first run.
+select = ["E", "F", "I", "B", "UP"]
+ignore = [
+    "E501",  # line length -- enforced separately (see line-length above), not as a hard error on prose-heavy docstrings/comments
+    "B008",  # function-call-in-default-argument -- flags FastAPI's own Depends()/Query() pattern, which is idiomatic here, not a bug
+]
+
+[tool.pytest.ini_options]
+# Scoped to tests/, NOT the repo root's legacy test_*.py scripts (test_api.py,
+# test_games.py, test_routes.py, test_assistant.py, test_assistant_retry.py,
+# test_orchestrator.py). Those are pre-existing print-only manual scripts
+# (see docs/engineering/testing.md), several require a live DB and/or a
+# live local LLM server, and one is documented to block forever if that
+# server never starts. Pytest's default discovery would otherwise collect
+# the ones that happen to have a test_-prefixed function and run them for
+# real -- fine locally, but a hang or a false failure in CI, which has
+# neither. tests/ is for real, infra-free (or explicitly infra-marked)
+# pytest tests only.
+testpaths = ["tests"]
+
+[tool.pyright]
+include = ["app", "tests"]
+# "basic", not "strict": nothing in this codebase has ever been type-checked.
+# Strict mode on a first pass would mostly flag third-party libraries with
+# no stubs (e.g. implicit) and SQLAlchemy's dynamic attribute access,
+# not real bugs. Basic is the honest starting point; tighten later once
+# app/ is clean under it.
+typeCheckingMode = "basic"
+pythonVersion = "3.10"
+reportMissingImports = true
+reportMissingModuleSource = false

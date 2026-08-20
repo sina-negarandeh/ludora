@@ -1,6 +1,14 @@
 # Testing
 
-**Status: no automated test suite exists.** Worth stating plainly, since the file layout (files named `test_*.py`) could otherwise mislead a reader: none of them use an assertion framework, and none of them run in CI, since there's no CI configured at all. See [docs/limitations.md](../limitations.md).
+**Status: a real but minimal automated suite runs in CI (lint + type check + 2 infra-free smoke tests); the original print-only scripts below are unconverted and don't run in CI.** Worth stating both halves plainly, since the file layout (two different sets of files named `test_*.py`, in two different directories) could otherwise mislead a reader either way.
+
+## What runs in CI (`.github/workflows/backend-ci.yml`)
+
+On every PR touching `backend/`, in order: `ruff check app/` (lint), `pyright` (type check, `basic` mode, scoped to `app/`), then `pytest` (scoped to `backend/tests/` via `[tool.pytest.ini_options]`, not the repo root -- see why below).
+
+`backend/tests/test_app_smoke.py` is the entire real automated suite today: two tests, both infra-free (no live DB, no local LLM server), using `TestClient` to hit `/health` and `/openapi.json`. Deliberately minimal but genuine -- it catches a broken import, a broken route/schema definition, or an app startup error, which is exactly what a GitHub-hosted Linux runner *can* check. It can't run anything requiring `mlx-embeddings` (Apple Silicon only, see `backend/AGENTS.md`) or a seeded Postgres instance, which is also why the CI job installs only the `dev` dependency group (`uv sync`, no `--group ml`) -- the offline pipeline's heavy ML libraries aren't needed for any of this.
+
+Pyright and ruff both run clean today; pyright has one deliberate, tracked exception -- see [Known limitation: SQLAlchemy Column typing](#known-limitation-sqlalchemy-column-typing-under-pyright) below.
 
 ## Backend "tests" (all print-based scripts, not pytest suites)
 
@@ -13,7 +21,7 @@
 | `backend/test_assistant_retry.py` | A local LLM server, blocks forever (`while True`) if one never starts | No | `python test_assistant_retry.py`, despite the name, tests server-readiness polling and a single parse call, not the retry-on-malformed-completion logic `AssistantService.parse_query()` actually has |
 | `backend/test_orchestrator.py` | A live DB *and* a live local LLM server | No | `python test_orchestrator.py`, a handful of hardcoded natural-language queries through the full chat pipeline, prints intent and data shape |
 
-None of these files are wired into any CI job; there's no CI configuration in the repo at all. `backend/pyproject.toml` has no `pytest` dependency and no `[tool.pytest.ini_options]` section, so pytest isn't even installed by default.
+None of these six files are wired into CI, and `[tool.pytest.ini_options]`'s `testpaths = ["tests"]` (see above) means plain `pytest`/`uv run pytest` won't even collect them by default anymore -- deliberately: three of the six need a live DB and/or LLM server pytest's default discovery would otherwise try to run for real, and `test_assistant_retry.py` is documented above to block forever without one. Run one directly by name (`uv run python test_orchestrator.py`) when you actually have that infra up.
 
 **What this means concretely**: a regression that changes a response shape, breaks a query, or silently swaps in wrong data would not be caught by anything currently in the repository unless a developer manually runs these scripts and reads the printed output.
 
@@ -21,21 +29,30 @@ None of these files are wired into any CI job; there's no CI configuration in th
 
 No test framework is installed: `frontend/package.json` has no `vitest`, `jest`, `@testing-library/react`, `playwright`, or `cypress` in dependencies or devDependencies, and there's no `test` script. Linting exists (`oxlint`, `frontend/.oxlintrc.json`, enforcing `react/rules-of-hooks` and a constant-export allowance), and `frontend/tsconfig.app.json` runs a strict TypeScript configuration (`noUnusedLocals`, `noUnusedParameters`, `noFallthroughCasesInSwitch`, `erasableSyntaxOnly`). Type-checking via `tsc -b` (part of `npm run build`) is the closest thing to an automated correctness check on the frontend, and it only catches type errors, not behavioral regressions.
 
+## Known limitation: SQLAlchemy Column typing under pyright
+
+`app/database/models.py` uses SQLAlchemy's legacy `Column(...)` declarative style, not 2.0's typed `Mapped[]`/`mapped_column()`. Pyright can't distinguish an instance attribute (`game.rank`, an `int` at runtime) from the class-level `Column` descriptor, so it reports every read or write of a model attribute as `Column[X]` instead of `X`. Confirmed as false positives, not real bugs, by direct runtime behavior throughout the session that added this CI setup.
+
+Three files dense with model-attribute plumbing (`app/services/aspect_service.py`, `summarization_service.py`, `recommendation_service.py`) carry a file-level `# pyright: report...=false` comment for exactly the rule categories this pattern triggers, each with the same explanatory comment pointing back here. Deliberately scoped to those three files, not project-wide, so a real error of the same rule type elsewhere still surfaces. Two more one-line suppressions exist for genuine third-party stub gaps (`app/recommenders/collaborative/als.py`, `item_cosine.py` -- pandas/scipy-sparse operations that exist at runtime but aren't in their stubs), and two for the standard FastAPI/Pydantic pattern of returning ORM objects or dicts through a `response_model` schema with `from_attributes=True` (`app/api/routes/games.py`, `recommendations.py`).
+
+The real fix is migrating every model class in `models.py` to `Mapped[]`, which SQLAlchemy 2.0 natively supports. Not done as part of adding pyright: it's a genuinely separate, sizable task (touches every model class, and once pyright can see real types there, it may surface *new* findings elsewhere that `Column`'s untyped nature was hiding). Tracked in [docs/roadmap.md](../roadmap.md).
+
 ## What does exist as a quality signal
 
+- **`ruff` and `pyright` on the backend**, both clean and enforced in CI on every PR (see above).
 - **Strict TypeScript** across the frontend, which catches an entire class of prop/shape mismatches at build time even without a test suite.
 - **Pydantic v2 response models** on every backend route, which catch response-shape errors at serialization time (a malformed object raises rather than silently returning bad JSON).
 - **The evaluation scripts** (`backend/evaluation/`) are manual harnesses, not regression tests: for search, results are committed and reproducible, which makes them a real quality signal; for recommenders and CF, the script exists but hasn't been run to produce a committed result yet. See [docs/ml/evaluation.md](../ml/evaluation.md).
 
 ## Highest-value next steps (not started)
 
-1. Add `pytest` and `httpx`/`TestClient`-based assertions to the existing DB-dependent scripts. The request/response wiring to convert is already there; only the `assert` statements are missing.
-2. Add a `conftest.py` with a test-database fixture so backend tests don't require a hand-seeded local Postgres instance.
+1. Convert the six DB/LLM-dependent scripts above into real `pytest` tests under `backend/tests/`, using a fixture (`conftest.py`) for a test database instead of a hand-seeded local Postgres instance, and a way to skip (not hang on) the LLM-dependent ones when no server is running. Only then would CI plausibly ever run them; a GitHub-hosted runner still can't provide `mlx-embeddings` regardless (Apple Silicon only).
+2. Migrate `app/database/models.py` to SQLAlchemy 2.0's `Mapped[]` typed columns, removing the scoped pyright suppressions above. See [docs/roadmap.md](../roadmap.md).
 3. Add `vitest` and React Testing Library for at least the filter/sort logic in `GamesList.tsx` and the gauge math in `GameDetail.tsx`, both pure enough to unit test without a running backend.
-4. Wire whichever of the above exists into a CI workflow; none currently runs on push or PR.
 
 ## Related code
 
-- `backend/test_api.py`, `test_games.py`, `test_routes.py`, `test_assistant.py`, `test_assistant_retry.py`, `test_orchestrator.py`
-- `backend/pyproject.toml`
+- `backend/tests/test_app_smoke.py` (real, CI-run) and `backend/test_api.py`, `test_games.py`, `test_routes.py`, `test_assistant.py`, `test_assistant_retry.py`, `test_orchestrator.py` (print-only, not CI-run)
+- `backend/pyproject.toml` (`[dependency-groups]`, `[tool.ruff]`, `[tool.pyright]`, `[tool.pytest.ini_options]`)
+- `.github/workflows/backend-ci.yml`
 - `frontend/package.json`, `frontend/.oxlintrc.json`, `frontend/tsconfig.app.json`

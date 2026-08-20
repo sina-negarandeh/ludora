@@ -1,25 +1,24 @@
-from fastapi import APIRouter, Depends, Query, HTTPException
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+
 from app.database.session import get_db
 from app.schemas.game import GameResponse
-from typing import List
-from pydantic import BaseModel
-
 from app.services.recommendation_service import RecommendationService
 
 router = APIRouter(tags=["recommendations"])
 
-from pydantic import Field
 
 class RecommendationItemSchema(BaseModel):
     game: GameResponse = Field(..., description="The recommended game.")
     score: float = Field(..., description="The recommendation score.")
-    reason: List[str] = Field(..., description="Reasons for this recommendation.")
+    reason: list[str] = Field(..., description="Reasons for this recommendation.")
 
 class RecommendationResponseSchema(BaseModel):
     source_game: GameResponse = Field(..., description="The game the recommendations are based on.")
     model: str = Field(..., description="The ID of the model used.")
-    recommendations: List[RecommendationItemSchema] = Field(..., description="List of recommended games.")
+    recommendations: list[RecommendationItemSchema] = Field(..., description="List of recommended games.")
 
 class RecommendationModelSchema(BaseModel):
     id: str = Field(..., description="The internal ID of the model.")
@@ -28,7 +27,7 @@ class RecommendationModelSchema(BaseModel):
     description: str = Field(..., description="Detailed description of how the model works.")
 
 class ModelsResponseSchema(BaseModel):
-    models: List[RecommendationModelSchema] = Field(..., description="List of available recommendation models.")
+    models: list[RecommendationModelSchema] = Field(..., description="List of available recommendation models.")
 
 @router.get("/recommendation-models", response_model=ModelsResponseSchema, summary="Get Recommendation Models", description="Retrieve a list of all available recommendation models and algorithms.")
 def get_models(db: Session = Depends(get_db)):
@@ -48,8 +47,11 @@ def get_recommendations(
     if not source_game:
         raise HTTPException(status_code=404, detail="Game not found")
 
+    # recs is list[dict], not list[RecommendationItemSchema] -- Pydantic
+    # coerces each dict via the schema at validation time, same as the
+    # ORM-object coercion in routes/games.py.
     return RecommendationResponseSchema(
         source_game=source_game,
         model=model,
-        recommendations=recs
+        recommendations=recs  # pyright: ignore[reportArgumentType]
     )

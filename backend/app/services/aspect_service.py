@@ -1,8 +1,21 @@
-from sqlalchemy.orm import Session
-from typing import List
-from app.database.models import GameAspectAggregate, ReviewAspect
-from app.core.ml_config import ABSAConfig
+# Known limitation, tracked in docs/roadmap.md: app/database/models.py uses
+# SQLAlchemy's legacy Column(...) declarative style, not 2.0's typed
+# Mapped[]/mapped_column(). Pyright can't tell an instance attribute like
+# `game.rank` apart from the class-level Column descriptor, so it reports
+# every read of a model attribute as Column[X] instead of X. These are
+# false positives, not real bugs -- confirmed by direct behavior at
+# runtime throughout this session -- and this file is unusually dense with
+# them since it's mostly model-attribute plumbing. Suppressed here rather
+# than project-wide so a real reportArgumentType/reportGeneralTypeIssues
+# bug elsewhere still surfaces.
+# pyright: reportArgumentType=false, reportGeneralTypeIssues=false
+
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.core.ml_config import ABSAConfig
+from app.database.models import GameAspectAggregate, ReviewAspect
+
 
 class EvidenceSample(BaseModel):
     sentiment: str
@@ -16,13 +29,13 @@ class AspectAggregateResponse(BaseModel):
     neutral_count: int
     total_mentions: int
     mean_sentiment: float
-    evidence_samples: List[EvidenceSample]
+    evidence_samples: list[EvidenceSample]
 
 class AspectService:
     def __init__(self, db: Session):
         self.db = db
 
-    def _top_evidence(self, game_id: int, aspect: str, sentiment: str, limit: int = 1) -> List[EvidenceSample]:
+    def _top_evidence(self, game_id: int, aspect: str, sentiment: str, limit: int = 1) -> list[EvidenceSample]:
         rows = self.db.query(ReviewAspect).filter(
             ReviewAspect.game_id == game_id,
             ReviewAspect.aspect == aspect,
@@ -31,7 +44,7 @@ class AspectService:
         ).order_by(ReviewAspect.confidence.desc()).limit(limit).all()
         return [EvidenceSample(sentiment=sentiment, text=r.evidence) for r in rows if r.evidence.strip()]
 
-    def get_game_aspects(self, game_id: int) -> List[AspectAggregateResponse]:
+    def get_game_aspects(self, game_id: int) -> list[AspectAggregateResponse]:
         aggregates = self.db.query(GameAspectAggregate).filter(
             GameAspectAggregate.game_id == game_id,
             GameAspectAggregate.total_mentions >= ABSAConfig.MIN_MENTIONS_FOR_DISPLAY

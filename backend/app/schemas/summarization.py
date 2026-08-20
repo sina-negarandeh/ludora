@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 
+
 class AspectMiniSummary(BaseModel):
     aspect: str = Field(description="The name of the aspect being summarized")
     summary: str = Field(description="A concise summary of what customers say about this aspect")

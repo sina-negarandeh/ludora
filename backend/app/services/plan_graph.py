@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass, field
-from typing import Optional
+
 from app.schemas.assistant import ParsedIntent, ParsedPlan
 
 _PLACEHOLDER_RE = re.compile(r"^\$step(\d+)$")
@@ -30,7 +30,7 @@ class PlanStep:
     position: int
     intent: ParsedIntent
     depends_on: list[int]                      # deduped positions this step's placeholders reference, in first-seen order
-    game_name_ref: Optional[int] = None         # position, if game_name is itself "$stepN"
+    game_name_ref: int | None = None         # position, if game_name is itself "$stepN"
     game_names_refs: dict[int, int] = field(default_factory=dict)  # {index in game_names: referenced position}
 
 
@@ -76,7 +76,7 @@ def compile_plan(plan: ParsedPlan) -> PlanGraph:
 
     for position, intent in enumerate(ordered):
         depends_on: list[int] = []
-        game_name_ref: Optional[int] = None
+        game_name_ref: int | None = None
         game_names_refs: dict[int, int] = {}
 
         if intent.game_name:

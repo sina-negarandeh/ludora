@@ -1,13 +1,15 @@
-from sqlalchemy.orm import Session
+
 from sqlalchemy import func
-from typing import List
-from app.database.models import Category, Theme, Subdomain, Mechanic, Designer, Publisher, GameTheme, GameSubdomain, Family, Subfamily, GameSubfamily
+from sqlalchemy.orm import Session
+
+from app.database.models import Category, Designer, Family, GameSubdomain, GameSubfamily, GameTheme, Mechanic, Publisher, Subdomain, Subfamily, Theme
+
 
 class MetadataService:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_categories(self, search: str = None, limit: int = None) -> List[str]:
+    def get_categories(self, search: str | None = None, limit: int | None = None) -> list[str]:
         query = self.db.query(Category.name)
         if search:
             query = query.filter(Category.name.ilike(f"%{search}%"))
@@ -16,7 +18,7 @@ class MetadataService:
             query = query.limit(limit)
         return [c[0] for c in query.all()]
 
-    def get_subdomains(self, search: str = None, limit: int = None) -> List[dict]:
+    def get_subdomains(self, search: str | None = None, limit: int | None = None) -> list[dict]:
         query = self.db.query(
             Subdomain.id,
             Subdomain.name,
@@ -33,7 +35,7 @@ class MetadataService:
         subdomains = query.all()
         return [{"id": s.id, "name": s.name, "game_count": s.game_count} for s in subdomains]
 
-    def get_mechanics(self, search: str = None, limit: int = None) -> List[str]:
+    def get_mechanics(self, search: str | None = None, limit: int | None = None) -> list[str]:
         query = self.db.query(Mechanic.name)
         if search:
             query = query.filter(Mechanic.name.ilike(f"%{search}%"))
@@ -42,7 +44,7 @@ class MetadataService:
             query = query.limit(limit)
         return [m[0] for m in query.all()]
 
-    def get_designers(self, search: str = None, limit: int = None) -> List[str]:
+    def get_designers(self, search: str | None = None, limit: int | None = None) -> list[str]:
         query = self.db.query(Designer.name)
         if search:
             query = query.filter(Designer.name.ilike(f"%{search}%"))
@@ -51,7 +53,7 @@ class MetadataService:
             query = query.limit(limit)
         return [d[0] for d in query.all()]
 
-    def get_publishers(self, search: str = None, limit: int = None) -> List[str]:
+    def get_publishers(self, search: str | None = None, limit: int | None = None) -> list[str]:
         query = self.db.query(Publisher.name)
         if search:
             query = query.filter(Publisher.name.ilike(f"%{search}%"))
@@ -60,7 +62,7 @@ class MetadataService:
             query = query.limit(limit)
         return [p[0] for p in query.all()]
 
-    def get_themes(self, search: str = None, limit: int = None) -> List[dict]:
+    def get_themes(self, search: str | None = None, limit: int | None = None) -> list[dict]:
         query = self.db.query(
             Theme.id, 
             Theme.name, 
@@ -77,7 +79,7 @@ class MetadataService:
         themes = query.all()
         return [{"id": t.id, "name": t.name, "game_count": t.game_count} for t in themes]
 
-    def get_families(self, search: str = None) -> List[dict]:
+    def get_families(self, search: str | None = None) -> list[dict]:
         query = self.db.query(
             Family.name.label("group_name"),
             Subfamily.id,
@@ -103,7 +105,7 @@ class MetadataService:
             )
         return [{"group": g, "values": vals} for g, vals in grouped.items()]
 
-    def get_artists(self, search: str = None, limit: int = None) -> List[str]:
+    def get_artists(self, search: str | None = None, limit: int | None = None) -> list[str]:
         from app.database.models import Artist
         query = self.db.query(Artist.name)
         if search:

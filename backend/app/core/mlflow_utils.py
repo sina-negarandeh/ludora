@@ -45,7 +45,7 @@ def _get_or_create_experiment(name: str) -> str:
 
 
 @contextmanager
-def tracked_run(experiment: str, run_name: str = None):
+def tracked_run(experiment: str, run_name: str | None = None):
     """Start an MLflow run under a given experiment.
 
     Experiments are grouped by technique family, not by individual model id,

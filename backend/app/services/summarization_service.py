@@ -1,17 +1,29 @@
+# Known limitation, tracked in docs/roadmap.md: app/database/models.py uses
+# SQLAlchemy's legacy Column(...) declarative style, not 2.0's typed
+# Mapped[]/mapped_column(). Pyright can't tell an instance attribute like
+# `game.rank` apart from the class-level Column descriptor, so it reports
+# every read of a model attribute as Column[X] instead of X. These are
+# false positives, not real bugs -- confirmed by direct behavior at
+# runtime throughout this session -- and this file is unusually dense with
+# them since it's mostly model-attribute plumbing. Suppressed here rather
+# than project-wide so a real error of the same rule elsewhere still surfaces.
+# pyright: reportArgumentType=false, reportAttributeAccessIssue=false, reportGeneralTypeIssues=false, reportReturnType=false
+
 import hashlib
 import json
 import random
 import time
-from typing import List, Any, Optional
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+from collections import defaultdict
+from typing import Any
+
 from openai import OpenAI
 from pydantic import ValidationError
-from collections import defaultdict
+from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.ml_config import RANDOM_SEED, SummarizationConfig, ABSAConfig
-from app.database.models import Game, ReviewAspect, GameAspectAggregate, GameSummary
+from app.core.ml_config import RANDOM_SEED, ABSAConfig, SummarizationConfig
+from app.database.models import Game, GameAspectAggregate, GameSummary, ReviewAspect
 from app.schemas.summarization import AspectMiniSummary, FinalGameSummary
 
 # Constants
@@ -35,7 +47,7 @@ class SummarizationService:
         # Per-call (prompt_hash, latency_seconds) log — an LLM-prompted feature's
         # "training" is really its prompt, so this is what generate_summaries.py
         # logs to MLflow instead of conventional model hyperparameters.
-        self.llm_calls: List[dict] = []
+        self.llm_calls: list[dict] = []
 
     def _call_llm_json(self, system_prompt: str, user_prompt: str, schema_class) -> Any:
         schema_json = schema_class.model_json_schema()
@@ -52,7 +64,7 @@ Output ONLY valid JSON matching this schema. No markdown wrapping.
         # max_tokens) and succeeds on a byte-identical retry -- a real,
         # non-deterministic flake, not a broken prompt. One bad call
         # shouldn't abort an entire batch run.
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
         for attempt in range(SummarizationConfig.MAX_LLM_RETRIES + 1):
             start = time.time()
             response = self.client.chat.completions.create(
@@ -118,7 +130,7 @@ Output ONLY valid JSON matching this schema. No markdown wrapping.
             outcome = "mixed_neutral"
         return outcome, pos_ratio, neu_ratio, neg_ratio
 
-    def _sample_reviews(self, game_id: int, aspect: str) -> List[ReviewAspect]:
+    def _sample_reviews(self, game_id: int, aspect: str) -> list[ReviewAspect]:
         # Same confidence bar as aggregation (ABSAConfig.WINNER_PROB_THRESHOLD)
         # and the same three sentiments as the card system -- evidence fed to
         # the LLM must be exactly what's being counted, not a superset that
@@ -140,7 +152,7 @@ Output ONLY valid JSON matching this schema. No markdown wrapping.
             sentiment_groups[r.sentiment].append(r)
             
         sampled = []
-        for sentiment, group_reviews in sentiment_groups.items():
+        for _sentiment, group_reviews in sentiment_groups.items():
             proportion = len(group_reviews) / len(reviews)
             sample_size = max(1, int(MAX_REVIEWS_PER_ASPECT * proportion))
             # Shuffle safely for sampling (seeded — see __init__)
@@ -150,7 +162,7 @@ Output ONLY valid JSON matching this schema. No markdown wrapping.
         # Ensure we don't exceed MAX exactly due to rounding
         return sampled[:MAX_REVIEWS_PER_ASPECT]
 
-    def _summarize_aspect(self, aspect: str, reviews: List[ReviewAspect], outcome: str, pos_ratio: float, neu_ratio: float, neg_ratio: float) -> AspectMiniSummary:
+    def _summarize_aspect(self, aspect: str, reviews: list[ReviewAspect], outcome: str, pos_ratio: float, neu_ratio: float, neg_ratio: float) -> AspectMiniSummary:
         positive = sum(1 for r in reviews if r.sentiment == 'positive')
         negative = sum(1 for r in reviews if r.sentiment == 'negative')
         neutral = sum(1 for r in reviews if r.sentiment == 'neutral')
@@ -176,7 +188,7 @@ Evidence sample ({len(reviews)} of the mentions above; Positive: {positive}, Neg
         mini_summary.sentiment = OUTCOME_LABELS[outcome]
         return mini_summary
 
-    def generate_game_summary(self, game_id: int) -> Optional[GameSummary]:
+    def generate_game_summary(self, game_id: int) -> GameSummary | None:
         # 1. Verify >= MIN_REVIEWS_FOR_ABSA
         # Distinct reviews, not raw review_aspects rows -- one review can
         # produce several aspect rows, so counting rows overstated how many

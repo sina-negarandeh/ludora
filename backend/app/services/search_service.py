@@ -1,13 +1,15 @@
-from sqlalchemy.orm import Session
-from sqlalchemy import func
-from app.database.models import Game, Category, Mechanic, Theme, Subdomain, Subfamily, GameEmbedding, Designer, Artist, Publisher
-from app.schemas.search import SearchQuery, PaginatedSearchResults, SearchResult, SearchDebug
-from app.schemas.game_query import GameFilter, SortSpec, SORT_FIELD_TO_COLUMN
-from app.core.ml_config import SearchConfig
-from app.core import embeddings as embedding_model
-from typing import Dict
 
-def apply_game_filters(query, filters: GameFilter):
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app.core import embeddings as embedding_model
+from app.core.ml_config import SearchConfig
+from app.database.models import Artist, Category, Designer, Game, GameEmbedding, Mechanic, Publisher, Subdomain, Subfamily, Theme
+from app.schemas.game_query import SORT_FIELD_TO_COLUMN, GameFilter, SortSpec
+from app.schemas.search import PaginatedSearchResults, SearchDebug, SearchQuery, SearchResult
+
+
+def apply_game_filters(query, filters: GameFilter | None):
     if not filters:
         return query
         
@@ -66,7 +68,7 @@ class SearchService:
         self.db = db
         self.rrf_k = SearchConfig.RRF_K
 
-    def search_lexical(self, q: str, limit: int = SearchConfig.CANDIDATE_POOL_SIZE) -> Dict[int, int]:
+    def search_lexical(self, q: str, limit: int = SearchConfig.CANDIDATE_POOL_SIZE) -> dict[int, int]:
         # 'english_unaccent' (not plain 'english') — must match the config
         # search_vector itself was built with (scripts/update_search_vectors.py),
         # or accent-insensitive matching silently doesn't happen: querying
@@ -96,7 +98,7 @@ class SearchService:
         
         return {row.bgg_id: rank + 1 for rank, row in enumerate(results)}
 
-    def search_semantic(self, q: str, limit: int = SearchConfig.CANDIDATE_POOL_SIZE) -> Dict[int, int]:
+    def search_semantic(self, q: str, limit: int = SearchConfig.CANDIDATE_POOL_SIZE) -> dict[int, int]:
         embedding = embedding_model.encode([q], is_query=True)[0]
 
         # Filter to the currently-configured model first — game_embeddings can
@@ -112,7 +114,7 @@ class SearchService:
 
         return {row.game_id: rank + 1 for rank, row in enumerate(results)}
 
-    def _sort_by_field(self, candidates: list, filtered_games: Dict[int, Game], sort: SortSpec) -> list:
+    def _sort_by_field(self, candidates: list, filtered_games: dict[int, Game], sort: SortSpec) -> list:
         """Reorders `candidates` by a Game column instead of relevance --
         same field vocabulary and nulls-last placement as GameService.get_games'
         SQL ORDER BY, just applied in Python since these candidates were

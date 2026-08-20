@@ -42,9 +42,11 @@ Brings up Postgres, the frontend, and pgAdmin, not the backend. The backend must
 
 The database starts empty; nothing here seeds it. Populate it via the pipeline in `docs/setup/README.md` before expecting real data from any endpoint.
 
+A root `Makefile` wraps the commands above plus lint/typecheck/test (`make help` for the full list, `make check` runs the same `ruff` → `pyright` → `pytest` sequence as CI).
+
 ## Known debt
 
-No CI and no automated test suite (backend or frontend). This is tracked debt, not steady state; full list and priority in `docs/roadmap.md`. Don't add to it; see the standards below for the bar on new work.
+Backend CI (`.github/workflows/backend-ci.yml`) runs `ruff` + `pyright` + a small, genuinely infra-free `pytest` suite (`backend/tests/`) on every PR; the original manual `test_*.py` scripts are still print-only and unconverted, and don't run in CI. Frontend has no CI and no test framework at all. This is tracked debt, not steady state; full list and priority in `docs/roadmap.md`. Don't add to it; see the standards below for the bar on new work.
 
 ## Standards for new work
 
