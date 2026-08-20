@@ -38,7 +38,7 @@ Specific claims that currently appear in multiple docs and are the most likely t
 | Two Kaggle datasets, not three | `AGENTS.md`, `README.md`, `docs/case-study.md` |
 | 9 recommendation model ids across 4 paradigms (not 10; `cf_svd` and the old `ensemble` model are deleted) | `README.md`, `AGENTS.md`, `docs/architecture/README.md`, `docs/product/features.md`, `docs/case-study.md`, `docs/ml/README.md`, `docs/ml/recommenders.md`, `docs/limitations.md` |
 | `data/` is gitignored in full; nothing under it (`raw/`, `processed/`, `models/`) is tracked in git, and large files there are present on disk only | `docs/data/README.md`, `docs/architecture/data-pipeline.md`, `docs/ml/recommenders.md` |
-| Backend CI (`ruff`/`pyright`/`pytest` on every PR) is minimal but real; the original manual test scripts and frontend still have neither | `AGENTS.md`, `backend/AGENTS.md`, `README.md`, `docs/engineering/testing.md`, `docs/limitations.md`, `docs/roadmap.md` |
+| Backend CI (`ruff`/`pyright`/`pytest` on every PR) is minimal but real; the original manual test scripts and frontend still have neither | `AGENTS.md`, `backend/AGENTS.md`, `README.md`, `docs/engineering/testing.md`, `docs/limitations.md`, `docs/roadmap.md`, `docs/case-study.md` |
 | Dependency groups: `dev` (pytest/ruff/pyright, default) and `ml` (offline pipeline libraries, opt-in via `--group ml`) | `backend/AGENTS.md`, `docs/engineering/testing.md` |
 | No auth, CORS wide open, hardcoded local DB credential default | `AGENTS.md`, `backend/AGENTS.md`, `docs/architecture/README.md`, `docs/setup/README.md`, `docs/case-study.md`, `docs/limitations.md` |
 | `docker compose up` brings up an empty database (no seed step) | `AGENTS.md`, `README.md`, `docs/setup/README.md` |

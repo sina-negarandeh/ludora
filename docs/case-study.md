@@ -45,7 +45,7 @@ Every evaluation script computes real metrics: `evaluate_search.py` for MRR/NDCG
 
 ## Tradeoffs and honest caveats
 
-**Speed over test coverage.** The commit history spans five calendar days. That pace produced a working, feature-dense app with a real layered architecture and a real migration history, and zero automated test assertions. Every `test_*.py` file in the repo is a print-only smoke script; several require a live database and/or a live local LLM server to run at all. Detail: [docs/engineering/testing.md](engineering/testing.md).
+**Speed over test coverage.** The commit history spans five calendar days. That pace produced a working, feature-dense app with a real layered architecture and a real migration history. CI is minimal but real: `ruff`, `pyright`, and two infra-free `pytest` assertions on every backend PR. The original `test_*.py` scripts predate that. They're still print-only smoke scripts, several need a live database and/or a live local LLM server, and none of them run in CI. Detail: [docs/engineering/testing.md](engineering/testing.md).
 
 **Breadth over depth in the recommendation engine.** Nine model IDs across four paradigms is a lot of surface area for a short build, and keeping each one correctly routed and evaluated took real work: deleting a redundant SVD pipeline and an in-paradigm blend that predated the current `hybrid` model. A narrower engine with fewer algorithms would have been easier to keep correct from the start, but wouldn't have covered the same range of technique: popularity, content-based, graph, and collaborative filtering side by side.
 

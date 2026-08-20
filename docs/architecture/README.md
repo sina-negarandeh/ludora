@@ -45,6 +45,8 @@ flowchart LR
 
 The backend follows a **routes → services → (ORM models / recommenders)** layering. Route handlers never touch SQLAlchemy directly; each instantiates a service class and returns its result through a Pydantic `response_model`. Every route except `/health` carries an explicit OpenAPI `summary` and `description`.
 
+Every request is logged (method, path, status, duration) via a `structlog`-based middleware in `backend/app/main.py`, console-rendered for local reading, not shipped anywhere. `AssistantService`'s two LLM-calling methods log the same way per attempt (model, duration, outcome). See `backend/app/core/logging_config.py`.
+
 ### API surface: 18 endpoints across 6 files
 
 | File → mount | Endpoints |
