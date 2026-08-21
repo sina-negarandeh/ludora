@@ -15,14 +15,14 @@ receivers:
 
 processors:
   batch: {}
-  # Local-dev stack, single service today -- tagging deployment.environment
-  # now means dashboards/queries don't need to change if a second
-  # environment (or service) is ever added later.
-  resource:
-    attributes:
-      - key: deployment.environment
-        value: local
-        action: upsert
+  # No resource processor here: the app itself already sets
+  # deployment.environment (backend/app/core/otel_config.py's
+  # Resource.create(...)) on every span/metric/log before it reaches
+  # this collector -- setting it again here would just be the same
+  # literal in two places that could drift out of sync. If a second
+  # service ever sends telemetry through this collector without
+  # setting its own resource attributes, add a resource processor back
+  # then, scoped to that gap.
 
 exporters:
   otlp/tempo:
@@ -46,13 +46,13 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [resource, batch]
+      processors: [batch]
       exporters: [otlp/tempo]
     logs:
       receivers: [otlp]
-      processors: [resource, batch]
+      processors: [batch]
       exporters: [otlphttp/loki]
     metrics:
       receivers: [otlp]
-      processors: [resource, batch]
+      processors: [batch]
       exporters: [prometheus]

@@ -75,10 +75,19 @@ services:
     ports:
       - "4317:4317"  # OTLP gRPC -- the backend's OTEL_EXPORTER_OTLP_ENDPOINT
       - "4318:4318"  # OTLP HTTP
+    # No healthcheck: this image is fully distroless -- confirmed directly
+    # (`docker exec` finds no sh/wget/curl/ls, only the otelcol-contrib
+    # binary itself), so there's no way to run a CMD-based probe from
+    # inside it. Nothing else in this stack depends_on otel-collector, so
+    # this only affects the collector's own dependents below, which are
+    # gated on service_healthy for the three backends it exports to.
     depends_on:
-      - loki
-      - tempo
-      - prometheus
+      loki:
+        condition: service_healthy
+      tempo:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
 
   prometheus:
     image: prom/prometheus:v2.55.1
@@ -89,6 +98,12 @@ services:
       - prometheus_data:/prometheus
     ports:
       - "9090:9090"
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
 
   loki:
     image: grafana/loki:3.2.1
@@ -100,6 +115,12 @@ services:
       - loki_data:/loki
     ports:
       - "3100:3100"
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
 
   tempo:
     image: grafana/tempo:2.6.1
@@ -111,6 +132,12 @@ services:
       - tempo_data:/var/tempo
     ports:
       - "3200:3200"  # Tempo query API, read by Grafana
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:3200/ready || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
 
   grafana:
     image: grafana/grafana:11.3.0
@@ -119,6 +146,8 @@ services:
     environment:
       # No-auth, local-only dashboard -- consistent with the rest of this
       # project's local-dev, no-auth posture (see AGENTS.md boundaries).
+      # Explicitly reviewed and kept as-is: Grafana here only visualizes
+      # already-local telemetry, holds no data of its own worth gating.
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - GF_AUTH_DISABLE_LOGIN_FORM=true
@@ -127,10 +156,19 @@ services:
       - grafana_data:/var/lib/grafana
     ports:
       - "3000:3000"
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
     depends_on:
-      - prometheus
-      - loki
-      - tempo
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+      tempo:
+        condition: service_healthy
 
   # --- Langfuse (LLM tracing for AssistantService) ------------------------
   # Opt-in via `docker compose --profile langfuse up -d` (or
@@ -237,7 +275,13 @@ services:
       start_period: 1s
 
   langfuse-minio:
-    image: cgr.dev/chainguard/minio
+    # Pinned by digest, not tag: Chainguard's free-tier images only ship a
+    # rolling `latest` (no version-numbered tags, unlike every other image
+    # in this file) -- digest is the actual reproducibility mechanism
+    # available here. Confirmed directly: `docker pull .../minio:latest`
+    # resolves to this digest; re-pin by re-running that pull when an
+    # update is wanted.
+    image: cgr.dev/chainguard/minio@sha256:cfdf1bed85da055bc031883d0959f373c4dbe9f3cb120855dcdc13943cd6284b
     container_name: ludora_langfuse_minio
     profiles: ["langfuse"]
     restart: unless-stopped

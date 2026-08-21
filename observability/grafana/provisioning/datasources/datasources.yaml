@@ -22,8 +22,11 @@ datasources:
     url: http://loki:3100
     jsonData:
       derivedFields:
+        # Matches structlog's KeyValueRenderer output (backend/app/core/
+        # logging_config.py's OTel export tee), which quotes string
+        # values: trace_id='143ec6...', not trace_id=143ec6...
         - datasourceUid: tempo
-          matcherRegex: 'trace_id=(\w+)'
+          matcherRegex: "trace_id='(\\w+)'"
           name: TraceID
           url: '$${__value.raw}'
     editable: true

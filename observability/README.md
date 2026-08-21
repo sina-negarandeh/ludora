@@ -7,13 +7,13 @@ comment.
 
 ## Status
 
-**Infrastructure only, not yet wired to the backend.** These five
-containers run and can talk to each other; nothing in `backend/app/`
-emits OTLP yet. That's a separate, deliberately incremental follow-up:
-add the OTel SDK + FastAPI/SQLAlchemy auto-instrumentors to
-`backend/pyproject.toml`, point `OTEL_EXPORTER_OTLP_ENDPOINT` at
-`http://localhost:4317`, and traces/metrics start flowing. Until then,
-Grafana will come up with datasources configured but nothing to show.
+**Real, verified, end-to-end.** The backend (`backend/app/core/otel_config.py`)
+instruments FastAPI, SQLAlchemy, and httpx, and ships traces, metrics,
+and structlog-sourced logs over one OTLP connection to the collector
+here. Confirmed against actual exported data -- a live request produces
+a real Tempo trace with nested DB spans, a matching Prometheus metric,
+and a Loki log line carrying the same `trace_id`. Full detail and
+evidence: `docs/engineering/observability.md`.
 
 ## Run it
 
