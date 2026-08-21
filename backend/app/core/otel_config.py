@@ -7,6 +7,18 @@ startup, before anything it instruments runs.
 Exporters retry/back off silently if the collector isn't reachable
 (`make observability-up` brings it up) -- same posture as
 OPENAI_BASE_URL: nothing here is required for the app to work.
+
+Idempotent by design (see the module-level guard below), and called
+defensively from AssistantService.__init__, not just app.main: the
+Langfuse SDK (app.core.langfuse_config) registers itself as the global
+OTel TracerProvider if none is set yet, silently stealing that slot from
+this app's own provider -- any FastAPI/SQLAlchemy/httpx span created
+afterward would then be dropped by Langfuse's span-export filter with no
+error. Calling configure_otel() from AssistantService.__init__ (the one
+place that constructs a Langfuse-wrapped client, whether from app.main's
+request handlers or from a standalone script like
+backend/test_assistant.py) guarantees this app's provider always wins
+the race, regardless of entry point.
 """
 import logging
 
@@ -33,8 +45,15 @@ from app.core.config import settings
 # principle logging_config.py already documents for its own setup.
 OTEL_LOG_LOGGER_NAME = "ludora.otel_export"
 
+_configured = False
+
 
 def configure_otel() -> None:
+    global _configured
+    if _configured:
+        return
+    _configured = True
+
     resource = Resource.create({
         "service.name": settings.OTEL_SERVICE_NAME,
         "deployment.environment": "local",

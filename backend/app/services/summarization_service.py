@@ -16,6 +16,16 @@ import time
 from collections import defaultdict
 from typing import Any
 
+# Deliberately the plain SDK, not langfuse.openai (see
+# assistant_service.py's import): Langfuse tracing is scoped to the AI
+# Assistant only, not this offline summarization job. Importing
+# langfuse.openai monkeypatches openai.resources.chat.completions.
+# Completions.create/.parse at the CLASS level (confirmed directly
+# against the installed SDK), not just for its own import site -- so if
+# this module and assistant_service.py are EVER imported into the same
+# process (they aren't today: this only runs via the standalone
+# scripts/generate_summaries.py, assistant_service.py only via the live
+# API), this client would silently start getting traced too.
 from openai import OpenAI
 from pydantic import ValidationError
 from sqlalchemy import func

@@ -1,24 +1,39 @@
-"""Bridges Settings' LANGFUSE_* fields into the process environment, since
-the langfuse SDK (both the `langfuse.openai` drop-in client and the
-Langfuse() client it looks up internally) reads its credentials via
-os.environ directly, not via this app's pydantic-settings object --
-pydantic-settings loads backend/.env into Settings' own fields, it
-doesn't mutate os.environ for other libraries to see.
+"""Registers the shared Langfuse client explicitly from Settings, rather
+than mutating the process environment for the SDK to discover
+credentials implicitly.
 
-Only sets them when both keys are actually present: setting
-LANGFUSE_PUBLIC_KEY to an empty string would NOT trigger the SDK's own
-"no key configured, disable tracing" branch (it checks `is None`, and
-`"" or os.environ.get(...)` already short-circuits past a falsy default
-before that check even runs) -- omitting the env var entirely is what
-correctly reaches that graceful no-op path.
+langfuse.openai's drop-in OpenAI wrapper (app.services.assistant_service)
+looks up this client lazily via get_client() on each call -- confirmed
+directly against the installed SDK (langfuse/_client/get_client.py):
+constructing Langfuse(public_key=...) registers itself in
+LangfuseResourceManager._instances, and a later no-argument get_client()
+call returns that sole registered instance. Settings defaults
+LANGFUSE_PUBLIC_KEY/SECRET_KEY to "" (matching this project's other
+optional-infra settings, e.g. OPENAI_API_KEY), not None, so this module
+does the "" -> None translation once here, since the SDK's own
+Optional[str] = None constructor typing checks `is None` -- passing ""
+straight through would skip its "not configured" no-op path.
+
+Idempotent (module-level guard): safe to call from
+AssistantService.__init__ on every request, not just once at app
+startup, so a standalone script that never imports app.main (e.g.
+backend/test_assistant.py) still gets a correctly-configured client.
 """
-import os
+from langfuse import Langfuse
 
 from app.core.config import settings
 
+_configured = False
+
 
 def configure_langfuse() -> None:
-    if settings.LANGFUSE_PUBLIC_KEY and settings.LANGFUSE_SECRET_KEY:
-        os.environ["LANGFUSE_PUBLIC_KEY"] = settings.LANGFUSE_PUBLIC_KEY
-        os.environ["LANGFUSE_SECRET_KEY"] = settings.LANGFUSE_SECRET_KEY
-        os.environ["LANGFUSE_BASE_URL"] = settings.LANGFUSE_BASE_URL
+    global _configured
+    if _configured:
+        return
+    _configured = True
+
+    Langfuse(
+        public_key=settings.LANGFUSE_PUBLIC_KEY or None,
+        secret_key=settings.LANGFUSE_SECRET_KEY or None,
+        host=settings.LANGFUSE_BASE_URL,
+    )

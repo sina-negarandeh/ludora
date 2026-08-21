@@ -6,11 +6,11 @@ processor pipeline, not per-module ad hoc setup.
 Console-rendered (human-readable key=value pairs), not JSON: the primary
 reader is still a developer's terminal, not a machine. Every event is
 also teed to the OTel logs pipeline (-> collector -> Loki, see
-app.core.otel_config and observability/README.md) in the same key=value
-shape, so a log line looks identical whether you're reading it in the
-terminal or in Grafana, and Grafana's trace_id derived-field regex
-(observability/grafana/provisioning/datasources/datasources.yaml) can
-find it either way.
+app.core.otel_config and observability/README.md), rendered via
+structlog's own KeyValueRenderer (quoted values, e.g. trace_id='abc...')
+-- Grafana's Loki derived-field regex
+(observability/grafana/provisioning/datasources/datasources.yaml) is
+written to match that exact quoted shape, not the terminal's.
 
 Deliberately standalone (structlog.PrintLoggerFactory(), not routed
 through Python's stdlib `logging`): keeps this additive -- uvicorn's own
@@ -35,9 +35,17 @@ def _inject_trace_context(logger, method_name, event_dict):
     return event_dict
 
 
+_KV_RENDERER = structlog.processors.KeyValueRenderer()
+
+
 def _export_to_otel(logger, method_name, event_dict):
-    level = getattr(logging, method_name.upper(), logging.INFO)
-    rendered = " ".join(f"{key}={value}" for key, value in event_dict.items())
+    # Reads event_dict["level"] (already normalized by add_log_level,
+    # earlier in this pipeline -- e.g. "exception" -> "error"), not the
+    # raw method_name: stdlib logging has no EXCEPTION level, so deriving
+    # from method_name directly would downgrade every logger.exception()
+    # call to INFO here.
+    level = getattr(logging, event_dict.get("level", "info").upper(), logging.INFO)
+    rendered = _KV_RENDERER(logger, method_name, event_dict)
     logging.getLogger(OTEL_LOG_LOGGER_NAME).log(level, rendered)
     return event_dict
 
