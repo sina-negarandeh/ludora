@@ -27,6 +27,7 @@ Internal maintenance artifact, not reader-facing product documentation. It suppo
 | Data pipeline / dataset provenance | `docs/data/README.md`, `docs/architecture/data-pipeline.md` | `data/raw/`, `data/processed/`, `scripts/build_master_dataset.py`, `scripts/ingest_master.py` | `README.md`, `docs/case-study.md`, `docs/setup/README.md`, `AGENTS.md` |
 | Database schema (migrations) | `docs/data/README.md#schema` | `backend/alembic/versions/` | `docs/architecture/README.md` |
 | Testing reality | `docs/engineering/testing.md` | `backend/test_*.py`, `frontend/package.json` | `README.md`, `AGENTS.md`, `backend/AGENTS.md`, `frontend/AGENTS.md`, `docs/limitations.md`, `docs/case-study.md` |
+| Observability (logging/tracing/metrics/LLM tracing) | `docs/engineering/observability.md` | `backend/app/core/logging_config.py`, `backend/app/core/otel_config.py`, `backend/app/core/langfuse_config.py`, `backend/app/main.py`, `backend/app/database/session.py`, `backend/app/services/assistant_service.py`, `observability/`, `langfuse/` | `AGENTS.md`, `backend/AGENTS.md`, `docs/architecture/README.md` |
 | Setup / security posture | `docs/setup/README.md`, `docs/limitations.md` | `docker-compose.yml`, `backend/app/core/config.py`, `backend/app/main.py` | `README.md`, `AGENTS.md`, `backend/AGENTS.md`, `docs/architecture/README.md`, `docs/case-study.md` |
 
 ## Tracked cross-cutting facts

@@ -37,6 +37,25 @@ class Settings(BaseSettings):
     SUMMARIZATION_OPENAI_API_KEY: str = "not-needed-for-local"
     SUMMARIZATION_MODEL_NAME: str = "Qwen/Qwen3-4B-MLX-4bit"
 
+    # OTel Collector endpoint (see observability/README.md) -- same posture
+    # as the LLM server settings above: the app always tries to export,
+    # and degrades silently (background retries, no request-path impact)
+    # if nothing is listening on it. Not gated behind a feature flag,
+    # since `uv run uvicorn ...` works identically whether or not
+    # `make observability-up` has been run.
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://localhost:4317"
+    OTEL_SERVICE_NAME: str = "ludora-backend"
+
+    # Langfuse (self-hosted, see langfuse/README.md) traces AssistantService's
+    # LLM calls specifically -- prompt/completion/token content the generic
+    # OTel setup above never captures. Empty by default (not committed --
+    # real values live in backend/.env, gitignored): the Langfuse SDK
+    # degrades to a no-op tracer with just a log warning when these are
+    # unset, same posture as every other optional-infra setting here.
+    LANGFUSE_PUBLIC_KEY: str = ""
+    LANGFUSE_SECRET_KEY: str = ""
+    LANGFUSE_BASE_URL: str = "http://localhost:3001"
+
     class Config:
         env_file = ".env"
 

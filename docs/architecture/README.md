@@ -45,7 +45,7 @@ flowchart LR
 
 The backend follows a **routes → services → (ORM models / recommenders)** layering. Route handlers never touch SQLAlchemy directly; each instantiates a service class and returns its result through a Pydantic `response_model`. Every route except `/health` carries an explicit OpenAPI `summary` and `description`.
 
-Every request is logged (method, path, status, duration) via a `structlog`-based middleware in `backend/app/main.py`, console-rendered for local reading, not shipped anywhere. `AssistantService`'s two LLM-calling methods log the same way per attempt (model, duration, outcome). See `backend/app/core/logging_config.py`.
+Every request is logged (method, path, status, duration) via a `structlog`-based middleware in `backend/app/main.py`, console-rendered for local reading and also teed to an OpenTelemetry logs pipeline. `AssistantService`'s two LLM-calling methods log the same way per attempt (model, duration, outcome). FastAPI, SQLAlchemy, and httpx are OTel-instrumented for traces and metrics, all exported over one OTLP connection to an opt-in local Grafana/Loki/Tempo/Prometheus stack. Full detail: `docs/engineering/observability.md`.
 
 ### API surface: 18 endpoints across 6 files
 

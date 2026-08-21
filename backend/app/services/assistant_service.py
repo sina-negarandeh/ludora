@@ -3,11 +3,24 @@ import re
 import time
 
 import structlog
-from openai import OpenAI
+
+# Langfuse's drop-in OpenAI client, not the plain SDK -- traces every
+# chat.completions.create() call (prompt, completion, token usage,
+# latency) to Langfuse with no other code change, see
+# app.core.langfuse_config and langfuse/README.md. Falls back to
+# behaving exactly like the plain client if Langfuse isn't configured.
+# langfuse's own type stubs mark this re-export private; the runtime
+# import (confirmed directly) resolves to the real openai.OpenAI class.
+# NOTE: this import monkeypatches the real openai SDK process-wide, not
+# just this module -- see summarization_service.py's own import comment
+# for what that means if it's ever loaded into the same process as this.
+from langfuse.openai import OpenAI  # pyright: ignore[reportPrivateImportUsage]
 from pydantic import ValidationError
 
 from app.core.config import settings
+from app.core.langfuse_config import configure_langfuse
 from app.core.ml_config import AssistantConfig
+from app.core.otel_config import configure_otel
 from app.schemas.assistant import ParsedIntent, ParsedPlan
 
 _THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
@@ -15,6 +28,17 @@ logger = structlog.get_logger("ludora.assistant")
 
 class AssistantService:
     def __init__(self):
+        # Both idempotent (safe to call on every request, not just once at
+        # app startup) and must run before the langfuse.openai.OpenAI
+        # client below is ever asked to trace a call: Langfuse's SDK
+        # claims the global OTel TracerProvider for itself if none is
+        # registered yet, which would silently drop every FastAPI/
+        # SQLAlchemy/httpx span created afterward. app.main already calls
+        # both at startup: this is the same guarantee for any other
+        # entry point that constructs an AssistantService directly (e.g.
+        # backend/test_assistant.py), which never imports app.main.
+        configure_otel()
+        configure_langfuse()
         # Local MLX / OpenAI-compatible server, or real OpenAI if configured.
         self.client = OpenAI(base_url=settings.OPENAI_BASE_URL, api_key=settings.OPENAI_API_KEY)
         # MLX server expects the exact HuggingFace repo ID.

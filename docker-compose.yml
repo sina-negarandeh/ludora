@@ -56,6 +56,298 @@ services:
       - VITE_API_URL=http://localhost:8000
     command: npm run dev -- --host 0.0.0.0
 
+  # --- Observability stack -----------------------------------------------
+  # Opt-in via `docker compose --profile observability up -d` (or
+  # `make observability-up`), not part of plain `make up` / `docker compose
+  # up -d` -- this is 5 extra containers with no payoff until the backend
+  # actually emits OTLP, and shouldn't add startup weight to routine dev
+  # work. The backend runs natively on the host (see the `backend` service
+  # comment above), so it reaches the collector via the published
+  # localhost:4317/4318 ports, same as it reaches Postgres on localhost:5432.
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.114.0
+    container_name: ludora_otel_collector
+    profiles: ["observability"]
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./observability/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "4317:4317"  # OTLP gRPC -- the backend's OTEL_EXPORTER_OTLP_ENDPOINT
+      - "4318:4318"  # OTLP HTTP
+    # No healthcheck: this image is fully distroless -- confirmed directly
+    # (`docker exec` finds no sh/wget/curl/ls, only the otelcol-contrib
+    # binary itself), so there's no way to run a CMD-based probe from
+    # inside it. Nothing else in this stack depends_on otel-collector, so
+    # this only affects the collector's own dependents below, which are
+    # gated on service_healthy for the three backends it exports to.
+    depends_on:
+      loki:
+        condition: service_healthy
+      tempo:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: ludora_prometheus
+    profiles: ["observability"]
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  loki:
+    image: grafana/loki:3.2.1
+    container_name: ludora_loki
+    profiles: ["observability"]
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      - ./observability/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    container_name: ludora_tempo
+    profiles: ["observability"]
+    command: -config.file=/etc/tempo/tempo.yaml
+    volumes:
+      - ./observability/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    ports:
+      - "3200:3200"  # Tempo query API, read by Grafana
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:3200/ready || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: ludora_grafana
+    profiles: ["observability"]
+    environment:
+      # No-auth, local-only dashboard -- consistent with the rest of this
+      # project's local-dev, no-auth posture (see AGENTS.md boundaries).
+      # Explicitly reviewed and kept as-is: Grafana here only visualizes
+      # already-local telemetry, holds no data of its own worth gating.
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+      tempo:
+        condition: service_healthy
+
+  # --- Langfuse (LLM tracing for AssistantService) ------------------------
+  # Opt-in via `docker compose --profile langfuse up -d` (or
+  # `make langfuse-up`), separate from the `observability` profile above --
+  # this is 6 more containers (Langfuse's v4 self-host stack: web, worker,
+  # Postgres, ClickHouse, Redis, minio), a genuinely different piece of
+  # infra with its own opt-in cost. Secrets come from `.env` (gitignored,
+  # never commit real values here) -- see `.env.example` and
+  # `langfuse/README.md`. Ports remapped from Langfuse's own upstream
+  # defaults where they'd collide with the observability stack above
+  # (langfuse-web 3000->3001 collides with grafana, minio 9090->9190
+  # collides with prometheus).
+
+  langfuse-worker:
+    image: docker.langfuse.com/langfuse/langfuse-worker:4
+    container_name: ludora_langfuse_worker
+    profiles: ["langfuse"]
+    restart: unless-stopped
+    depends_on: &langfuse-depends-on
+      langfuse-postgres:
+        condition: service_healthy
+      langfuse-minio:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+      langfuse-clickhouse:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3030:3030"
+    environment: &langfuse-worker-env
+      NEXTAUTH_URL: http://localhost:3001
+      DATABASE_URL: postgresql://langfuse:${LANGFUSE_POSTGRES_PASSWORD}@langfuse-postgres:5432/langfuse
+      SALT: ${LANGFUSE_SALT}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY}
+      TELEMETRY_ENABLED: "false"
+      CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_ROOT_PASSWORD}
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_ROOT_PASSWORD}
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+      REDIS_HOST: langfuse-redis
+      REDIS_PORT: "6379"
+      REDIS_AUTH: ${LANGFUSE_REDIS_AUTH}
+
+  langfuse-web:
+    image: docker.langfuse.com/langfuse/langfuse:4
+    container_name: ludora_langfuse_web
+    profiles: ["langfuse"]
+    restart: unless-stopped
+    depends_on: *langfuse-depends-on
+    ports:
+      - "3001:3000"
+    environment:
+      <<: *langfuse-worker-env
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET}
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://localhost:9190
+      # Auto-provisions an org/project/user/API-keypair on first boot --
+      # no manual sign-up/create-project UI step. See .env.example.
+      LANGFUSE_INIT_ORG_ID: ${LANGFUSE_INIT_ORG_ID}
+      LANGFUSE_INIT_ORG_NAME: ${LANGFUSE_INIT_ORG_NAME}
+      LANGFUSE_INIT_PROJECT_ID: ${LANGFUSE_INIT_PROJECT_ID}
+      LANGFUSE_INIT_PROJECT_NAME: ${LANGFUSE_INIT_PROJECT_NAME}
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_INIT_PROJECT_PUBLIC_KEY}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL}
+      LANGFUSE_INIT_USER_NAME: ${LANGFUSE_INIT_USER_NAME}
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD}
+
+  langfuse-clickhouse:
+    image: docker.io/clickhouse/clickhouse-server:25.12
+    container_name: ludora_langfuse_clickhouse
+    profiles: ["langfuse"]
+    restart: unless-stopped
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD}
+    volumes:
+      - langfuse_clickhouse_data:/var/lib/clickhouse
+      - langfuse_clickhouse_logs:/var/log/clickhouse-server
+    ports:
+      - "127.0.0.1:8123:8123"
+      - "127.0.0.1:9000:9000"
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 1s
+
+  langfuse-minio:
+    # Pinned by digest, not tag: Chainguard's free-tier images only ship a
+    # rolling `latest` (no version-numbered tags, unlike every other image
+    # in this file) -- digest is the actual reproducibility mechanism
+    # available here. Confirmed directly: `docker pull .../minio:latest`
+    # resolves to this digest; re-pin by re-running that pull when an
+    # update is wanted.
+    image: cgr.dev/chainguard/minio@sha256:cfdf1bed85da055bc031883d0959f373c4dbe9f3cb120855dcdc13943cd6284b
+    container_name: ludora_langfuse_minio
+    profiles: ["langfuse"]
+    restart: unless-stopped
+    entrypoint: sh
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: ${LANGFUSE_MINIO_ROOT_PASSWORD}
+    ports:
+      - "9190:9000"  # S3 API -- remapped from minio's own default 9090, which prometheus already owns
+      - "127.0.0.1:9191:9001"  # console
+    volumes:
+      - langfuse_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 1s
+      timeout: 5s
+      retries: 5
+      start_period: 1s
+
+  langfuse-redis:
+    image: docker.io/redis:7
+    container_name: ludora_langfuse_redis
+    profiles: ["langfuse"]
+    restart: unless-stopped
+    command: >
+      --requirepass ${LANGFUSE_REDIS_AUTH}
+      --maxmemory-policy noeviction
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - langfuse_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 10s
+      retries: 10
+
+  langfuse-postgres:
+    image: docker.io/postgres:17
+    container_name: ludora_langfuse_postgres
+    profiles: ["langfuse"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: ${LANGFUSE_POSTGRES_PASSWORD}
+      POSTGRES_DB: langfuse
+    ports:
+      - "127.0.0.1:5433:5432"  # remapped from Postgres's own default 5432, which ludora_db already owns
+    volumes:
+      - langfuse_postgres_data:/var/lib/postgresql/data
+
 volumes:
   postgres_data:
   pgadmin_data:
+  prometheus_data:
+  loki_data:
+  tempo_data:
+  grafana_data:
+  langfuse_postgres_data:
+  langfuse_clickhouse_data:
+  langfuse_clickhouse_logs:
+  langfuse_minio_data:
+  langfuse_redis_data:

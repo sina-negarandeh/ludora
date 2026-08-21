@@ -1,0 +1,58 @@
+# OpenTelemetry Collector: the single ingestion point for the backend's
+# traces/logs/metrics. The app (running natively on the host, not in this
+# compose stack -- mlx-embeddings needs Apple Silicon) sends one OTLP
+# stream here via localhost:4317; the collector fans it out to Tempo,
+# Loki, and Prometheus. This is the standard shape -- the app never talks
+# to Tempo/Loki/Prometheus directly.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+  # No resource processor here: the app itself already sets
+  # deployment.environment (backend/app/core/otel_config.py's
+  # Resource.create(...)) on every span/metric/log before it reaches
+  # this collector -- setting it again here would just be the same
+  # literal in two places that could drift out of sync. If a second
+  # service ever sends telemetry through this collector without
+  # setting its own resource attributes, add a resource processor back
+  # then, scoped to that gap.
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  # Loki's native OTLP log ingestion (Loki >= 3.0), not the older
+  # collector-side `loki` exporter -- that one is deprecated in favor of
+  # this, per Grafana's own current guidance.
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+
+  # Prometheus is pull-based by design; the collector exposes a /metrics
+  # endpoint here and prometheus.yml scrapes it, rather than fighting
+  # Prometheus's model with remote-write.
+  prometheus:
+    endpoint: 0.0.0.0:8889
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/tempo]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/loki]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]
