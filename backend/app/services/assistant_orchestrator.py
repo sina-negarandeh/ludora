@@ -9,25 +9,67 @@ from app.schemas.search import SearchMode, SearchQuery
 from app.services.aspect_service import AspectAggregateResponse, AspectService
 from app.services.entity_resolver import AmbiguousEntityError, EntityNotFoundError, EntityResolver
 from app.services.game_service import GameService
-from app.services.plan_graph import PlanStep, PlanValidationError, compile_plan
+from app.services.plan_executor import run_plan
+from app.services.plan_graph import PlanGraph, PlanValidationError, compile_plan
+from app.services.plan_resolution import MAX_COMPARE_GAMES, extract_chainable_values
 from app.services.recommendation_service import RecommendationService
 from app.services.review_service import ReviewService
 from app.services.search_service import SearchService
 
 
+def based_on_prefix(graph: PlanGraph, results: dict[int, AssistantResponse]) -> str:
+    """"Based on X: " when exactly one earlier step fed everything
+    downstream of it, otherwise "".
+
+    With two or more independent sources merging into one step (two
+    browse steps into one compare) there is no single "based on" to name,
+    and the response's own data already makes the sources obvious.
+    """
+    if len(results) <= 1:
+        return ""
+    sources = {p for node in graph.steps for p in node.depends_on}
+    if len(sources) != 1:
+        return ""
+    names = [name for name, _ in extract_chainable_values(results[next(iter(sources))])]
+    if len(names) == 1:
+        return f"Based on {names[0]}: "
+    if len(names) > 1:
+        return f"Based on {len(names)} suggestions ({', '.join(names)}): "
+    return ""
+
+
+def relaxation_note(relaxed_filters: dict[int, list[str]]) -> str:
+    """What recovery gave up, or "" if it never fired.
+
+    Never silently answer a different question than the one asked: if a
+    constraint had to be dropped to find anything, the response says so.
+
+    Bounds keep the order they were surrendered in rather than being
+    sorted, because that order is the policy (_RELAXABLE_FILTERS runs
+    least-defensible first), so it tells the user which constraint was
+    treated as most disposable. Attribution is per step once more than
+    one step relaxed: a flat list would read as though a single query
+    carried every dropped bound.
+    """
+    relaxed = [(position, dropped)
+               for position, dropped in sorted(relaxed_filters.items())
+               if dropped]
+    if not relaxed:
+        return ""
+    if len(relaxed) == 1:
+        # Naming a step number for the common single-step case is noise,
+        # not precision.
+        what = ", ".join(relaxed[0][1])
+    else:
+        what = "; ".join(f"{', '.join(dropped)} on step {position}"
+                         for position, dropped in relaxed)
+    return f"Nothing matched every constraint, so I relaxed {what}. "
+
+
 class AssistantOrchestrator:
-    # Cap on how many games a "compare" request will fetch/render -- past
-    # this many, a comparison table stops being readable in the narrow
-    # assistant drawer.
-    MAX_COMPARE_GAMES = 5
 
     def __init__(self, db: Session):
         self.db = db
-        # Defaults to empty so execute() alone (without going through
-        # execute_plan()) is still safe -- e.g. direct use in a script.
-        # execute_plan() resets this per request; see there and
-        # _handle_compare() for what it's for.
-        self._known_bgg_ids: dict = {}
         self.game_service = GameService(db)
         self.search_service = SearchService(db)
         self.rec_service = RecommendationService(db)
@@ -35,7 +77,18 @@ class AssistantOrchestrator:
         self.review_service = ReviewService(db)
         self.resolver = EntityResolver(db)
 
-    def execute(self, intent: ParsedIntent) -> AssistantResponse:
+    def execute(self, intent: ParsedIntent, known_bgg_ids: dict[str, int] | None = None) -> AssistantResponse:
+        """Runs one already-resolved intent.
+
+        `known_bgg_ids` carries names a plan step already resolved to an
+        exact id, so a title lifted straight off an earlier step's result
+        skips the fuzzy EntityResolver -- which can spuriously raise
+        AmbiguousEntityError on an exact title (measured: "Witch Hunt").
+        Passed in rather than held as instance state: it belongs to one
+        plan execution, and the walk that owns that execution keeps it.
+        """
+        known = known_bgg_ids or {}
+
         # If LLM already knows it needs clarification
         if intent.needs_clarification:
             return AssistantResponse(
@@ -47,21 +100,21 @@ class AssistantOrchestrator:
 
         try:
             if intent.intent == "browse":
-                return self._handle_browse(intent)
+                return self._handle_browse(intent, known)
             elif intent.intent == "search":
-                return self._handle_search(intent)
+                return self._handle_search(intent, known)
             elif intent.intent == "recommend":
-                return self._handle_recommend(intent)
+                return self._handle_recommend(intent, known)
             elif intent.intent == "compare":
-                return self._handle_compare(intent)
+                return self._handle_compare(intent, known)
             elif intent.intent == "get_game":
-                return self._handle_get_game(intent)
+                return self._handle_get_game(intent, known)
             elif intent.intent == "get_aspects":
-                return self._handle_get_aspects(intent)
+                return self._handle_get_aspects(intent, known)
             elif intent.intent == "get_reviews":
-                return self._handle_get_reviews(intent)
+                return self._handle_get_reviews(intent, known)
             elif intent.intent == "unsupported":
-                return self._handle_unsupported(intent)
+                return self._handle_unsupported(intent, known)
             else:
                 return AssistantResponse(
                     message="I'm not sure how to handle that intent.",
@@ -98,22 +151,19 @@ class AssistantOrchestrator:
 
         The plan is compiled into a validated PlanGraph before anything
         runs (see plan_graph.compile_plan) -- every "$stepN" reference is
-        checked to point at an earlier, existing step up front, so this
-        loop never has to handle an out-of-range or forward reference
+        checked to point at an earlier, existing step up front, so the
+        walk never has to handle an out-of-range or forward reference
         itself; if compile_plan doesn't raise, every dependency lookup
-        below is guaranteed safe.
+        during execution is guaranteed safe.
 
-        Deliberately a plain linear walk over a graph that's acyclic by
-        construction, not a scheduler: with at most
-        AssistantConfig.MAX_PLAN_STEPS steps and no need for parallelism
-        (the single LLM call already dominates latency), there's nothing
-        to schedule.
+        The walk itself lives in plan_executor as a LangGraph state
+        machine, not inline here. It still visits steps in position
+        order, but it can also loop back and retry a step with looser
+        constraints -- a cycle the compiled plan deliberately cannot
+        express, since compile_plan makes references point strictly
+        backward. This method keeps only what happens around that walk:
+        the single-step shortcut, and composing the final message.
         """
-        # Request-scoped map of already-exact game names (ones that came
-        # from a placeholder expansion, not user-typed text) to their
-        # known bgg_id -- see _resolve_step and _handle_compare's use of it.
-        self._known_bgg_ids: dict = {}
-
         if not plan.steps:
             return AssistantResponse(
                 message="I couldn't understand that request. Could you rephrase it?",
@@ -140,187 +190,41 @@ class AssistantOrchestrator:
         if len(graph.steps) == 1:
             return self.execute(graph.steps[0].intent)
 
-        results: dict[int, AssistantResponse] = {}
-        final = None
-        for node in graph.steps:
-            step = node.intent
-            if node.depends_on:
-                # Safe without a None-check: compile_plan guarantees every
-                # position in depends_on is < node.position, and positions
-                # only enter `results` in increasing order below -- if a
-                # referenced step were missing, an earlier iteration would
-                # already have broken out of this loop.
-                priors = [results[p] for p in node.depends_on]
-                bad = next((r for r in priors if r.type in ("error", "clarification")), None)
-                if bad is not None:
-                    # A step this one depends on didn't cleanly resolve
-                    # (ambiguous or not found) -- surface that instead of
-                    # guessing, rather than continuing the chain on bad data.
-                    final = bad
-                    break
-                resolved_step = self._resolve_step(node, results)
-                if resolved_step is None:
-                    final = AssistantResponse(
-                        message="I couldn't pin down the games this part of the request needed from an earlier step.",
-                        type="error",
-                        parsed_intent=step,
-                        data={}
-                    )
-                    break
-                step = resolved_step
+        # Execution proper lives in a LangGraph state machine (see
+        # plan_executor): the same position-order walk this did inline,
+        # plus one recovery cycle -- a step that matches nothing, and that
+        # a later step depends on, gives up one model-invented numeric
+        # bound at a time, retrying after each until something matches or
+        # it has nothing left. That cycle is why this isn't still
+        # a plain loop: compile_plan's acyclic-by-construction guarantee
+        # means the plan itself cannot express "try again, looser".
+        state = run_plan(self, graph)
+        results: dict[int, AssistantResponse] = state["results"]
+        final = state["final"]
 
-            response = self.execute(step)
-            results[node.position] = response
-            final = response
-            if response.type in ("error", "clarification"):
-                # Failure isolation: stop the chain here rather than
-                # running further steps against a state we know is bad,
-                # but whatever earlier steps succeeded stays in `results`
-                # even though only `final` is returned to the caller today.
-                break
+        if final is not None and final.type not in ("error", "clarification"):
+            note = relaxation_note(state["relaxed_filters"])
+            prefix = based_on_prefix(graph, results)
+            if note or prefix:
+                # Note first: the caveat frames the whole answer rather
+                # than getting buried inside the "Based on X" prefix.
+                final = final.model_copy(update={"message": f"{note}{prefix}{final.message}"})
 
-        if len(results) > 1 and final is not None and final.type not in ("error", "clarification"):
-            # "Based on X: ..." only makes sense when exactly one earlier
-            # step fed everything downstream of it. With two or more
-            # independent sources merging into one step (e.g. two browse
-            # steps into one compare), there's no single "based on" to
-            # name -- and the response's own data (the comparison table)
-            # already makes the sources obvious, so the prefix is skipped.
-            sources = {p for node in graph.steps for p in node.depends_on}
-            if len(sources) == 1:
-                source = next(iter(sources))
-                chained_names = [name for name, _ in self._extract_chainable_values(results[source])]
-                if len(chained_names) == 1:
-                    final = final.model_copy(update={"message": f"Based on {chained_names[0]}: {final.message}"})
-                elif len(chained_names) > 1:
-                    final = final.model_copy(update={"message": f"Based on {len(chained_names)} suggestions ({', '.join(chained_names)}): {final.message}"})
-
-        # graph.steps is non-empty here (the len == 1 case already
-        # returned above), so the loop runs at least once and every
-        # iteration sets final before continuing or breaking.
+        # The walk always runs at least one step (the single-step case
+        # returned above), and every path through plan_executor sets final.
         assert final is not None
         return final
 
-    def _resolve_step(self, node: PlanStep, results: dict) -> ParsedIntent | None:
-        """Substitutes every "$stepN" placeholder in node.intent's
-        game_name/game_names with real values drawn from `results`, per
-        node.depends_on (already validated non-empty and, by
-        compile_plan's guarantee, all already executed and present in
-        `results`). Returns None if a referenced step's result can't
-        supply what this step needs -- the caller turns that into a
-        user-facing error rather than guessing forward.
-
-        Three shapes, all handled uniformly by resolving every distinct
-        referenced position once and then applying it wherever it's used:
-
-        - "game_name" is itself a placeholder: needs exactly one game.
-        - "game_names" has exactly one placeholder entry: this is the one
-          case a placeholder can stand for MULTIPLE games at once (e.g.
-          "suggest some games and compare them") -- if the referenced
-          step resolved to more than one game, every one of them is used,
-          capped at MAX_COMPARE_GAMES, replacing the whole game_names
-          list rather than merging with any sibling literal entries
-          (measured directly against this server: the model paired a
-          many-valued placeholder with a second, fabricated literal title
-          that wasn't in the user's request at all).
-        - "game_names" has two or more DISTINCT placeholder entries (e.g.
-          ["$step0", "$step1"] -- "compare the heaviest game to the
-          highest-rated game", two independent prior steps merging into
-          one compare): each referenced step must resolve to exactly one
-          game. Comparing two open-ended GROUPS of suggestions against
-          each other isn't well defined, so if any of them resolves to
-          more than one game, that's an error rather than a guess at
-          which games from which group to pair.
-
-        known_bgg_ids is populated for every substituted name in every
-        case: these names came straight off an earlier GameResponse, so
-        they're already exact, and _handle_compare skips re-resolving
-        them through the fuzzy EntityResolver, which can still spuriously
-        raise AmbiguousEntityError on an exact title (measured: "Witch
-        Hunt" did this).
-        """
-        step = node.intent
-        resolved: dict[int, list] = {}
-        for position in node.depends_on:
-            values = self._extract_chainable_values(results[position])
-            if not values:
-                return None
-            resolved[position] = values
-
-        updates = {}
-
-        if node.game_name_ref is not None:
-            values = resolved[node.game_name_ref]
-            if len(values) != 1:
-                return None
-            name, bgg_id = values[0]
-            self._known_bgg_ids[name] = bgg_id
-            updates["game_name"] = name
-
-        if node.game_names_refs:
-            # game_names_refs is only populated by compile_plan when it
-            # found placeholder matches while iterating step.game_names,
-            # so game_names is guaranteed non-None here.
-            assert step.game_names is not None
-            new_names = list(step.game_names)
-            if len(node.game_names_refs) == 1:
-                (idx, position), = node.game_names_refs.items()
-                values = resolved[position]
-                for name, bgg_id in values:
-                    self._known_bgg_ids[name] = bgg_id
-                if len(values) == 1:
-                    new_names[idx] = values[0][0]
-                else:
-                    capped = values[:self.MAX_COMPARE_GAMES]
-                    new_names = [name for name, _ in capped]
-            else:
-                for idx, position in node.game_names_refs.items():
-                    values = resolved[position]
-                    if len(values) != 1:
-                        return None
-                    name, bgg_id = values[0]
-                    self._known_bgg_ids[name] = bgg_id
-                    new_names[idx] = name
-            updates["game_names"] = new_names
-
-        return step.model_copy(update=updates) if updates else step
-
-    def _extract_chainable_values(self, response: AssistantResponse) -> list:
-        """Pulls every (name, bgg_id) pair out of a step's result --
-        used when a dependent step needs every game an earlier step
-        found (a "compare" one-to-many placeholder), or just to check
-        how many games a dependency resolved to when deciding whether a
-        substitution is unambiguous (see _resolve_step). The bgg_id
-        travels with the name so _resolve_step can let the handlers
-        below skip re-resolving a title that's already exact -- see
-        _resolve_bgg_id for why that matters.
-        """
-        if not response.data:
-            return []
-        games = response.data.get("games")
-        if games:
-            return [(g["name"], g["bgg_id"]) for g in games if g.get("name") and g.get("bgg_id")]
-        results = response.data.get("results")
-        if results:
-            return [(r["game"]["name"], r["game"]["bgg_id"]) for r in results if r.get("game", {}).get("name") and r.get("game", {}).get("bgg_id")]
-        recommendations = response.data.get("recommendations")
-        if recommendations:
-            return [(r["game"]["name"], r["game"]["bgg_id"]) for r in recommendations if r.get("game", {}).get("name") and r.get("game", {}).get("bgg_id")]
-        game = response.data.get("game")
-        if game and game.get("name") and game.get("bgg_id"):
-            return [(game["name"], game["bgg_id"])]
-        return []
-
-    def _resolve_bgg_id(self, name: str) -> int:
+    def _resolve_bgg_id(self, name: str, known_bgg_ids: dict[str, int]) -> int:
         """Resolves a game name to its bgg_id, preferring an already-known
-        exact id (populated by _resolve_step for every name substituted
+        exact id (populated by resolve_step for every name substituted
         from an earlier step's result) over the fuzzy EntityResolver.
         Skipping the resolver for an already-exact name matters because
         re-running it through EntityResolver.resolve_game() -- built for
         fuzzy, typed-in user text -- can still spuriously raise
         AmbiguousEntityError on it (measured: "Witch Hunt" did this).
         """
-        return self._known_bgg_ids.get(name) or self.resolver.resolve_game(name)
+        return known_bgg_ids.get(name) or self.resolver.resolve_game(name)
 
     def _map_filters(self, assistant_filters) -> GameFilter:
         if not assistant_filters:
@@ -364,7 +268,7 @@ class AssistantOrchestrator:
                 parts.extend(values)
         return " ".join(parts)
 
-    def _handle_browse(self, intent: ParsedIntent) -> AssistantResponse:
+    def _handle_browse(self, intent: ParsedIntent, known_bgg_ids: dict[str, int]) -> AssistantResponse:
         try:
             db_filters = self._map_filters(intent.filters)
         except EntityNotFoundError:
@@ -439,7 +343,7 @@ class AssistantOrchestrator:
             data={"total": total, "games": [GameResponse.model_validate(g).model_dump() for g in games]}
         )
 
-    def _handle_search(self, intent: ParsedIntent) -> AssistantResponse:
+    def _handle_search(self, intent: ParsedIntent, known_bgg_ids: dict[str, int]) -> AssistantResponse:
         try:
             db_filters = self._map_filters(intent.filters)
         except EntityNotFoundError:
@@ -465,7 +369,7 @@ class AssistantOrchestrator:
             data={"total": results.total, "results": [{"game": GameResponse.model_validate(item.game).model_dump(), "score": item.score} for item in results.items]}
         )
 
-    def _handle_recommend(self, intent: ParsedIntent) -> AssistantResponse:
+    def _handle_recommend(self, intent: ParsedIntent, known_bgg_ids: dict[str, int]) -> AssistantResponse:
         if not intent.game_name:
             intent.needs_clarification = True
             intent.clarification_question = "Which game do you want recommendations for?"
@@ -476,7 +380,7 @@ class AssistantOrchestrator:
                 data={}
             )
 
-        bgg_id = self._resolve_bgg_id(intent.game_name)
+        bgg_id = self._resolve_bgg_id(intent.game_name, known_bgg_ids)
         
         # Default to hybrid if not specified
         model_name = intent.recommendation_model or "hybrid"
@@ -493,7 +397,7 @@ class AssistantOrchestrator:
             }
         )
 
-    def _handle_compare(self, intent: ParsedIntent) -> AssistantResponse:
+    def _handle_compare(self, intent: ParsedIntent, known_bgg_ids: dict[str, int]) -> AssistantResponse:
         if not intent.game_names or len(intent.game_names) < 2:
             intent.needs_clarification = True
             intent.clarification_question = "Which games do you want to compare? Please name at least two."
@@ -504,8 +408,8 @@ class AssistantOrchestrator:
                 data={}
             )
 
-        names = intent.game_names[:self.MAX_COMPARE_GAMES]
-        bgg_ids = [self._resolve_bgg_id(name) for name in names]
+        names = intent.game_names[:MAX_COMPARE_GAMES]
+        bgg_ids = [self._resolve_bgg_id(name, known_bgg_ids) for name in names]
         games = [self.game_service.get_game(bgg_id) for bgg_id in bgg_ids]
         games = [g for g in games if g is not None]
 
@@ -524,7 +428,7 @@ class AssistantOrchestrator:
             data={"games": [GameResponse.model_validate(g).model_dump() for g in games]}
         )
 
-    def _handle_get_game(self, intent: ParsedIntent) -> AssistantResponse:
+    def _handle_get_game(self, intent: ParsedIntent, known_bgg_ids: dict[str, int]) -> AssistantResponse:
         if not intent.game_name:
             intent.needs_clarification = True
             intent.clarification_question = "Which game are you looking for?"
@@ -535,7 +439,7 @@ class AssistantOrchestrator:
                 data={}
             )
 
-        bgg_id = self._resolve_bgg_id(intent.game_name)
+        bgg_id = self._resolve_bgg_id(intent.game_name, known_bgg_ids)
         game = self.game_service.get_game(bgg_id)
 
         if not game:
@@ -604,7 +508,7 @@ class AssistantOrchestrator:
             return f"I don't have that information for {game.name}."
         return f"{game.name} " + "; ".join(parts) + "."
 
-    def _handle_get_aspects(self, intent: ParsedIntent) -> AssistantResponse:
+    def _handle_get_aspects(self, intent: ParsedIntent, known_bgg_ids: dict[str, int]) -> AssistantResponse:
         """"What do people think of X" -- the community consensus paragraph
         plus the per-aspect sentiment breakdown, bundled together since
         they're complementary views of the same review corpus (one holistic
@@ -621,7 +525,7 @@ class AssistantOrchestrator:
                 data={}
             )
 
-        bgg_id = self._resolve_bgg_id(intent.game_name)
+        bgg_id = self._resolve_bgg_id(intent.game_name, known_bgg_ids)
         game = self.game_service.get_game(bgg_id)
         if not game:
             return AssistantResponse(message="I couldn't find that game.", type="error", parsed_intent=intent, data={})
@@ -668,7 +572,7 @@ class AssistantOrchestrator:
         else:
             return f"{a.aspect} (mixed opinions)"
 
-    def _handle_get_reviews(self, intent: ParsedIntent) -> AssistantResponse:
+    def _handle_get_reviews(self, intent: ParsedIntent, known_bgg_ids: dict[str, int]) -> AssistantResponse:
         """Actual written review text -- distinct from get_aspects, which
         answers a general opinion question with a summary/breakdown
         instead of verbatim reviews.
@@ -683,7 +587,7 @@ class AssistantOrchestrator:
                 data={}
             )
 
-        bgg_id = self._resolve_bgg_id(intent.game_name)
+        bgg_id = self._resolve_bgg_id(intent.game_name, known_bgg_ids)
         game = self.game_service.get_game(bgg_id)
         if not game:
             return AssistantResponse(message="I couldn't find that game.", type="error", parsed_intent=intent, data={})
@@ -699,7 +603,7 @@ class AssistantOrchestrator:
             data={"game": GameResponse.model_validate(game).model_dump(), "total": total, "reviews": reviews}
         )
 
-    def _handle_unsupported(self, intent: ParsedIntent) -> AssistantResponse:
+    def _handle_unsupported(self, intent: ParsedIntent, known_bgg_ids: dict[str, int]) -> AssistantResponse:
         """A request with nothing to do with board games (small talk,
         general knowledge, questions about the assistant itself). The
         message is fixed here rather than left to the LLM's phrasing --

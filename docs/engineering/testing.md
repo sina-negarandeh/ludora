@@ -6,7 +6,7 @@
 
 On every PR touching `backend/`, in order: `ruff check app/` (lint), `pyright` (type check, `basic` mode, scoped to `app/`), then `pytest` (scoped to `backend/tests/` via `[tool.pytest.ini_options]`, not the repo root -- see why below).
 
-`backend/tests/test_app_smoke.py` is the entire real automated suite today: two tests, both infra-free (no live DB, no local LLM server), using `TestClient` to hit `/health` and `/openapi.json`. Deliberately minimal but genuine -- it catches a broken import, a broken route/schema definition, or an app startup error, which is exactly what a GitHub-hosted Linux runner *can* check. It can't run anything requiring `mlx-embeddings` (Apple Silicon only, see `backend/AGENTS.md`) or a seeded Postgres instance, which is also why the CI job installs only the `dev` dependency group (`uv sync`, no `--group ml`) -- the offline pipeline's heavy ML libraries aren't needed for any of this.
+`backend/tests/` holds the real automated suite, and every test in it is infra-free (no live DB, no local LLM server), which is what lets a GitHub-hosted Linux runner run all of it. `test_app_smoke.py` is two tests using `TestClient` to hit `/health` and `/openapi.json`: deliberately minimal but genuine, catching a broken import, a broken route or schema definition, or an app startup error. `test_plan_executor.py` is eleven tests over the assistant's plan-execution state machine, covering the bound on its one recovery cycle and the user-facing message it produces; it touches no HTTP layer at all, driving the graph directly with a fake orchestrator. It can't run anything requiring `mlx-embeddings` (Apple Silicon only, see `backend/AGENTS.md`) or a seeded Postgres instance, which is also why the CI job installs only the `dev` dependency group (`uv sync`, no `--group ml`) -- the offline pipeline's heavy ML libraries aren't needed for any of this.
 
 Neither test touches search or embeddings, but `from app.main import app` alone used to fail on Linux anyway: `app/core/embeddings.py` imported `mlx_embeddings` at module top-level, which imports `mlx.core`, which requires Apple Silicon (`libmlx.so`) to even *import*, not just run. Fixed by moving that one import inside the function that actually calls it (`_get_model()`) -- not an ML-testing workaround, just an eager import that had no reason to run before it was needed, confirmed directly: after the fix, importing `app.main` loads zero `mlx*` modules unless something actually calls `encode()`.
 
@@ -60,7 +60,7 @@ Listed explicitly in `[tool.pyright].exclude`, not caught during development: lo
 
 ## Related code
 
-- `backend/tests/test_app_smoke.py` (real, CI-run) and `backend/test_api.py`, `test_games.py`, `test_routes.py`, `test_assistant.py`, `test_assistant_retry.py`, `test_orchestrator.py` (print-only, not CI-run)
+- `backend/tests/test_app_smoke.py`, `backend/tests/test_plan_executor.py` (real, CI-run) and `backend/test_api.py`, `test_games.py`, `test_routes.py`, `test_assistant.py`, `test_assistant_retry.py`, `test_orchestrator.py` (print-only, not CI-run)
 - `backend/pyproject.toml` (`[dependency-groups]`, `[tool.ruff]`, `[tool.pyright]`, `[tool.pytest.ini_options]`)
 - `.github/workflows/backend-ci.yml`
 - `frontend/package.json`, `frontend/.oxlintrc.json`, `frontend/tsconfig.app.json`
