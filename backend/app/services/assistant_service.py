@@ -2,7 +2,8 @@ import time
 
 import structlog
 from pydantic_ai import Agent, PromptedOutput
-from pydantic_ai.exceptions import UnexpectedModelBehavior
+from pydantic_ai.exceptions import AgentRunError
+from pydantic_ai.messages import ModelRequest
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
@@ -15,13 +16,13 @@ logger = structlog.get_logger("ludora.assistant")
 
 def _model_request_count(result) -> int:
     """How many round-trips the model actually took, retries included --
-    PydanticAI records one ModelRequest per attempt, so this is the
-    directly comparable number to the old hand-rolled retry loop's
-    `attempt` counter.
+    PydanticAI records one ModelRequest per attempt.
+
+    isinstance against the real exported type, not a class-name string:
+    a rename upstream should break the import loudly rather than make
+    this silently report zero round-trips on every call.
     """
-    return sum(1 for m in result.all_messages() if type(m).__name__ == "ModelRequest")
-
-
+    return sum(1 for m in result.all_messages() if isinstance(m, ModelRequest))
 
 
 class AssistantService:
@@ -57,8 +58,20 @@ class AssistantService:
         # Agents are stateless and reusable -- built once per service
         # instance rather than per call. `retries` is PydanticAI's
         # validation-retry budget: on a schema violation it re-prompts the
-        # model with the validation error attached, which is strictly more
-        # information than this service's previous blind retry had.
+        # model with the validation error attached.
+        #
+        # Temperature stays at TEMPERATURE (0.0) for retries too, where
+        # the previous hand-rolled loop bumped it to 0.3 on later
+        # attempts. That bump existed because the old retry replayed a
+        # byte-identical prompt, so a deterministic malformation would
+        # reproduce forever; jitter was the only way out. PydanticAI's
+        # retry is not a replay -- it appends the specific validation
+        # error, so the model is answering a different, more constrained
+        # question each time. Verified directly against this server: a
+        # model_validator rejection was repaired on the next attempt at
+        # temperature 0.0, with the error text visible in the retry
+        # prompt. Keeping 0.0 throughout also means a successful parse
+        # stays reproducible, which sampling jitter would have cost.
         self._intent_agent = Agent(
             OpenAIChatModel(self.model, provider=provider),
             output_type=PromptedOutput(ParsedIntent),
@@ -225,25 +238,25 @@ Each step in "steps" follows these rules:
 {self._intent_rules_text()}
 
 Planning rules (how many steps, and how they connect):
-19. Almost every request is ONE step. Only emit more than one step when a later step's "game_name" or an entry in its "game_names" genuinely cannot be filled in without first resolving an earlier step's answer -- for example the request names a game only by a criterion ("the highest-rated strategy game"), not by title, and then asks a second, different question about that game.
-20. Each step needs a "step_id" starting at 0 and counting up in the order the steps must run. A step that depends on an earlier one sets "depends_on_step" to that earlier step's "step_id" AND sets the referencing field ("game_name", or one entry of "game_names") to the literal placeholder string "$stepN" (where N is that step_id) instead of guessing a real title -- the actual title isn't known until step N has actually run. Never invent a game name to avoid using a placeholder.
-21. A step with no "depends_on_step" set (the default: null) is independent and needs no placeholder.
-22. A "compare" step's "game_names" can hold "$stepN" placeholders in two different shapes -- tell them apart by how many DISTINCT step numbers appear, not by counting entries:
+18. Almost every request is ONE step. Only emit more than one step when a later step's "game_name" or an entry in its "game_names" genuinely cannot be filled in without first resolving an earlier step's answer -- for example the request names a game only by a criterion ("the highest-rated strategy game"), not by title, and then asks a second, different question about that game.
+19. Each step needs a "step_id" starting at 0 and counting up in the order the steps must run. A step that depends on an earlier one sets "depends_on_step" to that earlier step's "step_id" AND sets the referencing field ("game_name", or one entry of "game_names") to the literal placeholder string "$stepN" (where N is that step_id) instead of guessing a real title -- the actual title isn't known until step N has actually run. Never invent a game name to avoid using a placeholder.
+20. A step with no "depends_on_step" set (the default: null) is independent and needs no placeholder.
+21. A "compare" step's "game_names" can hold "$stepN" placeholders in two different shapes -- tell them apart by how many DISTINCT step numbers appear, not by counting entries:
    - ONE distinct placeholder, standing for MULTIPLE games at once (e.g. game_names=["$step0"]) -- use this when the request wants to compare several suggested/found games against each other, not chain one resolved game into a second lookup. Set that earlier step's "limit" to how many games you want compared (2 to 5) -- do not also invent extra literal titles alongside it that the user never named.
    - TWO OR MORE distinct placeholders, each from its OWN independent earlier step (e.g. game_names=["$step0", "$step1"]) -- use this when the request names two SEPARATE, unrelated criteria to find independently and then compare, not one group of suggestions. Neither earlier step depends on the other; only the compare step depends on both, and "depends_on_step" on it only needs to name one of them for reference. Each of those two (or more) earlier steps is an ordinary, independent step and STILL needs its own "sort" + "limit"=1 exactly as rule 9 already requires for any single superlative -- decomposing into more steps never relaxes that.
-23. When a step's game is a "$stepN" placeholder instead of a real title, every rule above STILL applies exactly the same way -- being chained changes nothing about which intent or fields are correct, and this includes every step that feeds a later comparison, not only the ones a single question is asked about directly. In particular: rule 8's get_game + "requested_facts" (rank, rating, complexity, player_count, age, OR playtime -- all six, not only whichever one appears in an example below) is the right choice any time the question asks for one specific official number or spec about that game, even when phrased indirectly ("is it good for kids" means requested_facts=["age"]; "how long does it take" means requested_facts=["playtime"]). Only use get_aspects when the question is actually about subjective opinion ("what do people think", "is it fun", "is the theme good"), never merely because the game is a placeholder.
-24. Keep the criterion that FINDS a step's game separate from the fact being ASKED about it in a later step -- they are not the same thing and must not be merged into one step's filters. "The top ranked game" is a sort with no filters (there's no genre restriction stated); "is it good for kids" is a separate question about that specific game (requested_facts=["age"] on the next step), not a filter for finding it. Do not fold a later step's question into an earlier step's filters just because they appear in the same sentence.
-25. Worked examples:
+22. When a step's game is a "$stepN" placeholder instead of a real title, every rule above STILL applies exactly the same way -- being chained changes nothing about which intent or fields are correct, and this includes every step that feeds a later comparison, not only the ones a single question is asked about directly. In particular: rule 8's get_game + "requested_facts" (rank, rating, complexity, player_count, age, OR playtime -- all six, not only whichever one appears in an example below) is the right choice any time the question asks for one specific official number or spec about that game, even when phrased indirectly ("is it good for kids" means requested_facts=["age"]; "how long does it take" means requested_facts=["playtime"]). Only use get_aspects when the question is actually about subjective opinion ("what do people think", "is it fun", "is the theme good"), never merely because the game is a placeholder.
+23. Keep the criterion that FINDS a step's game separate from the fact being ASKED about it in a later step -- they are not the same thing and must not be merged into one step's filters. "The top ranked game" is a sort with no filters (there's no genre restriction stated); "is it good for kids" is a separate question about that specific game (requested_facts=["age"] on the next step), not a filter for finding it. Do not fold a later step's question into an earlier step's filters just because they appear in the same sentence.
+24. Worked examples:
    - "recommend games like the highest rated strategy game" -> two steps: step_id=0, intent="browse", filters={{"subdomains":["Strategy"]}}, sort={{"field":"rating","direction":"desc"}}, limit=1; step_id=1, intent="recommend", game_name="$step0", depends_on_step=0.
    - "what do people think of the most complex game in the catalog" -> step_id=0, intent="browse", sort={{"field":"complexity","direction":"desc"}}, limit=1; step_id=1, intent="get_aspects", game_name="$step0", depends_on_step=0. (Opinion question -> get_aspects.)
-   - "what's the rating of the most complex game in strategy games" -> step_id=0, intent="browse", filters={{"subdomains":["Strategy"]}}, sort={{"field":"complexity","direction":"desc"}}, limit=1; step_id=1, intent="get_game", game_name="$step0", requested_facts=["rating"], depends_on_step=0. (One specific official number -> get_game + requested_facts, NOT get_aspects, per rule 23.)
-   - "is the top ranked game good for kids" -> step_id=0, intent="browse", sort={{"field":"rank","direction":"asc"}}, limit=1 (NO filters -- "top ranked" names no genre, per rule 24); step_id=1, intent="get_game", game_name="$step0", requested_facts=["age"], depends_on_step=0 (an age-appropriateness question is the "age" official fact, NOT get_aspects, and NOT a filters.subdomains=["Childrens"] on step 0).
+   - "what's the rating of the most complex game in strategy games" -> step_id=0, intent="browse", filters={{"subdomains":["Strategy"]}}, sort={{"field":"complexity","direction":"desc"}}, limit=1; step_id=1, intent="get_game", game_name="$step0", requested_facts=["rating"], depends_on_step=0. (One specific official number -> get_game + requested_facts, NOT get_aspects, per rule 22.)
+   - "is the top ranked game good for kids" -> step_id=0, intent="browse", sort={{"field":"rank","direction":"asc"}}, limit=1 (NO filters -- "top ranked" names no genre, per rule 23); step_id=1, intent="get_game", game_name="$step0", requested_facts=["age"], depends_on_step=0 (an age-appropriateness question is the "age" official fact, NOT get_aspects, and NOT a filters.subdomains=["Childrens"] on step 0).
    - "show me some reviews of the top ranked party game" -> step_id=0, intent="browse", filters={{"subdomains":["Party"]}}, sort={{"field":"rank","direction":"asc"}}, limit=1; step_id=1, intent="get_reviews", game_name="$step0", depends_on_step=0. (Explicitly wants written reviews -> get_reviews, chained exactly like the other intents above -- do not collapse this into a single get_reviews step with the criterion phrase as a literal game_name.)
-   - "compare the heaviest game to Brass Birmingham" -> step_id=0, intent="browse", sort={{"field":"complexity","direction":"desc"}}, limit=1; step_id=1, intent="compare", game_names=["$step0", "Brass Birmingham"], depends_on_step=0. (Exactly one game resolved from step 0, paired with one literal name -- ordinary single-value substitution, per rule 22's first shape.)
-   - "we're 5 people looking for something fun and not too heavy tonight, maybe a party game, any suggestions? can you compare them" -> step_id=0, intent="browse", filters={{"subdomains":["Party"]}}, exact_players=5, max_complexity=2.5, sort={{"field":"rating","direction":"desc"}}, limit=3; step_id=1, intent="compare", game_names=["$step0"], depends_on_step=0. (The request wants several suggestions compared against each other, not one game chained into a second lookup -- per rule 22's first shape, one placeholder stands for all of step 0's results; do not add a second literal title alongside it.)
-   - "find games with pokemon in it and compare the top 3 in terms of rating" -> step_id=0, intent="search", query="pokemon", sort={{"field":"rating","direction":"desc"}}, limit=3 (per rule 10, "pokemon" is a franchise, not real taxonomy -- search, not browse; "top 3 in terms of rating" is that step's own sort+limit, same as rule 22's browse case, NOT left unset just because the prerequisite step is search instead of browse); step_id=1, intent="compare", game_names=["$step0"], depends_on_step=0. (Without an explicit limit here, expansion falls back to comparing however many matches exist, capped at 5 -- which answers "compare them" for every match, not the "top 3" the user actually asked for.)
+   - "compare the heaviest game to Brass Birmingham" -> step_id=0, intent="browse", sort={{"field":"complexity","direction":"desc"}}, limit=1; step_id=1, intent="compare", game_names=["$step0", "Brass Birmingham"], depends_on_step=0. (Exactly one game resolved from step 0, paired with one literal name -- ordinary single-value substitution, per rule 21's first shape.)
+   - "we're 5 people looking for something fun and not too heavy tonight, maybe a party game, any suggestions? can you compare them" -> step_id=0, intent="browse", filters={{"subdomains":["Party"]}}, exact_players=5, max_complexity=2.5, sort={{"field":"rating","direction":"desc"}}, limit=3; step_id=1, intent="compare", game_names=["$step0"], depends_on_step=0. (The request wants several suggestions compared against each other, not one game chained into a second lookup -- per rule 21's first shape, one placeholder stands for all of step 0's results; do not add a second literal title alongside it.)
+   - "find games with pokemon in it and compare the top 3 in terms of rating" -> step_id=0, intent="search", query="pokemon", sort={{"field":"rating","direction":"desc"}}, limit=3 (per rule 10, "pokemon" is a franchise, not real taxonomy -- search, not browse; "top 3 in terms of rating" is that step's own sort+limit, same as rule 21's browse case, NOT left unset just because the prerequisite step is search instead of browse); step_id=1, intent="compare", game_names=["$step0"], depends_on_step=0. (Without an explicit limit here, expansion falls back to comparing however many matches exist, capped at 5 -- which answers "compare them" for every match, not the "top 3" the user actually asked for.)
    - "tell me about Catan" -> ONE step only: step_id=0, intent="get_game", game_name="Catan". Do not invent a second step when the first already answers the whole request.
-   - "put the most complex strategy game up against the top ranked party game" -> THREE steps: step_id=0, intent="browse", filters={{"subdomains":["Strategy"]}}, sort={{"field":"complexity","direction":"desc"}}, limit=1; step_id=1, intent="browse", filters={{"subdomains":["Party"]}}, sort={{"field":"rank","direction":"asc"}}, limit=1 (independent of step 0 -- its own separate criterion, not chained from the first); step_id=2, intent="compare", game_names=["$step0", "$step1"], depends_on_step=0. (Per rule 22's second shape: two distinct placeholders, each from its own independent step -- and per rule 23, each of those two steps STILL needs its own sort+limit=1 exactly like any single superlative browse, same as every example above it. Do NOT chain step 1 off of step 0's result, since the two criteria don't depend on each other.)
+   - "put the most complex strategy game up against the top ranked party game" -> THREE steps: step_id=0, intent="browse", filters={{"subdomains":["Strategy"]}}, sort={{"field":"complexity","direction":"desc"}}, limit=1; step_id=1, intent="browse", filters={{"subdomains":["Party"]}}, sort={{"field":"rank","direction":"asc"}}, limit=1 (independent of step 0 -- its own separate criterion, not chained from the first); step_id=2, intent="compare", game_names=["$step0", "$step1"], depends_on_step=0. (Per rule 21's second shape: two distinct placeholders, each from its own independent step -- and per rule 22, each of those two steps STILL needs its own sort+limit=1 exactly like any single superlative browse, same as every example above it. Do NOT chain step 1 off of step 0's result, since the two criteria don't depend on each other.)
 """
 
     def parse_query(self, user_message: str) -> ParsedIntent:
@@ -255,9 +268,15 @@ Planning rules (how many steps, and how they connect):
         start = time.perf_counter()
         try:
             result = self._intent_agent.run_sync(user_message)
-        except UnexpectedModelBehavior as e:
+        except AgentRunError as e:
+            # The base class, not just UnexpectedModelBehavior: an
+            # unreachable or erroring LLM server raises ModelHTTPError,
+            # which is just as much an upstream failure and just as much
+            # worth a diagnostic record. Catching the base keeps this in
+            # step with the route layer, which maps the same class to 502.
             logger.error(
                 "assistant.parse_query", model=self.model,
+                error_type=type(e).__name__,
                 retries=AssistantConfig.MAX_LLM_RETRIES, outcome="failed",
                 error=str(e)[:300], query=user_message[:200],
             )
@@ -289,9 +308,11 @@ Planning rules (how many steps, and how they connect):
         start = time.perf_counter()
         try:
             result = self._plan_agent.run_sync(user_message)
-        except UnexpectedModelBehavior as e:
+        except AgentRunError as e:
+            # See parse_query() on why this catches the base class.
             logger.error(
                 "assistant.parse_plan", model=self.plan_model,
+                error_type=type(e).__name__,
                 retries=AssistantConfig.MAX_LLM_RETRIES, outcome="failed",
                 error=str(e)[:300], query=user_message[:200],
             )

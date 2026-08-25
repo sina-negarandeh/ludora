@@ -417,15 +417,21 @@ class AssistantConfig:
     # real, reproduced flake, not a broken prompt. One bad call shouldn't
     # fail an entire user request.
     MAX_LLM_RETRIES = 2
-    # Measured, not assumed: on the deeper-nested plan schema, Qwen3-4B
-    # produced a JSON syntax error (one extra closing brace) that
-    # reproduced identically on every retry at TEMPERATURE=0 -- a
-    # deterministic bug retries at the same temperature can never escape.
-    # Retries (attempt > 0) use this instead; the first attempt still
-    # runs at TEMPERATURE for reproducible primary behavior.
-    RETRY_TEMPERATURE = 0.3
-    # A hard ceiling on plan length, enforced in the orchestrator, not
+    # There is deliberately no RETRY_TEMPERATURE any more. It existed
+    # because the old hand-rolled retry replayed a byte-identical prompt,
+    # so a deterministic malformation (measured: Qwen3-4B appending one
+    # extra closing brace on the plan schema) reproduced on every attempt
+    # and sampling jitter was the only escape. PydanticAI's retry appends
+    # the actual validation error to the prompt instead, so each attempt
+    # is a different, more constrained question -- verified repairing a
+    # rejection at temperature 0.0. Every attempt now runs at
+    # TEMPERATURE, which also keeps a successful parse reproducible.
+    #
+    # A hard ceiling on plan length, enforced after parsing rather than
     # requested of the model -- caps a runaway decomposition (or a
     # confidently-wrong one) at a size that's still cheap and legible to
     # execute, rather than trusting the LLM's own restraint.
+    #
+    # Also bounds plan_executor's LangGraph walk: that graph derives its
+    # recursion limit from this value, so raising it stays safe.
     MAX_PLAN_STEPS = 3

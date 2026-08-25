@@ -22,13 +22,14 @@ LangGraph StateGraph is a static topology, while a ParsedPlan is data.
                                             +-> resolve           (next step)
                                             +-> END
 """
-from typing import Any, TypedDict
+from typing import Any, Protocol, TypedDict
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 
-from app.schemas.assistant import AssistantResponse, ParsedIntent
-from app.services.plan_graph import PlanGraph
+from app.core.ml_config import AssistantConfig
+from app.schemas.assistant import AssistantResponse, GameFilters, ParsedIntent
+from app.services.plan_graph import PlanGraph, PlanStep
 
 # Numeric range bounds get dropped on a relax pass; taxonomy filters and
 # player counts do not. This isn't arbitrary: the parsing prompt's own
@@ -45,26 +46,58 @@ _RELAXABLE_FILTERS = (
     "min_year", "max_year",
 )
 
+# These names are read off GameFilters by string, so a rename or typo
+# would otherwise make every getattr() return None -- recovery would
+# silently stop firing, with no error and nothing failing except the
+# feature. Checked once at import so that becomes a startup crash.
+_unknown_filters = set(_RELAXABLE_FILTERS) - set(GameFilters.model_fields)
+if _unknown_filters:
+    raise RuntimeError(
+        f"_RELAXABLE_FILTERS names fields that don't exist on GameFilters: "
+        f"{sorted(_unknown_filters)}"
+    )
+
+
+class SupportsPlanExecution(Protocol):
+    """What this module actually needs from the orchestrator.
+
+    Declared explicitly rather than typing the parameter as
+    AssistantOrchestrator: that would be a circular import (the
+    orchestrator imports run_plan from here), and stating the three
+    methods makes the cross-module contract visible instead of leaving
+    it as an undocumented dependency on someone else's internals.
+    """
+
+    def execute(self, intent: ParsedIntent) -> AssistantResponse: ...
+
+    def resolve_step(self, node: PlanStep, results: dict) -> ParsedIntent | None: ...
+
+    def extract_chainable_values(self, response: AssistantResponse) -> list: ...
+
 
 class PlanState(TypedDict):
     """Everything the walk needs. `graph` is the compiled plan (data
     flowing through a fixed topology, see the module docstring);
     `relaxed` prevents a step from being loosened more than once, which
     is what keeps the one cycle here from being an unbounded loop.
+
+    `relaxed_filters` maps position -> the bounds dropped from that step,
+    keyed rather than flattened so a caller can say WHICH part of the
+    request was loosened when more than one step relaxes.
     """
     graph: PlanGraph
     position: int
     current: ParsedIntent | None
     results: dict[int, AssistantResponse]
     relaxed: list[int]
-    relaxed_filters: list[str]
+    relaxed_filters: dict[int, list[str]]
     final: AssistantResponse | None
 
 
-def _orchestrator(config: RunnableConfig):
+def _orchestrator(config: RunnableConfig) -> SupportsPlanExecution:
     """The orchestrator is passed per-invocation rather than held in
-    state: it owns a live DB session and the request-scoped
-    _known_bgg_ids map, neither of which is plan data.
+    state: it owns a live DB session and the request-scoped _known_bgg_ids
+    map, neither of which is plan data.
 
     `configurable` is optional on RunnableConfig in general, but run_plan
     below always supplies it -- this graph is not reachable any other way.
@@ -95,13 +128,13 @@ def _resolve(state: PlanState, config: RunnableConfig) -> dict[str, Any]:
     priors = [state["results"][p] for p in node.depends_on]
     bad = next((r for r in priors if r.type in ("error", "clarification")), None)
     if bad is None:
-        bad = next((r for r in priors if not orch._extract_chainable_values(r)), None)
+        bad = next((r for r in priors if not orch.extract_chainable_values(r)), None)
     if bad is not None:
         # Same principle as the non-graph path: the step that ran the
         # query already explained the outcome better than this layer can.
         return {"current": None, "final": bad}
 
-    resolved = orch._resolve_step(node, state["results"])
+    resolved = orch.resolve_step(node, state["results"])
     if resolved is None:
         return {"current": None, "final": AssistantResponse(
             message="That part of your request needed a single game from an earlier step, but more than one matched. Could you be more specific?",
@@ -137,7 +170,7 @@ def _relax(state: PlanState, config: RunnableConfig) -> dict[str, Any]:
     return {
         "current": step.model_copy(update={"filters": relaxed_filters}),
         "relaxed": [*state["relaxed"], state["position"]],
-        "relaxed_filters": [*state["relaxed_filters"], *dropped],
+        "relaxed_filters": {**state["relaxed_filters"], state["position"]: dropped},
     }
 
 
@@ -161,7 +194,7 @@ def _route_after_execute(state: PlanState, config: RunnableConfig) -> str:
     response = state["results"][position]
 
     if response.type not in ("error", "clarification"):
-        empty = not orch._extract_chainable_values(response)
+        empty = not orch.extract_chainable_values(response)
         step = state["current"]
         has_relaxable = step is not None and step.filters is not None and any(
             getattr(step.filters, f, None) is not None for f in _RELAXABLE_FILTERS
@@ -209,17 +242,35 @@ def _build() -> Any:
 PLAN_EXECUTOR = _build()
 
 
-def run_plan(orchestrator, graph: PlanGraph) -> PlanState:
+def _recursion_limit() -> int:
+    """LangGraph counts every node run against a recursion limit whose
+    default (25) has nothing to do with this plan's size, so derive it
+    instead of inheriting it.
+
+    Worst case per step is four node runs (resolve, execute, relax,
+    execute) plus one advance between steps, so a MAX_PLAN_STEPS plan
+    needs 5*steps. Doubling that leaves headroom for a topology change
+    without silently turning a legal plan into a GraphRecursionError --
+    which, not being an AgentRunError, would surface as an opaque 500
+    rather than the 502 an upstream-model failure gets.
+    """
+    return max(25, AssistantConfig.MAX_PLAN_STEPS * 10)
+
+
+def run_plan(orchestrator: SupportsPlanExecution, graph: PlanGraph) -> PlanState:
     initial: PlanState = {
         "graph": graph,
         "position": 0,
         "current": None,
         "results": {},
         "relaxed": [],
-        "relaxed_filters": [],
+        "relaxed_filters": {},
         "final": None,
     }
     return PLAN_EXECUTOR.invoke(
         initial,
-        config={"configurable": {"orchestrator": orchestrator}},
+        config={
+            "configurable": {"orchestrator": orchestrator},
+            "recursion_limit": _recursion_limit(),
+        },
     )

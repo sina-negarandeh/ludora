@@ -99,20 +99,22 @@ class AssistantOrchestrator:
 
         The plan is compiled into a validated PlanGraph before anything
         runs (see plan_graph.compile_plan) -- every "$stepN" reference is
-        checked to point at an earlier, existing step up front, so this
-        loop never has to handle an out-of-range or forward reference
+        checked to point at an earlier, existing step up front, so the
+        walk never has to handle an out-of-range or forward reference
         itself; if compile_plan doesn't raise, every dependency lookup
-        below is guaranteed safe.
+        during execution is guaranteed safe.
 
-        Deliberately a plain linear walk over a graph that's acyclic by
-        construction, not a scheduler: with at most
-        AssistantConfig.MAX_PLAN_STEPS steps and no need for parallelism
-        (the single LLM call already dominates latency), there's nothing
-        to schedule.
+        The walk itself lives in plan_executor as a LangGraph state
+        machine, not inline here. It still visits steps in position
+        order, but it can also loop back and retry a step with looser
+        constraints -- a cycle the compiled plan deliberately cannot
+        express, since compile_plan makes references point strictly
+        backward. This method keeps only what happens around that walk:
+        the single-step shortcut, and composing the final message.
         """
         # Request-scoped map of already-exact game names (ones that came
         # from a placeholder expansion, not user-typed text) to their
-        # known bgg_id -- see _resolve_step and _handle_compare's use of it.
+        # known bgg_id -- see resolve_step and _handle_compare's use of it.
         self._known_bgg_ids: dict = {}
 
         if not plan.steps:
@@ -162,7 +164,7 @@ class AssistantOrchestrator:
             sources = {p for node in graph.steps for p in node.depends_on}
             if len(sources) == 1:
                 source = next(iter(sources))
-                chained_names = [name for name, _ in self._extract_chainable_values(results[source])]
+                chained_names = [name for name, _ in self.extract_chainable_values(results[source])]
                 if len(chained_names) == 1:
                     final = final.model_copy(update={"message": f"Based on {chained_names[0]}: {final.message}"})
                 elif len(chained_names) > 1:
@@ -174,9 +176,25 @@ class AssistantOrchestrator:
             # Never silently answer a different question than the one
             # asked: if a constraint had to be dropped to find anything,
             # the response says so.
-            dropped = ", ".join(sorted(set(state["relaxed_filters"])))
+            #
+            # Attributed per step rather than pooled: with more than one
+            # step relaxed, a flat list reads as though a single query
+            # carried every dropped bound, and the user can't tell which
+            # part of their request was loosened.
+            per_step = [
+                f"{', '.join(sorted(dropped))} on step {position}"
+                for position, dropped in sorted(state["relaxed_filters"].items())
+                if dropped
+            ]
+            if len(per_step) == 1:
+                # One relaxed step is the overwhelmingly common case, and
+                # naming a step number there is noise, not precision.
+                only = sorted(next(iter(state["relaxed_filters"].values())))
+                what = ", ".join(only)
+            else:
+                what = "; ".join(per_step)
             final = final.model_copy(update={
-                "message": f"Nothing matched every constraint, so I relaxed {dropped}. {final.message}"
+                "message": f"Nothing matched every constraint, so I relaxed {what}. {final.message}"
             })
 
         # The walk always runs at least one step (the single-step case
@@ -184,7 +202,7 @@ class AssistantOrchestrator:
         assert final is not None
         return final
 
-    def _resolve_step(self, node: PlanStep, results: dict) -> ParsedIntent | None:
+    def resolve_step(self, node: PlanStep, results: dict) -> ParsedIntent | None:
         """Substitutes every "$stepN" placeholder in node.intent's
         game_name/game_names with real values drawn from `results`, per
         node.depends_on (already validated non-empty and, by
@@ -225,7 +243,7 @@ class AssistantOrchestrator:
         step = node.intent
         resolved: dict[int, list] = {}
         for position in node.depends_on:
-            values = self._extract_chainable_values(results[position])
+            values = self.extract_chainable_values(results[position])
             if not values:
                 return None
             resolved[position] = values
@@ -268,13 +286,13 @@ class AssistantOrchestrator:
 
         return step.model_copy(update=updates) if updates else step
 
-    def _extract_chainable_values(self, response: AssistantResponse) -> list:
+    def extract_chainable_values(self, response: AssistantResponse) -> list:
         """Pulls every (name, bgg_id) pair out of a step's result --
         used when a dependent step needs every game an earlier step
         found (a "compare" one-to-many placeholder), or just to check
         how many games a dependency resolved to when deciding whether a
-        substitution is unambiguous (see _resolve_step). The bgg_id
-        travels with the name so _resolve_step can let the handlers
+        substitution is unambiguous (see resolve_step). The bgg_id
+        travels with the name so resolve_step can let the handlers
         below skip re-resolving a title that's already exact -- see
         _resolve_bgg_id for why that matters.
         """
@@ -296,7 +314,7 @@ class AssistantOrchestrator:
 
     def _resolve_bgg_id(self, name: str) -> int:
         """Resolves a game name to its bgg_id, preferring an already-known
-        exact id (populated by _resolve_step for every name substituted
+        exact id (populated by resolve_step for every name substituted
         from an earlier step's result) over the fuzzy EntityResolver.
         Skipping the resolver for an already-exact name matters because
         re-running it through EntityResolver.resolve_game() -- built for

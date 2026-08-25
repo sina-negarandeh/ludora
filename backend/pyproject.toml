@@ -18,7 +18,18 @@ dependencies = [
     "openai>=3.1.0",
     "mlx-embeddings>=0.0.5",
     "structlog>=24.4.0",
+    # pydantic-ai-slim, not the full pydantic-ai: the latter pulls in
+    # anthropic and google-genai, provider SDKs this project will never
+    # use since it talks to a local OpenAI-compatible server. The [openai]
+    # extra is the only provider needed.
     "pydantic-ai-slim[openai]>=2.34.0",
+    # langgraph has no slim variant, so this does bring ~15 transitive
+    # packages including langsmith (LangChain's hosted-telemetry client)
+    # and langgraph-sdk, neither of which this project uses. Accepted
+    # rather than vendored around: LangSmith stays inert unless
+    # LANGSMITH_TRACING/LANGCHAIN_API_KEY are set, which nothing here
+    # sets. Noted so the asymmetry with the line above reads as a
+    # decision rather than an oversight.
     "langgraph>=1.2.11",
 ]
 
