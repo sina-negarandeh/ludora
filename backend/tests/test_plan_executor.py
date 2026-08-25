@@ -8,15 +8,15 @@ when it stops), and that is exactly what a fake can exercise honestly.
 Wiring the real orchestrator in would test SQLAlchemy and the browse
 service instead, and would not run in CI.
 
-The cycle's bound is the property most worth pinning: `relax` must fire
-at most once per step, or a step that stays empty would loop forever.
+The cycle is the property most worth pinning: it drops one bound at a
+time and stops at the first set that matches, so it must relax as little
+as possible and must always terminate.
 """
-from langchain_core.runnables import RunnableConfig
 
 from app.schemas.assistant import AssistantResponse, GameFilters, ParsedIntent, ParsedPlan
 from app.schemas.game_query import SortSpec
-from app.services.plan_executor import PlanState, _route_after_execute, run_plan
-from app.services.plan_graph import PlanStep, compile_plan
+from app.services.plan_executor import run_plan
+from app.services.plan_graph import compile_plan
 
 
 class FakeOrchestrator:
@@ -34,9 +34,11 @@ class FakeOrchestrator:
         self.always_empty = always_empty
         self.fail_on = fail_on
         self.executed: list[ParsedIntent] = []
+        self.known_seen: list[dict] = []
 
-    def execute(self, intent: ParsedIntent) -> AssistantResponse:
+    def execute(self, intent: ParsedIntent, known_bgg_ids: dict | None = None) -> AssistantResponse:
         self.executed.append(intent)
+        self.known_seen.append(dict(known_bgg_ids or {}))
 
         if self.fail_on is not None and len(self.executed) - 1 == self.fail_on:
             return AssistantResponse(
@@ -44,6 +46,9 @@ class FakeOrchestrator:
                 parsed_intent=intent, data={},
             )
 
+        # Only min_complexity makes this step unsatisfiable. Any other
+        # bound the step carries is satisfiable, so a recovery pass that
+        # drops more than min_complexity has relaxed more than it needed.
         over_constrained = intent.filters is not None and intent.filters.min_complexity is not None
         if self.always_empty or over_constrained:
             return AssistantResponse(
@@ -56,18 +61,6 @@ class FakeOrchestrator:
             message="Found it.", type="search_results", parsed_intent=intent,
             data={"total": 1, "games": [{"name": "Found Game", "bgg_id": 42}]},
         )
-
-    def extract_chainable_values(self, response: AssistantResponse) -> list:
-        games = (response.data or {}).get("games") or []
-        return [(g["name"], g["bgg_id"]) for g in games]
-
-    def resolve_step(self, node: PlanStep, results: dict) -> ParsedIntent | None:
-        if node.game_name_ref is None:
-            return node.intent
-        values = self.extract_chainable_values(results[node.game_name_ref])
-        if len(values) != 1:
-            return None
-        return node.intent.model_copy(update={"game_name": values[0][0]})
 
 
 def _plan(step0_filters: GameFilters | None) -> ParsedPlan:
@@ -96,7 +89,6 @@ def test_linear_walk_executes_every_step_in_order():
     assert sorted(state["results"]) == [0, 1]
     # The dependent step ran against the name step 0 actually produced.
     assert orch.executed[1].game_name == "Found Game"
-    assert state["relaxed"] == []
     assert state["relaxed_filters"] == {}
 
 
@@ -112,19 +104,19 @@ def test_relax_fires_when_an_over_constrained_step_blocks_a_dependent():
     assert retried.min_complexity is None
     # Taxonomy is what the user actually asked for -- it must survive.
     assert retried.subdomains == ["Party"]
-    assert state["relaxed"] == [0]
     assert state["relaxed_filters"] == {0: ["min_complexity"]}
 
 
-def test_relax_fires_at_most_once_so_the_cycle_terminates():
-    """End-to-end: a step that stays empty after relaxing must stop,
-    not loop until LangGraph's recursion limit."""
+def test_cycle_terminates_when_every_bound_has_been_given_up():
+    """The bound on the cycle. Each pass gives up exactly one more
+    filter, so a step that never matches runs out of things to drop and
+    stops, rather than looping until LangGraph's recursion limit."""
     orch = FakeOrchestrator(always_empty=True)
-    state = _run(orch, _plan(GameFilters(subdomains=["Party"], min_complexity=4.9)))
+    state = _run(orch, _plan(GameFilters(min_complexity=4.9, min_playtime=90)))
 
-    # Exactly two browse runs: the original and the single relaxed retry.
-    assert [i.intent for i in orch.executed] == ["browse", "browse"]
-    assert state["relaxed"] == [0]
+    # Original run, then one retry per bound dropped, then nothing left.
+    assert [i.intent for i in orch.executed] == ["browse", "browse", "browse"]
+    assert state["relaxed_filters"] == {0: ["min_complexity", "min_playtime"]}
     # The dependent step never runs, and the user gets the step's own
     # explanation rather than an internal-sounding one.
     assert 1 not in state["results"]
@@ -132,37 +124,35 @@ def test_relax_fires_at_most_once_so_the_cycle_terminates():
     assert state["final"].message == "I couldn't find any games matching your preferences."
 
 
-def test_already_relaxed_step_is_never_relaxed_again():
-    """Pins the `relaxed` guard on its own.
+def test_relaxation_is_minimal_and_keeps_what_the_user_asked_for():
+    """Regression against over-relaxing.
 
-    Worth a direct test because the end-to-end path above cannot reach
-    it: _relax drops every relaxable bound in one pass, so has_relaxable
-    is already False on the second visit and stops the cycle first.
-    Deleting the `relaxed` check therefore breaks nothing today -- but
-    it is the guard that would still hold if _relax ever dropped bounds
-    one at a time, which is exactly the refinement someone would reach
-    for next. Asserting the routing decision directly keeps that
-    invariant covered instead of resting on an accident of ordering.
+    Only min_complexity makes the fake's step unsatisfiable, so recovery
+    must give that up and stop -- keeping min_playtime, which the user
+    did ask about and which was never the problem. Dropping every bound
+    in one pass would answer a looser question than necessary.
     """
-    step = ParsedIntent(
-        intent="browse", filters=GameFilters(min_complexity=4.9), limit=1, step_id=0,
-    )
-    graph = compile_plan(_plan(GameFilters(min_complexity=4.9)))
-    empty = AssistantResponse(
-        message="none", type="search_results", parsed_intent=step,
-        data={"total": 0, "games": []},
-    )
-    # Every precondition for relaxing holds -- empty result, a dependent
-    # step, a bound still available to drop -- except that position 0 has
-    # already been relaxed once.
-    state: PlanState = {
-        "graph": graph, "position": 0, "current": step,
-        "results": {0: empty}, "relaxed": [0],
-        "relaxed_filters": {0: ["max_playtime"]}, "final": empty,
-    }
-    config: RunnableConfig = {"configurable": {"orchestrator": FakeOrchestrator()}}
+    orch = FakeOrchestrator()
+    state = _run(orch, _plan(GameFilters(min_playtime=90, min_complexity=4.9)))
 
-    assert _route_after_execute(state, config) != "relax"
+    assert state["relaxed_filters"] == {0: ["min_complexity"]}
+    retried = orch.executed[1].filters
+    assert retried is not None
+    assert retried.min_complexity is None
+    assert retried.min_playtime == 90
+
+
+def test_names_resolved_by_an_earlier_step_reach_the_handler():
+    """known_bgg_ids belongs to one plan execution, so the walk carries
+    it and hands it to each step, rather than the orchestrator holding it
+    as mutable instance state reset by convention."""
+    orch = FakeOrchestrator()
+    _run(orch, _plan(GameFilters(subdomains=["Party"])))
+
+    # Step 0 has nothing resolved yet; step 1 runs against the exact id
+    # step 0 produced, so it can skip the fuzzy resolver.
+    assert orch.known_seen[0] == {}
+    assert orch.known_seen[1] == {"Found Game": 42}
 
 
 def test_no_relax_when_there_is_no_model_invented_bound_to_drop():
@@ -170,7 +160,7 @@ def test_no_relax_when_there_is_no_model_invented_bound_to_drop():
     state = _run(orch, _plan(GameFilters(subdomains=["Party"])))
 
     assert [i.intent for i in orch.executed] == ["browse"]
-    assert state["relaxed"] == []
+    assert state["relaxed_filters"] == {}
 
 
 def test_no_relax_when_nothing_depends_on_the_empty_step():
@@ -187,7 +177,7 @@ def test_no_relax_when_nothing_depends_on_the_empty_step():
     state = _run(orch, plan)
 
     assert [i.intent for i in orch.executed] == ["get_game", "browse"]
-    assert state["relaxed"] == []
+    assert state["relaxed_filters"] == {}
 
 
 def test_a_failed_step_stops_the_walk():
@@ -198,13 +188,3 @@ def test_a_failed_step_stops_the_walk():
     assert state["final"] is not None
     assert state["final"].type == "error"
     assert 1 not in state["results"]
-
-
-def test_relaxed_filters_are_attributed_to_the_step_they_came_from():
-    """Keyed by position, so a caller can say which part of the request
-    was loosened instead of pooling bounds from unrelated steps."""
-    orch = FakeOrchestrator()
-    state = _run(orch, _plan(GameFilters(min_playtime=90, min_complexity=4.9)))
-
-    assert set(state["relaxed_filters"]) == {0}
-    assert sorted(state["relaxed_filters"][0]) == ["min_complexity", "min_playtime"]
