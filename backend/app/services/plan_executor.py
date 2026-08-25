@@ -22,14 +22,15 @@ LangGraph StateGraph is a static topology, while a ParsedPlan is data.
                                             +-> resolve           (next step)
                                             +-> END
 """
-from typing import Any, Protocol, TypedDict
+from typing import Any, TypedDict
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 
 from app.core.ml_config import AssistantConfig
 from app.schemas.assistant import AssistantResponse, GameFilters, ParsedIntent
-from app.services.plan_graph import PlanGraph, PlanStep
+from app.services.plan_graph import PlanGraph
+from app.services.plan_resolution import extract_chainable_values, resolve_step
 
 # Numeric range bounds get dropped on a relax pass; taxonomy filters and
 # player counts do not. This isn't arbitrary: the parsing prompt's own
@@ -40,6 +41,18 @@ from app.services.plan_graph import PlanGraph, PlanStep
 # to loosen first. Subdomains/categories/player counts are what the user
 # concretely asked for, so relaxing those would answer a different
 # question than the one posed.
+# Order is the policy: the cycle drops these ONE AT A TIME, in this
+# order, retrying after each, and stops at the first set that matches
+# something. Dropping them all at once would over-relax -- measured
+# against real data, "a quick, very heavy party game" has no matches,
+# but dropping only min_complexity keeps 3 results that are still
+# quick, whereas dropping everything also throws away the 30-minute
+# limit the user did ask about.
+#
+# Least-defensible first. Complexity bounds are the most likely to be
+# the model's own invention (rule 14 tells it to guess 2.0 for "light"),
+# then playtime (rule 16, same), and year bounds last since "from the
+# 2010s" is usually stated outright rather than inferred.
 _RELAXABLE_FILTERS = (
     "min_complexity", "max_complexity",
     "min_playtime", "max_playtime",
@@ -58,46 +71,34 @@ if _unknown_filters:
     )
 
 
-class SupportsPlanExecution(Protocol):
-    """What this module actually needs from the orchestrator.
-
-    Declared explicitly rather than typing the parameter as
-    AssistantOrchestrator: that would be a circular import (the
-    orchestrator imports run_plan from here), and stating the three
-    methods makes the cross-module contract visible instead of leaving
-    it as an undocumented dependency on someone else's internals.
-    """
-
-    def execute(self, intent: ParsedIntent) -> AssistantResponse: ...
-
-    def resolve_step(self, node: PlanStep, results: dict) -> ParsedIntent | None: ...
-
-    def extract_chainable_values(self, response: AssistantResponse) -> list: ...
-
-
 class PlanState(TypedDict):
     """Everything the walk needs. `graph` is the compiled plan (data
     flowing through a fixed topology, see the module docstring);
-    `relaxed` prevents a step from being loosened more than once, which
-    is what keeps the one cycle here from being an unbounded loop.
+    `relaxed_filters` maps position -> the bounds already dropped from
+    that step. It does double duty: it tells the caller WHICH part of the
+    request was loosened (keyed rather than flattened, so two relaxed
+    steps don't read as one over-constrained query), and it is what
+    bounds the cycle -- each pass drops one more bound, so the graph can
+    loop at most len(_RELAXABLE_FILTERS) times per step and then stops
+    having anything left to give up.
 
-    `relaxed_filters` maps position -> the bounds dropped from that step,
-    keyed rather than flattened so a caller can say WHICH part of the
-    request was loosened when more than one step relaxes.
+    `known_bgg_ids` holds names an earlier step already resolved exactly.
+    It lives here, not on the orchestrator, because it belongs to one
+    plan execution and this is the thing that owns one plan execution.
     """
     graph: PlanGraph
     position: int
     current: ParsedIntent | None
     results: dict[int, AssistantResponse]
-    relaxed: list[int]
+    known_bgg_ids: dict[str, int]
     relaxed_filters: dict[int, list[str]]
     final: AssistantResponse | None
 
 
-def _orchestrator(config: RunnableConfig) -> SupportsPlanExecution:
+def _orchestrator(config: RunnableConfig):
     """The orchestrator is passed per-invocation rather than held in
-    state: it owns a live DB session and the request-scoped _known_bgg_ids
-    map, neither of which is plan data.
+    state: it owns a live DB session, which is not plan data. The only
+    thing this module asks of it is execute(intent, known_bgg_ids).
 
     `configurable` is optional on RunnableConfig in general, but run_plan
     below always supplies it -- this graph is not reachable any other way.
@@ -107,49 +108,73 @@ def _orchestrator(config: RunnableConfig) -> SupportsPlanExecution:
     return orchestrator
 
 
-def _dependents_of(graph: PlanGraph, position: int) -> bool:
-    """Does any later step actually consume this step's result? Only then
-    is an empty result worth recovering from -- if nothing depends on it,
-    "no matches" is a complete and correct answer on its own.
+def _has_dependents(graph: PlanGraph, position: int) -> bool:
+    """Does a later step consume this step's result? Only then is an
+    empty result worth recovering from -- if nothing depends on it, "no
+    matches" is a complete and correct answer on its own.
     """
     return any(position in node.depends_on for node in graph.steps)
 
 
-def _resolve(state: PlanState, config: RunnableConfig) -> dict[str, Any]:
-    """Substitute any $stepN placeholders in the current step, reusing the
-    orchestrator's own resolution logic rather than reimplementing it.
+def _next_bound_to_drop(step: ParsedIntent) -> str | None:
+    """The next single bound this step can give up, or None when it has
+    nothing left. Driving the cycle one bound at a time is what keeps
+    recovery to the closest satisfiable question instead of the loosest.
+
+    Termination is structural rather than guarded: _relax sets the bound
+    it drops to None on the step it hands back, so each pass strictly
+    reduces the number of non-None relaxable bounds, and there are
+    finitely many. No separate "already dropped" bookkeeping is needed,
+    and keeping some would only be a second way to say the same thing.
     """
-    orch = _orchestrator(config)
+    filters = step.filters
+    if filters is None:
+        return None
+    return next((f for f in _RELAXABLE_FILTERS if getattr(filters, f) is not None), None)
+
+
+def _resolve(state: PlanState, config: RunnableConfig) -> dict[str, Any]:
+    """Fill in this step's $stepN placeholders from earlier results."""
     node = state["graph"].steps[state["position"]]
 
     if not node.depends_on:
         return {"current": node.intent}
 
+    # A dependency that errored, asked for clarification, or matched
+    # nothing can't feed this step. Surface its own response: the step
+    # that ran the query already explained the outcome in the user's
+    # terms, better than this layer restating it as an internal failure.
     priors = [state["results"][p] for p in node.depends_on]
-    bad = next((r for r in priors if r.type in ("error", "clarification")), None)
-    if bad is None:
-        bad = next((r for r in priors if not orch.extract_chainable_values(r)), None)
-    if bad is not None:
-        # Same principle as the non-graph path: the step that ran the
-        # query already explained the outcome better than this layer can.
-        return {"current": None, "final": bad}
+    unusable = next(
+        (r for r in priors
+         if r.type in ("error", "clarification") or not extract_chainable_values(r)),
+        None,
+    )
+    if unusable is not None:
+        return {"current": None, "final": unusable}
 
-    resolved = orch.resolve_step(node, state["results"])
+    resolved = resolve_step(node, state["results"])
     if resolved is None:
+        # Everything it depends on found something, so the only way here
+        # is a count mismatch: a slot needing exactly one game matched
+        # several, and picking one would be a guess at what was meant.
         return {"current": None, "final": AssistantResponse(
             message="That part of your request needed a single game from an earlier step, but more than one matched. Could you be more specific?",
             type="clarification",
             parsed_intent=node.intent,
             data={},
         )}
-    return {"current": resolved}
+    step, newly_known = resolved
+    return {
+        "current": step,
+        "known_bgg_ids": {**state["known_bgg_ids"], **newly_known},
+    }
 
 
 def _execute(state: PlanState, config: RunnableConfig) -> dict[str, Any]:
-    orch = _orchestrator(config)
     step = state["current"]
     assert step is not None  # _route_after_resolve sends us to END otherwise
-    response = orch.execute(step)
+    response = _orchestrator(config).execute(step, state["known_bgg_ids"])
     return {
         "results": {**state["results"], state["position"]: response},
         "final": response,
@@ -157,20 +182,22 @@ def _execute(state: PlanState, config: RunnableConfig) -> dict[str, Any]:
 
 
 def _relax(state: PlanState, config: RunnableConfig) -> dict[str, Any]:
-    """Drop the model-invented numeric bounds from the current step and
-    mark it relaxed so this can't fire twice for the same step.
-    """
+    """Give up exactly one more bound and let the cycle retry."""
     step = state["current"]
-    # Both guaranteed by _route_after_execute, which only routes here for
-    # a step that has filters with at least one relaxable bound set.
     assert step is not None and step.filters is not None
-    filters = step.filters
-    dropped = [f for f in _RELAXABLE_FILTERS if getattr(filters, f, None) is not None]
-    relaxed_filters = filters.model_copy(update=dict.fromkeys(dropped, None))
+    position = state["position"]
+    dropping = _next_bound_to_drop(step)
+    # _route_after_execute only sends us here when one is available.
+    assert dropping is not None
+
     return {
-        "current": step.model_copy(update={"filters": relaxed_filters}),
-        "relaxed": [*state["relaxed"], state["position"]],
-        "relaxed_filters": {**state["relaxed_filters"], state["position"]: dropped},
+        "current": step.model_copy(
+            update={"filters": step.filters.model_copy(update={dropping: None})}
+        ),
+        "relaxed_filters": {
+            **state["relaxed_filters"],
+            position: [*state["relaxed_filters"].get(position, []), dropping],
+        },
     }
 
 
@@ -181,38 +208,28 @@ def _route_after_resolve(state: PlanState) -> str:
 def _route_after_execute(state: PlanState, config: RunnableConfig) -> str:
     """The one interesting decision in this graph.
 
-    Recovery fires only when all of these hold, so it can never turn a
-    complete answer into a different one:
-      - the step matched nothing, AND
-      - a later step needs its result (otherwise "no matches" IS the
-        answer), AND
-      - this step hasn't already been relaxed (bounds the cycle), AND
-      - there is actually a model-invented bound to drop.
+    Recovery fires only when the step matched nothing AND a later step
+    needs its result AND the step still has a bound left to give up, so
+    it can never turn a complete answer into a looser one, and the cycle
+    always terminates: every pass consumes one more bound.
     """
-    orch = _orchestrator(config)
     graph, position = state["graph"], state["position"]
     response = state["results"][position]
-
-    if response.type not in ("error", "clarification"):
-        empty = not orch.extract_chainable_values(response)
-        step = state["current"]
-        has_relaxable = step is not None and step.filters is not None and any(
-            getattr(step.filters, f, None) is not None for f in _RELAXABLE_FILTERS
-        )
-        if (
-            empty
-            and _dependents_of(graph, position)
-            and position not in state["relaxed"]
-            and has_relaxable
-        ):
-            return "relax"
 
     if response.type in ("error", "clarification"):
         # Failure isolation: don't run later steps against known-bad state.
         return END
-    if position + 1 < len(graph.steps):
-        return "advance"
-    return END
+
+    step = state["current"]
+    if (
+        not extract_chainable_values(response)
+        and _has_dependents(graph, position)
+        and step is not None
+        and _next_bound_to_drop(step) is not None
+    ):
+        return "relax"
+
+    return "advance" if position + 1 < len(graph.steps) else END
 
 
 def _advance(state: PlanState) -> dict[str, Any]:
@@ -247,23 +264,25 @@ def _recursion_limit() -> int:
     default (25) has nothing to do with this plan's size, so derive it
     instead of inheriting it.
 
-    Worst case per step is four node runs (resolve, execute, relax,
-    execute) plus one advance between steps, so a MAX_PLAN_STEPS plan
-    needs 5*steps. Doubling that leaves headroom for a topology change
-    without silently turning a legal plan into a GraphRecursionError --
-    which, not being an AgentRunError, would surface as an opaque 500
-    rather than the 502 an upstream-model failure gets.
+    Worst case per step is resolve, then one execute per bound the step
+    can give up (relax + execute for each of _RELAXABLE_FILTERS), plus
+    one advance: 2 + 2*len(_RELAXABLE_FILTERS). Doubling that leaves
+    headroom for a topology change without silently turning a legal plan
+    into a GraphRecursionError -- which, not being an AgentRunError,
+    would surface as an opaque 500 rather than the 502 an upstream-model
+    failure gets.
     """
-    return max(25, AssistantConfig.MAX_PLAN_STEPS * 10)
+    per_step = 2 + 2 * len(_RELAXABLE_FILTERS)
+    return max(25, AssistantConfig.MAX_PLAN_STEPS * per_step * 2)
 
 
-def run_plan(orchestrator: SupportsPlanExecution, graph: PlanGraph) -> PlanState:
+def run_plan(orchestrator, graph: PlanGraph) -> PlanState:
     initial: PlanState = {
         "graph": graph,
         "position": 0,
         "current": None,
         "results": {},
-        "relaxed": [],
+        "known_bgg_ids": {},
         "relaxed_filters": {},
         "final": None,
     }
