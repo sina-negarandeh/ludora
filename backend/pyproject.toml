@@ -19,6 +19,7 @@ dependencies = [
     "mlx-embeddings>=0.0.5",
     "structlog>=24.4.0",
     "pydantic-ai-slim[openai]>=2.34.0",
+    "langgraph>=1.2.11",
 ]
 
 [dependency-groups]

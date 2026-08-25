@@ -9,6 +9,7 @@ from app.schemas.search import SearchMode, SearchQuery
 from app.services.aspect_service import AspectAggregateResponse, AspectService
 from app.services.entity_resolver import AmbiguousEntityError, EntityNotFoundError, EntityResolver
 from app.services.game_service import GameService
+from app.services.plan_executor import run_plan
 from app.services.plan_graph import PlanStep, PlanValidationError, compile_plan
 from app.services.recommendation_service import RecommendationService
 from app.services.review_service import ReviewService
@@ -140,55 +141,16 @@ class AssistantOrchestrator:
         if len(graph.steps) == 1:
             return self.execute(graph.steps[0].intent)
 
-        results: dict[int, AssistantResponse] = {}
-        final = None
-        for node in graph.steps:
-            step = node.intent
-            if node.depends_on:
-                # Safe without a None-check: compile_plan guarantees every
-                # position in depends_on is < node.position, and positions
-                # only enter `results` in increasing order below -- if a
-                # referenced step were missing, an earlier iteration would
-                # already have broken out of this loop.
-                priors = [results[p] for p in node.depends_on]
-                bad = next((r for r in priors if r.type in ("error", "clarification")), None)
-                if bad is None:
-                    # A dependency that ran cleanly but matched nothing
-                    # can't feed this step either. Surface its own response
-                    # for the same reason the error case above does: the
-                    # step that actually ran the query already explains the
-                    # outcome in the user's terms ("I couldn't find any
-                    # games matching your preferences"), which beats this
-                    # layer restating it as an internal-sounding failure.
-                    bad = next((r for r in priors if not self._extract_chainable_values(r)), None)
-                if bad is not None:
-                    final = bad
-                    break
-                resolved_step = self._resolve_step(node, results)
-                if resolved_step is None:
-                    # Everything this step depends on found SOMETHING (the
-                    # empty case is already handled above), so the only way
-                    # to get here is a count mismatch: a slot that needs
-                    # exactly one game got several, and picking one
-                    # arbitrarily would be a guess at what was meant.
-                    final = AssistantResponse(
-                        message="That part of your request needed a single game from an earlier step, but more than one matched. Could you be more specific?",
-                        type="clarification",
-                        parsed_intent=step,
-                        data={}
-                    )
-                    break
-                step = resolved_step
-
-            response = self.execute(step)
-            results[node.position] = response
-            final = response
-            if response.type in ("error", "clarification"):
-                # Failure isolation: stop the chain here rather than
-                # running further steps against a state we know is bad,
-                # but whatever earlier steps succeeded stays in `results`
-                # even though only `final` is returned to the caller today.
-                break
+        # Execution proper lives in a LangGraph state machine (see
+        # plan_executor): the same position-order walk this did inline,
+        # plus one recovery cycle -- a step that matches nothing, and that
+        # a later step depends on, gets its model-invented numeric bounds
+        # dropped and is retried once. That cycle is why this isn't still
+        # a plain loop: compile_plan's acyclic-by-construction guarantee
+        # means the plan itself cannot express "try again, looser".
+        state = run_plan(self, graph)
+        results: dict[int, AssistantResponse] = state["results"]
+        final = state["final"]
 
         if len(results) > 1 and final is not None and final.type not in ("error", "clarification"):
             # "Based on X: ..." only makes sense when exactly one earlier
@@ -206,9 +168,19 @@ class AssistantOrchestrator:
                 elif len(chained_names) > 1:
                     final = final.model_copy(update={"message": f"Based on {len(chained_names)} suggestions ({', '.join(chained_names)}): {final.message}"})
 
-        # graph.steps is non-empty here (the len == 1 case already
-        # returned above), so the loop runs at least once and every
-        # iteration sets final before continuing or breaking.
+        if state["relaxed_filters"] and final is not None and final.type not in ("error", "clarification"):
+            # Applied last, so the caveat frames the whole answer rather
+            # than getting buried inside the "Based on X" prefix above.
+            # Never silently answer a different question than the one
+            # asked: if a constraint had to be dropped to find anything,
+            # the response says so.
+            dropped = ", ".join(sorted(set(state["relaxed_filters"])))
+            final = final.model_copy(update={
+                "message": f"Nothing matched every constraint, so I relaxed {dropped}. {final.message}"
+            })
+
+        # The walk always runs at least one step (the single-step case
+        # returned above), and every path through plan_executor sets final.
         assert final is not None
         return final
 
