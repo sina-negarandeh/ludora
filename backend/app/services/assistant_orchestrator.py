@@ -10,11 +10,60 @@ from app.services.aspect_service import AspectAggregateResponse, AspectService
 from app.services.entity_resolver import AmbiguousEntityError, EntityNotFoundError, EntityResolver
 from app.services.game_service import GameService
 from app.services.plan_executor import run_plan
-from app.services.plan_graph import PlanValidationError, compile_plan
+from app.services.plan_graph import PlanGraph, PlanValidationError, compile_plan
 from app.services.plan_resolution import MAX_COMPARE_GAMES, extract_chainable_values
 from app.services.recommendation_service import RecommendationService
 from app.services.review_service import ReviewService
 from app.services.search_service import SearchService
+
+
+def based_on_prefix(graph: PlanGraph, results: dict[int, AssistantResponse]) -> str:
+    """"Based on X: " when exactly one earlier step fed everything
+    downstream of it, otherwise "".
+
+    With two or more independent sources merging into one step (two
+    browse steps into one compare) there is no single "based on" to name,
+    and the response's own data already makes the sources obvious.
+    """
+    if len(results) <= 1:
+        return ""
+    sources = {p for node in graph.steps for p in node.depends_on}
+    if len(sources) != 1:
+        return ""
+    names = [name for name, _ in extract_chainable_values(results[next(iter(sources))])]
+    if len(names) == 1:
+        return f"Based on {names[0]}: "
+    if len(names) > 1:
+        return f"Based on {len(names)} suggestions ({', '.join(names)}): "
+    return ""
+
+
+def relaxation_note(relaxed_filters: dict[int, list[str]]) -> str:
+    """What recovery gave up, or "" if it never fired.
+
+    Never silently answer a different question than the one asked: if a
+    constraint had to be dropped to find anything, the response says so.
+
+    Bounds keep the order they were surrendered in rather than being
+    sorted, because that order is the policy (_RELAXABLE_FILTERS runs
+    least-defensible first), so it tells the user which constraint was
+    treated as most disposable. Attribution is per step once more than
+    one step relaxed: a flat list would read as though a single query
+    carried every dropped bound.
+    """
+    relaxed = [(position, dropped)
+               for position, dropped in sorted(relaxed_filters.items())
+               if dropped]
+    if not relaxed:
+        return ""
+    if len(relaxed) == 1:
+        # Naming a step number for the common single-step case is noise,
+        # not precision.
+        what = ", ".join(relaxed[0][1])
+    else:
+        what = "; ".join(f"{', '.join(dropped)} on step {position}"
+                         for position, dropped in relaxed)
+    return f"Nothing matched every constraint, so I relaxed {what}. "
 
 
 class AssistantOrchestrator:
@@ -144,56 +193,22 @@ class AssistantOrchestrator:
         # Execution proper lives in a LangGraph state machine (see
         # plan_executor): the same position-order walk this did inline,
         # plus one recovery cycle -- a step that matches nothing, and that
-        # a later step depends on, gets its model-invented numeric bounds
-        # dropped and is retried once. That cycle is why this isn't still
+        # a later step depends on, gives up one model-invented numeric
+        # bound at a time, retrying after each until something matches or
+        # it has nothing left. That cycle is why this isn't still
         # a plain loop: compile_plan's acyclic-by-construction guarantee
         # means the plan itself cannot express "try again, looser".
         state = run_plan(self, graph)
         results: dict[int, AssistantResponse] = state["results"]
         final = state["final"]
 
-        if len(results) > 1 and final is not None and final.type not in ("error", "clarification"):
-            # "Based on X: ..." only makes sense when exactly one earlier
-            # step fed everything downstream of it. With two or more
-            # independent sources merging into one step (e.g. two browse
-            # steps into one compare), there's no single "based on" to
-            # name -- and the response's own data (the comparison table)
-            # already makes the sources obvious, so the prefix is skipped.
-            sources = {p for node in graph.steps for p in node.depends_on}
-            if len(sources) == 1:
-                source = next(iter(sources))
-                chained_names = [name for name, _ in extract_chainable_values(results[source])]
-                if len(chained_names) == 1:
-                    final = final.model_copy(update={"message": f"Based on {chained_names[0]}: {final.message}"})
-                elif len(chained_names) > 1:
-                    final = final.model_copy(update={"message": f"Based on {len(chained_names)} suggestions ({', '.join(chained_names)}): {final.message}"})
-
-        if state["relaxed_filters"] and final is not None and final.type not in ("error", "clarification"):
-            # Applied last, so the caveat frames the whole answer rather
-            # than getting buried inside the "Based on X" prefix above.
-            # Never silently answer a different question than the one
-            # asked: if a constraint had to be dropped to find anything,
-            # the response says so.
-            #
-            # Attributed per step rather than pooled: with more than one
-            # step relaxed, a flat list reads as though a single query
-            # carried every dropped bound, and the user can't tell which
-            # part of their request was loosened.
-            per_step = [
-                f"{', '.join(sorted(dropped))} on step {position}"
-                for position, dropped in sorted(state["relaxed_filters"].items())
-                if dropped
-            ]
-            if len(per_step) == 1:
-                # One relaxed step is the overwhelmingly common case, and
-                # naming a step number there is noise, not precision.
-                only = sorted(next(iter(state["relaxed_filters"].values())))
-                what = ", ".join(only)
-            else:
-                what = "; ".join(per_step)
-            final = final.model_copy(update={
-                "message": f"Nothing matched every constraint, so I relaxed {what}. {final.message}"
-            })
+        if final is not None and final.type not in ("error", "clarification"):
+            note = relaxation_note(state["relaxed_filters"])
+            prefix = based_on_prefix(graph, results)
+            if note or prefix:
+                # Note first: the caveat frames the whole answer rather
+                # than getting buried inside the "Based on X" prefix.
+                final = final.model_copy(update={"message": f"{note}{prefix}{final.message}"})
 
         # The walk always runs at least one step (the single-step case
         # returned above), and every path through plan_executor sets final.

@@ -1,12 +1,15 @@
 """Tests for the LangGraph plan walk, especially its one cycle.
 
 Deliberately infra-free -- no database, no LLM server -- by driving the
-graph with a fake orchestrator that satisfies
-plan_executor.SupportsPlanExecution. The thing under test is control
-flow (which steps run, in what order, when the relax cycle fires and
-when it stops), and that is exactly what a fake can exercise honestly.
-Wiring the real orchestrator in would test SQLAlchemy and the browse
-service instead, and would not run in CI.
+graph with a fake orchestrator. All the walk asks of one is
+`execute(intent, known_bgg_ids) -> AssistantResponse`. The thing under
+test is control flow (which steps run, in what order, when the relax
+cycle fires and when it stops), and that is exactly what a fake can
+exercise honestly. Wiring the real orchestrator in would test SQLAlchemy
+and the browse service instead, and would not run in CI.
+
+The message helpers are covered here too: they are pure functions over
+the walk's output, so they need no orchestrator at all.
 
 The cycle is the property most worth pinning: it drops one bound at a
 time and stops at the first set that matches, so it must relax as little
@@ -15,6 +18,7 @@ as possible and must always terminate.
 
 from app.schemas.assistant import AssistantResponse, GameFilters, ParsedIntent, ParsedPlan
 from app.schemas.game_query import SortSpec
+from app.services.assistant_orchestrator import based_on_prefix, relaxation_note
 from app.services.plan_executor import run_plan
 from app.services.plan_graph import compile_plan
 
@@ -105,6 +109,10 @@ def test_relax_fires_when_an_over_constrained_step_blocks_a_dependent():
     # Taxonomy is what the user actually asked for -- it must survive.
     assert retried.subdomains == ["Party"]
     assert state["relaxed_filters"] == {0: ["min_complexity"]}
+    # The point of recovering at all: the dependent step gets the game the
+    # retry found. Asserting only the filters would let a relax that
+    # produced results but broke the substitution pass.
+    assert orch.executed[2].game_name == "Found Game"
 
 
 def test_cycle_terminates_when_every_bound_has_been_given_up():
@@ -188,3 +196,82 @@ def test_a_failed_step_stops_the_walk():
     assert state["final"] is not None
     assert state["final"].type == "error"
     assert 1 not in state["results"]
+
+
+# --- message helpers -------------------------------------------------
+# Pure functions over the walk's output, so they need no orchestrator.
+# They are the only user-visible product of recovery, and every branch
+# here produces text a person reads.
+
+
+def test_no_note_when_recovery_never_fired():
+    assert relaxation_note({}) == ""
+
+
+def test_note_for_one_relaxed_step_omits_the_step_number():
+    note = relaxation_note({0: ["min_complexity"]})
+    assert note == "Nothing matched every constraint, so I relaxed min_complexity. "
+
+
+def test_note_keeps_the_order_bounds_were_given_up_in():
+    """The order is the policy (_RELAXABLE_FILTERS runs least-defensible
+    first), so it says which constraint was treated as most disposable.
+    Sorting alphabetically would invent a different claim."""
+    note = relaxation_note({0: ["min_playtime", "max_complexity"]})
+    assert "min_playtime, max_complexity" in note
+
+
+def test_note_attributes_bounds_per_step_when_several_relaxed():
+    note = relaxation_note({0: ["min_complexity"], 1: ["max_playtime"]})
+    assert note == (
+        "Nothing matched every constraint, so I relaxed "
+        "min_complexity on step 0; max_playtime on step 1. "
+    )
+
+
+def test_note_ignores_positions_that_dropped_nothing():
+    """Regression: the single-step branch used to re-read the unfiltered
+    dict, so an empty entry ahead of a real one rendered "I relaxed . "."""
+    assert relaxation_note({0: []}) == ""
+    note = relaxation_note({0: [], 1: ["min_complexity"]})
+    assert note == "Nothing matched every constraint, so I relaxed min_complexity. "
+
+
+def _found(*names) -> AssistantResponse:
+    return AssistantResponse(
+        message="ok", type="search_results",
+        parsed_intent=ParsedIntent(intent="browse", step_id=0),
+        data={"total": len(names),
+              "games": [{"name": n, "bgg_id": 100 + i} for i, n in enumerate(names)]},
+    )
+
+
+def test_no_based_on_prefix_for_a_single_result():
+    graph = compile_plan(_plan(None))
+    assert based_on_prefix(graph, {0: _found("A")}) == ""
+
+
+def test_based_on_prefix_names_the_single_chained_game():
+    graph = compile_plan(_plan(None))
+    prefix = based_on_prefix(graph, {0: _found("Brass"), 1: _found("Brass")})
+    assert prefix == "Based on Brass: "
+
+
+def test_based_on_prefix_counts_and_lists_several_suggestions():
+    graph = compile_plan(_plan(None))
+    prefix = based_on_prefix(graph, {0: _found("A", "B", "C"), 1: _found("A")})
+    assert prefix == "Based on 3 suggestions (A, B, C): "
+
+
+def test_no_based_on_prefix_when_two_independent_steps_merge():
+    """With two sources feeding one compare there is no single "based on"
+    to name, and the comparison's own data already shows both."""
+    plan = ParsedPlan(steps=[
+        ParsedIntent(intent="browse", limit=1, step_id=0),
+        ParsedIntent(intent="browse", limit=1, step_id=1),
+        ParsedIntent(intent="compare", game_names=["$step0", "$step1"],
+                     depends_on_step=0, step_id=2),
+    ])
+    graph = compile_plan(plan)
+    results = {0: _found("A"), 1: _found("B"), 2: _found("A", "B")}
+    assert based_on_prefix(graph, results) == ""
