@@ -152,17 +152,28 @@ class AssistantOrchestrator:
                 # already have broken out of this loop.
                 priors = [results[p] for p in node.depends_on]
                 bad = next((r for r in priors if r.type in ("error", "clarification")), None)
+                if bad is None:
+                    # A dependency that ran cleanly but matched nothing
+                    # can't feed this step either. Surface its own response
+                    # for the same reason the error case above does: the
+                    # step that actually ran the query already explains the
+                    # outcome in the user's terms ("I couldn't find any
+                    # games matching your preferences"), which beats this
+                    # layer restating it as an internal-sounding failure.
+                    bad = next((r for r in priors if not self._extract_chainable_values(r)), None)
                 if bad is not None:
-                    # A step this one depends on didn't cleanly resolve
-                    # (ambiguous or not found) -- surface that instead of
-                    # guessing, rather than continuing the chain on bad data.
                     final = bad
                     break
                 resolved_step = self._resolve_step(node, results)
                 if resolved_step is None:
+                    # Everything this step depends on found SOMETHING (the
+                    # empty case is already handled above), so the only way
+                    # to get here is a count mismatch: a slot that needs
+                    # exactly one game got several, and picking one
+                    # arbitrarily would be a guess at what was meant.
                     final = AssistantResponse(
-                        message="I couldn't pin down the games this part of the request needed from an earlier step.",
-                        type="error",
+                        message="That part of your request needed a single game from an earlier step, but more than one matched. Could you be more specific?",
+                        type="clarification",
                         parsed_intent=step,
                         data={}
                     )
