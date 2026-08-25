@@ -1,0 +1,31 @@
+# Tempo receives traces from the OTel Collector (not directly from the
+# app) over OTLP, and stores them locally on disk -- no object-store
+# backend needed at this scale.
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+ingester:
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    # Demo stack -- 48h is enough to look at a recent trace, not a
+    # retention policy decision.
+    block_retention: 48h
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/traces
+    wal:
+      path: /var/tempo/wal

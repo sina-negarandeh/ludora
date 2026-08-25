@@ -1,10 +1,23 @@
-.PHONY: help up down logs sync sync-ml backend migrate migration lint typecheck test check frontend frontend-build frontend-lint
+.PHONY: help up down logs sync sync-ml backend migrate migration lint typecheck test check frontend frontend-build frontend-lint observability-up observability-down observability-logs langfuse-up langfuse-down langfuse-logs
+
+OBSERVABILITY_SERVICES = otel-collector prometheus loki tempo grafana
+LANGFUSE_SERVICES = langfuse-worker langfuse-web langfuse-clickhouse langfuse-minio langfuse-redis langfuse-postgres
 
 help:
 	@echo "Infra (docker compose: postgres, pgadmin, frontend dev server)"
 	@echo "  make up             start postgres, pgadmin, frontend"
 	@echo "  make down           stop them"
 	@echo "  make logs           tail docker compose logs"
+	@echo ""
+	@echo "Observability (opt-in, off by default -- see observability/README.md)"
+	@echo "  make observability-up    start otel-collector, prometheus, loki, tempo, grafana"
+	@echo "  make observability-down  stop them"
+	@echo "  make observability-logs  tail their logs"
+	@echo ""
+	@echo "Langfuse (opt-in, off by default -- see langfuse/README.md)"
+	@echo "  make langfuse-up    start langfuse web/worker, its postgres, clickhouse, minio, redis"
+	@echo "  make langfuse-down  stop them"
+	@echo "  make langfuse-logs  tail their logs"
 	@echo ""
 	@echo "Backend (native uv -- mlx-embeddings needs Apple Silicon, can't run in the docker containers)"
 	@echo "  make sync           install backend deps (main + dev group)"
@@ -32,6 +45,34 @@ down:
 
 logs:
 	docker compose logs -f
+
+## Observability (opt-in)
+
+observability-up:
+	docker compose --profile observability up -d $(OBSERVABILITY_SERVICES)
+
+# `docker compose down` always tears down the whole project regardless of
+# --profile (services with no profile, like db/pgadmin/frontend, are
+# considered active for every profile) -- stop+rm by explicit service name
+# instead, so this only ever touches the observability containers.
+observability-down:
+	docker compose stop $(OBSERVABILITY_SERVICES)
+	docker compose rm -f $(OBSERVABILITY_SERVICES)
+
+observability-logs:
+	docker compose --profile observability logs -f $(OBSERVABILITY_SERVICES)
+
+## Langfuse (opt-in)
+
+langfuse-up:
+	docker compose --profile langfuse up -d $(LANGFUSE_SERVICES)
+
+langfuse-down:
+	docker compose stop $(LANGFUSE_SERVICES)
+	docker compose rm -f $(LANGFUSE_SERVICES)
+
+langfuse-logs:
+	docker compose --profile langfuse logs -f $(LANGFUSE_SERVICES)
 
 ## Backend
 

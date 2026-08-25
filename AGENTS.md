@@ -17,6 +17,7 @@ This file covers what's true across the whole repo. Also read the nested file fo
 | Dataset provenance, schema, taxonomy, glossary | `docs/data/README.md` |
 | How search / recommenders / ABSA / assistant work | `docs/ml/README.md` |
 | What's measured vs. observed vs. not evaluated | `docs/ml/evaluation.md` |
+| Logging / tracing / metrics: what's wired, what isn't | `docs/engineering/observability.md` |
 | Every known gap and its fix priority | `docs/roadmap.md`, `docs/limitations.md` |
 
 Link to the relevant doc instead of re-explaining it here.

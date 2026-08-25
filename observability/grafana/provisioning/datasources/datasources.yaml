@@ -1,0 +1,49 @@
+# Auto-provisions all three datasources on Grafana startup -- no manual
+# "add datasource" click-through needed. Also wires trace<->logs<->metrics
+# correlation (Tempo's tracesToLogsV2/tracesToMetrics, Loki's derivedFields
+# regex pulling trace_id out of a structured log line), which is the actual
+# payoff of running Tempo+Loki+Prometheus together instead of separately --
+# a trace click jumps straight to its logs and its service's metrics.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      derivedFields:
+        # Matches structlog's KeyValueRenderer output (backend/app/core/
+        # logging_config.py's OTel export tee), which quotes string
+        # values: trace_id='143ec6...', not trace_id=143ec6...
+        - datasourceUid: tempo
+          matcherRegex: "trace_id='(\\w+)'"
+          name: TraceID
+          url: '$${__value.raw}'
+    editable: true
+
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: '-5m'
+        spanEndTimeShift: '5m'
+        filterByTraceID: true
+      tracesToMetrics:
+        datasourceUid: prometheus
+      serviceMap:
+        datasourceUid: prometheus
+    editable: true
