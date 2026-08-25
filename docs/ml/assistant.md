@@ -68,20 +68,38 @@ Most requests are one step. A second (or third) step exists only when a later fi
 
 ```mermaid
 flowchart TD
-    MSG["Chat message"] --> PLAN["AssistantService.parse_plan()\nplan model, thinking always on"]
-    PLAN -->|"raw completion"| REPAIR["strip &lt;think&gt;, parse leading JSON,\nvalidate against ParsedPlan"]
-    REPAIR -->|"invalid, retries left"| PLAN
-    REPAIR -->|"valid"| COMPILE["compile_plan()\nevery $stepN must point\nstrictly backward"]
-    COMPILE -->|"PlanValidationError"| ERR1["error response"]
-    COMPILE -->|"PlanGraph"| LOOP{"walk steps\nin position order"}
-    LOOP -->|"no dependency"| EXEC["execute(step)\nintent handler -> service -> DB"]
-    LOOP -->|"depends on 1+ earlier steps"| RESOLVE["_resolve_step()\nsubstitute $stepN with real game(s)"]
-    RESOLVE -->|"ambiguous / can't resolve"| ERR2["error response"]
-    RESOLVE --> EXEC
-    EXEC -->|"error or clarification"| STOP["stop the chain,\nreturn that response"]
-    EXEC -->|"success, more steps"| LOOP
-    EXEC -->|"success, last step"| FINAL["AssistantResponse\n('Based on X: ...' prefix\nif exactly one shared source)"]
+    MSG["Chat message\nPOST /api/assistant/chat"] --> AGENT
+
+    subgraph Understand["PydanticAI: understand"]
+        AGENT["parse_plan()\nPromptedOutput, retries=2"]
+        LLM["Local mlx_lm.server\nQwen3-30B-A3B-MLX-4bit\nthinking always on"]
+        AGENT --> LLM
+        LLM -->|"loop 1: output fails ParsedPlan,\nre-prompt WITH the validation error"| AGENT
+    end
+
+    AGENT -->|"still invalid after retries"| E502["502\nupstream model fault,\ndistinct from a 500"]
+    LLM -->|"valid"| PLAN["ParsedPlan\ntyped steps, $stepN marks a dependency"]
+
+    PLAN --> COMPILE["compile_plan()\nunique step_ids, every $stepN\npoints strictly backward"]
+    COMPILE -->|"PlanValidationError"| ERR["error response"]
+    COMPILE -->|"PlanGraph, acyclic by construction"| RES
+
+    subgraph Execute["LangGraph: do"]
+        RES["resolve\nfill $stepN from earlier results"]
+        EXE["execute\nrun one step"]
+        RLX["relax\ndrop ONE model-invented bound"]
+        RES --> EXE
+        EXE -->|"loop 2: matched nothing, a later step\nneeds it, a bound is left to give up"| RLX
+        RLX --> EXE
+        EXE -->|"advance: more steps"| RES
+    end
+
+    RES -->|"dependency matched nothing\nor was ambiguous"| DEP["surface that step's\nown message"]
+    EXE --> SVC["intent handler -> service -> DB"]
+    EXE -->|"last step"| FINAL["AssistantResponse\n'Based on X: ...' prefix,\nplus what was relaxed"]
 ```
+
+The two loops fix different failures at different layers, which is why both exist. Loop 1 is PydanticAI's: the model produced *malformed output*, and it gets re-prompted with the validation error attached. Loop 2 is LangGraph's: the output was well-formed but the *request was unsatisfiable as asked*, so the filters loosen. A retry cannot help an impossible query, and relaxing cannot fix broken JSON.
 
 ### Plan IR: compile before executing
 
@@ -170,7 +188,7 @@ Every `/api/assistant/chat` call is fully stateless. There's no rolling memory b
 - No multi-turn conversation memory (above).
 - No evaluation set of natural-language queries with expected parsed intents exists; parsing correctness is unverified beyond hand-run queries in `backend/test_orchestrator.py`, which is also currently out of date: it asserts the `compare` intent was removed, which was true two commits ago and is false today. A real regression suite, with the metrics `docs/roadmap.md` calls for (valid-schema rate, malformed-JSON rate, retry rate, latency), doesn't exist yet.
 - `MAX_PLAN_STEPS` (3) is a hard, deterministic ceiling; a request that would genuinely need a fourth step gets silently truncated to three rather than re-prompted for a shorter plan.
-- Sort/limit occasionally gets dropped by the plan model specifically in a multi-dependency compare (two independent steps merging into one compare), even though the identical instruction is followed reliably in a single-dependency chain. This is a real, measured prompt-sensitivity gap in a long system prompt, not a code bug: `_resolve_step()` correctly detects the resulting ambiguity and returns a clean error rather than guessing, but the request itself doesn't complete.
+- Sort/limit occasionally gets dropped by the plan model specifically in a multi-dependency compare (two independent steps merging into one compare), even though the identical instruction is followed reliably in a single-dependency chain. This is a real, measured prompt-sensitivity gap in a long system prompt, not a code bug: `plan_resolution.resolve_step()` correctly detects the resulting ambiguity and returns a clean error rather than guessing, but the request itself doesn't complete.
 
 ## Related code
 
