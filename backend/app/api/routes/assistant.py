@@ -1,7 +1,6 @@
-import json
-
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
+from pydantic_ai.exceptions import AgentRunError
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
@@ -15,11 +14,15 @@ class ParseRequest(BaseModel):
     message: str
     conversation_id: str | None = None
 
-# 502, not 500, for a ValidationError or JSONDecodeError specifically:
-# both mean the LLM (an upstream dependency) returned something that
-# didn't match the expected schema even after retries -- distinct from a
-# bug in this app's own code. Neither branch leaks str(e) to the client
-# -- a raw Pydantic validation message or SQLAlchemy error isn't
+# 502, not 500, for AgentRunError specifically: it is PydanticAI's base
+# class for every way the model itself can fail us -- output that still
+# didn't match the schema after retries (UnexpectedModelBehavior), or
+# the LLM server being unreachable or erroring (ModelHTTPError) -- all
+# of which are an upstream dependency's fault, distinct from a bug in
+# this app's own code. Catching the base class rather than the leaves
+# means a new PydanticAI failure mode lands on 502 too, instead of
+# silently falling through to the 500 below. Neither branch leaks
+# str(e) to the client -- a raw model error or SQLAlchemy message isn't
 # something an API consumer should see.
 _LLM_PARSE_FAILURE_MESSAGE = "The assistant returned a response that couldn't be parsed. Please try rephrasing your request."
 _UNEXPECTED_ERROR_MESSAGE = "Something went wrong while processing your request."
@@ -29,7 +32,7 @@ def parse_intent(request: ParseRequest):
     service = AssistantService()
     try:
         return service.parse_query(request.message)
-    except (ValidationError, json.JSONDecodeError):
+    except AgentRunError:
         raise HTTPException(status_code=502, detail=_LLM_PARSE_FAILURE_MESSAGE) from None
     except Exception:
         raise HTTPException(status_code=500, detail=_UNEXPECTED_ERROR_MESSAGE) from None
@@ -42,7 +45,7 @@ def chat_endpoint(request: ParseRequest, db: Session = Depends(get_db)):
     try:
         plan = service.parse_plan(request.message)
         return orchestrator.execute_plan(plan)
-    except (ValidationError, json.JSONDecodeError):
+    except AgentRunError:
         raise HTTPException(status_code=502, detail=_LLM_PARSE_FAILURE_MESSAGE) from None
     except Exception:
         raise HTTPException(status_code=500, detail=_UNEXPECTED_ERROR_MESSAGE) from None
