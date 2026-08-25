@@ -1,27 +1,84 @@
-import json
-import re
 import time
 
 import structlog
-from openai import OpenAI
-from pydantic import ValidationError
+from pydantic_ai import Agent, PromptedOutput
+from pydantic_ai.exceptions import UnexpectedModelBehavior
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
 
 from app.core.config import settings
 from app.core.ml_config import AssistantConfig
 from app.schemas.assistant import ParsedIntent, ParsedPlan
 
-_THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 logger = structlog.get_logger("ludora.assistant")
 
+
+def _model_request_count(result) -> int:
+    """How many round-trips the model actually took, retries included --
+    PydanticAI records one ModelRequest per attempt, so this is the
+    directly comparable number to the old hand-rolled retry loop's
+    `attempt` counter.
+    """
+    return sum(1 for m in result.all_messages() if type(m).__name__ == "ModelRequest")
+
+
+
+
 class AssistantService:
+    """Parses a natural-language request into a typed ParsedIntent (single
+    step) or ParsedPlan (one or more dependent steps), via PydanticAI
+    against the local OpenAI-compatible MLX server.
+
+    PromptedOutput, not PydanticAI's default ToolOutput or its
+    NativeOutput -- measured directly against this server, not assumed:
+    NativeOutput (response_format=json_schema) fails on the plan schema
+    whenever thinking mode is on, which parse_plan() always needs, and it
+    kept failing after raising max_tokens to this app's own 4096, so it
+    isn't just a token ceiling. PromptedOutput (schema in the prompt,
+    plain JSON back) is the one mode that works for both methods, and is
+    also what this service did by hand before.
+
+    PydanticAI owns schema presentation and the "output only JSON"
+    instruction; the rules text below stays hand-written, since that's
+    domain knowledge about BGG's taxonomy, not plumbing.
+    """
+
     def __init__(self):
         # Local MLX / OpenAI-compatible server, or real OpenAI if configured.
-        self.client = OpenAI(base_url=settings.OPENAI_BASE_URL, api_key=settings.OPENAI_API_KEY)
+        provider = OpenAIProvider(
+            base_url=settings.OPENAI_BASE_URL, api_key=settings.OPENAI_API_KEY
+        )
         # MLX server expects the exact HuggingFace repo ID.
         self.model = settings.LLM_MODEL_NAME
         # Separate, larger model for parse_plan() -- see PLAN_MODEL_NAME
         # in app.core.config for why this isn't the same as self.model.
         self.plan_model = settings.PLAN_MODEL_NAME
+
+        # Agents are stateless and reusable -- built once per service
+        # instance rather than per call. `retries` is PydanticAI's
+        # validation-retry budget: on a schema violation it re-prompts the
+        # model with the validation error attached, which is strictly more
+        # information than this service's previous blind retry had.
+        self._intent_agent = Agent(
+            OpenAIChatModel(self.model, provider=provider),
+            output_type=PromptedOutput(ParsedIntent),
+            instructions=self._build_system_prompt(),
+            model_settings={
+                "temperature": AssistantConfig.TEMPERATURE,
+                "max_tokens": AssistantConfig.MAX_TOKENS,
+            },
+            retries=AssistantConfig.MAX_LLM_RETRIES,
+        )
+        self._plan_agent = Agent(
+            OpenAIChatModel(self.plan_model, provider=provider),
+            output_type=PromptedOutput(ParsedPlan),
+            instructions=self._build_plan_system_prompt(allow_thinking=True),
+            model_settings={
+                "temperature": AssistantConfig.TEMPERATURE,
+                "max_tokens": AssistantConfig.MAX_TOKENS,
+            },
+            retries=AssistantConfig.MAX_LLM_RETRIES,
+        )
 
     def _intent_rules_text(self) -> str:
         """The per-step parsing rules, shared verbatim by the single-intent
@@ -118,24 +175,23 @@ class AssistantService:
         prompt-version hash) can reconstruct exactly what was sent without
         duplicating it.
 
+        No JSON schema and no "output only JSON" rule in here: PydanticAI's
+        PromptedOutput appends both itself (see the class docstring), and
+        stating them twice would just be two copies to keep in sync.
+
         /no_think: LLM_MODEL_NAME is Qwen3-4B, the same "thinking"-capable
         model family SummarizationService's prompts already prefix with
         /no_think — single-shot JSON classification doesn't need or want
-        extended reasoning, and unsuppressed thinking output would land
-        before the JSON and break model_validate_json().
+        extended reasoning, and thinking output costs latency for nothing
+        on a task this shallow.
         """
-        schema_json = ParsedIntent.model_json_schema()
         return f"""/no_think
 You are the Ludora Assistant, an expert in board games.
-Your job is to parse the user's natural language request into a strictly structured JSON intent object.
-DO NOT answer the user's question. Just output the JSON.
-
-Here is the JSON Schema you MUST follow:
-{json.dumps(schema_json, indent=2)}
+Your job is to parse the user's natural language request into a strictly structured intent object.
+DO NOT answer the user's question.
 
 Important Rules:
 {self._intent_rules_text()}
-18. Output ONLY valid JSON matching the schema. No markdown wrapping.
 """
 
     def _build_plan_system_prompt(self, allow_thinking: bool = False) -> str:
@@ -147,30 +203,23 @@ Important Rules:
         step's input genuinely can't be filled in without an earlier
         step's result.
 
-        allow_thinking defaults to False (sends /no_think) because most
-        chat messages go through this same prompt regardless of whether
-        they end up single- or multi-step, and /no_think has never
-        caused a problem on the single-step case -- paying thinking-mode
-        latency on every message just to cover the harder minority would
-        be the wrong tradeoff. parse_plan() only passes True on a retry,
-        after a first /no_think attempt already failed to parse.
+        allow_thinking is passed True by the agent this service builds:
+        latency isn't a constraint here, and thinking mode is what makes
+        the harder decomposition cases reliable. Measured directly against
+        this server: with /no_think, Qwen3-4B reliably emitted a
+        structurally invalid JSON plan (one extra closing brace) on a
+        query needing real decomposition -- byte-identical across
+        temperatures 0.0 and 0.3, so not a sampling fluke; allowing
+        thinking mode fixed it in the same test (valid JSON, correctly
+        structured) at roughly 8x the latency (2.3s -> 17.9s).
 
-        Measured directly against this server: with /no_think, Qwen3-4B
-        reliably emitted a structurally invalid JSON plan (one extra
-        closing brace) on a query needing real decomposition --
-        byte-identical across temperatures 0.0 and 0.3, so not a
-        sampling fluke; allowing thinking mode fixed it in the same test
-        (valid JSON, correctly structured) at roughly 8x the latency
-        (2.3s -> 17.9s for that query).
+        As with the single-step prompt above, no JSON schema and no
+        "output only JSON" rule live here -- PromptedOutput appends both.
         """
-        schema_json = ParsedPlan.model_json_schema()
         thinking_directive = "" if allow_thinking else "/no_think\n"
         return f"""{thinking_directive}You are the Ludora Assistant, an expert in board games.
-Your job is to parse the user's natural language request into a strictly structured JSON plan: a list of one or more steps.
-DO NOT answer the user's question. Just output the JSON.
-
-Here is the JSON Schema you MUST follow:
-{json.dumps(schema_json, indent=2)}
+Your job is to parse the user's natural language request into a structured plan: a list of one or more steps.
+DO NOT answer the user's question.
 
 Each step in "steps" follows these rules:
 {self._intent_rules_text()}
@@ -195,115 +244,38 @@ Planning rules (how many steps, and how they connect):
    - "find games with pokemon in it and compare the top 3 in terms of rating" -> step_id=0, intent="search", query="pokemon", sort={{"field":"rating","direction":"desc"}}, limit=3 (per rule 10, "pokemon" is a franchise, not real taxonomy -- search, not browse; "top 3 in terms of rating" is that step's own sort+limit, same as rule 22's browse case, NOT left unset just because the prerequisite step is search instead of browse); step_id=1, intent="compare", game_names=["$step0"], depends_on_step=0. (Without an explicit limit here, expansion falls back to comparing however many matches exist, capped at 5 -- which answers "compare them" for every match, not the "top 3" the user actually asked for.)
    - "tell me about Catan" -> ONE step only: step_id=0, intent="get_game", game_name="Catan". Do not invent a second step when the first already answers the whole request.
    - "put the most complex strategy game up against the top ranked party game" -> THREE steps: step_id=0, intent="browse", filters={{"subdomains":["Strategy"]}}, sort={{"field":"complexity","direction":"desc"}}, limit=1; step_id=1, intent="browse", filters={{"subdomains":["Party"]}}, sort={{"field":"rank","direction":"asc"}}, limit=1 (independent of step 0 -- its own separate criterion, not chained from the first); step_id=2, intent="compare", game_names=["$step0", "$step1"], depends_on_step=0. (Per rule 22's second shape: two distinct placeholders, each from its own independent step -- and per rule 23, each of those two steps STILL needs its own sort+limit=1 exactly like any single superlative browse, same as every example above it. Do NOT chain step 1 off of step 0's result, since the two criteria don't depend on each other.)
-26. Output ONLY valid JSON matching the schema. No markdown wrapping.
 """
 
-    @staticmethod
-    def _strip_markdown_json(raw_content: str) -> str:
-        # Thinking mode (the plan prompt allows it; the single-step
-        # prompt suppresses it via /no_think but this is harmless either
-        # way) can prefix the real content with a <think>...</think>
-        # block -- drop it before anything else.
-        raw_content = _THINK_BLOCK_RE.sub("", raw_content, count=1)
-        raw_content = raw_content.strip()
-        if raw_content.startswith("```json"):
-            raw_content = raw_content[7:]
-        elif raw_content.startswith("```"):
-            raw_content = raw_content[3:]
-        if raw_content.endswith("```"):
-            raw_content = raw_content[:-3]
-        return raw_content.strip()
-
-    @staticmethod
-    def _parse_leading_json(raw_content: str) -> dict:
-        """Parses the first complete JSON value in raw_content and
-        ignores anything after it, instead of the strict all-or-nothing
-        parsing model_validate_json() does.
-
-        Measured directly against this server on the deeper-nested
-        ParsedPlan schema: the model reliably appends exactly one extra
-        closing brace after an otherwise fully valid, complete JSON
-        object -- reproduced byte-identically across both temperature 0
-        and 0.3, so this isn't a sampling fluke a retry can dodge. The
-        leading document is already the complete, correct answer; only
-        the trailing noise needs to be tolerated.
-        """
-        decoder = json.JSONDecoder()
-        obj, _ = decoder.raw_decode(raw_content)
-        return obj
-
-    @staticmethod
-    def _temperature_for_attempt(attempt: int) -> float:
-        """The first attempt runs at AssistantConfig.TEMPERATURE (0.0) for
-        reproducible primary behavior. Retries (attempt > 0) switch to
-        RETRY_TEMPERATURE so a retry isn't guaranteed to replay an
-        identical completion. This helps with genuinely stochastic
-        flakes (an empty completion), but measured directly against this
-        server it is NOT reliable against a structural bug: one specific
-        JSON malformation on the plan schema reproduced byte-identically
-        across both 0.0 and 0.3 over multiple attempts. That class of
-        error needs _parse_leading_json() below, not a different
-        temperature -- this helper is kept for the flake case it was
-        actually built for, not as a general-purpose retry strategy.
-        """
-        return AssistantConfig.TEMPERATURE if attempt == 0 else AssistantConfig.RETRY_TEMPERATURE
-
     def parse_query(self, user_message: str) -> ParsedIntent:
-        system_prompt = self._build_system_prompt()
-
-        # Retries, not just a single attempt: the same class of flake
-        # SummarizationService._call_llm_json() was built to handle --
-        # measured against this local server, an identical (temperature=0)
-        # prompt occasionally comes back with an empty completion and
-        # succeeds on a byte-identical retry. One bad call shouldn't fail
-        # an entire user request.
-        last_error: Exception | None = None
-        for attempt in range(AssistantConfig.MAX_LLM_RETRIES + 1):
-            start = time.perf_counter()
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message}
-                ],
-                response_format={"type": "json_object"},
-                temperature=self._temperature_for_attempt(attempt),
-                max_tokens=AssistantConfig.MAX_TOKENS
+        """Single-intent parse. PydanticAI owns validation and retries:
+        on a schema violation it re-prompts with the validation error
+        attached, rather than this service replaying a blind identical
+        call and hoping for a different completion.
+        """
+        start = time.perf_counter()
+        try:
+            result = self._intent_agent.run_sync(user_message)
+        except UnexpectedModelBehavior as e:
+            logger.error(
+                "assistant.parse_query", model=self.model,
+                retries=AssistantConfig.MAX_LLM_RETRIES, outcome="failed",
+                error=str(e)[:300], query=user_message[:200],
             )
-            duration_ms = round((time.perf_counter() - start) * 1000, 1)
+            raise
+        duration_ms = round((time.perf_counter() - start) * 1000, 1)
 
-            raw_content = self._strip_markdown_json(response.choices[0].message.content or "{}")
-
-            try:
-                parsed = ParsedIntent.model_validate(self._parse_leading_json(raw_content))
-                logger.info(
-                    "assistant.parse_query", model=self.model, attempt=attempt,
-                    duration_ms=duration_ms, outcome="ok", intent=parsed.intent,
-                )
-                return parsed
-            except (ValidationError, json.JSONDecodeError) as e:
-                logger.warning(
-                    "assistant.parse_query", model=self.model, attempt=attempt,
-                    duration_ms=duration_ms, outcome="retry", error=str(e)[:300],
-                )
-                last_error = e
-                continue
-
-        # Unreachable in practice: the loop above always either returns or
-        # sets last_error before falling through here, since range(...) is
-        # never empty. The assert documents that guarantee for the type
-        # checker rather than asserting it can't fail.
-        assert last_error is not None
-        logger.error(
+        parsed = result.output
+        logger.info(
             "assistant.parse_query", model=self.model,
-            attempts=AssistantConfig.MAX_LLM_RETRIES + 1, outcome="failed",
-            error=str(last_error)[:300], query=user_message[:200],
+            requests=_model_request_count(result), duration_ms=duration_ms,
+            outcome="ok", intent=parsed.intent,
         )
-        raise last_error
+        return parsed
 
     def parse_plan(self, user_message: str) -> ParsedPlan:
         """Like parse_query(), but asks for a list of one or more steps
         instead of a single intent -- see _build_plan_system_prompt().
+
         Steps beyond AssistantConfig.MAX_PLAN_STEPS are dropped here,
         deterministically, rather than trusting the model's own restraint
         or re-prompting for a shorter plan. Sorted by step_id before
@@ -313,58 +285,25 @@ Planning rules (how many steps, and how they connect):
         guarantees truncation can never orphan a reference a kept step
         depends on -- truncating by array order instead could keep an
         arbitrary subset and silently strand a dependency.
-
-        Runs on self.plan_model (the larger model, see PLAN_MODEL_NAME)
-        with thinking mode always allowed, not gated behind a retry.
-        Latency isn't a constraint for this project, so there's no
-        reason to start with a faster-but-less-reliable configuration
-        and only fall back after it fails -- always giving the model
-        room to reason is strictly better here. The retry loop and
-        temperature bump on later attempts stay as a backstop for
-        genuinely stochastic flakes (an empty completion), not as the
-        primary reliability mechanism anymore.
         """
-        last_error: Exception | None = None
-        for attempt in range(AssistantConfig.MAX_LLM_RETRIES + 1):
-            system_prompt = self._build_plan_system_prompt(allow_thinking=True)
-            start = time.perf_counter()
-            response = self.client.chat.completions.create(
-                model=self.plan_model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message}
-                ],
-                response_format={"type": "json_object"},
-                temperature=self._temperature_for_attempt(attempt),
-                max_tokens=AssistantConfig.MAX_TOKENS
+        start = time.perf_counter()
+        try:
+            result = self._plan_agent.run_sync(user_message)
+        except UnexpectedModelBehavior as e:
+            logger.error(
+                "assistant.parse_plan", model=self.plan_model,
+                retries=AssistantConfig.MAX_LLM_RETRIES, outcome="failed",
+                error=str(e)[:300], query=user_message[:200],
             )
-            duration_ms = round((time.perf_counter() - start) * 1000, 1)
+            raise
+        duration_ms = round((time.perf_counter() - start) * 1000, 1)
 
-            raw_content = self._strip_markdown_json(response.choices[0].message.content or "{}")
-
-            try:
-                plan = ParsedPlan.model_validate(self._parse_leading_json(raw_content))
-                if len(plan.steps) > AssistantConfig.MAX_PLAN_STEPS:
-                    plan.steps = sorted(plan.steps, key=lambda s: s.step_id)[:AssistantConfig.MAX_PLAN_STEPS]
-                logger.info(
-                    "assistant.parse_plan", model=self.plan_model, attempt=attempt,
-                    duration_ms=duration_ms, outcome="ok", step_count=len(plan.steps),
-                )
-                return plan
-            except (ValidationError, json.JSONDecodeError) as e:
-                logger.warning(
-                    "assistant.parse_plan", model=self.plan_model, attempt=attempt,
-                    duration_ms=duration_ms, outcome="retry", error=str(e)[:300],
-                )
-                last_error = e
-                continue
-
-        # Same guarantee as parse_query() above: unreachable with last_error
-        # still None, since the loop always either returns or sets it.
-        assert last_error is not None
-        logger.error(
+        plan = result.output
+        if len(plan.steps) > AssistantConfig.MAX_PLAN_STEPS:
+            plan.steps = sorted(plan.steps, key=lambda s: s.step_id)[:AssistantConfig.MAX_PLAN_STEPS]
+        logger.info(
             "assistant.parse_plan", model=self.plan_model,
-            attempts=AssistantConfig.MAX_LLM_RETRIES + 1, outcome="failed",
-            error=str(last_error)[:300], query=user_message[:200],
+            requests=_model_request_count(result), duration_ms=duration_ms,
+            outcome="ok", step_count=len(plan.steps),
         )
-        raise last_error
+        return plan
