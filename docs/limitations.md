@@ -6,7 +6,7 @@ Grouped by area. Each item links to the doc with full evidence and detail; this 
 
 - **No user accounts, no authentication, no personalization.** Every visitor sees the same catalog and the same non-personalized recommendation baselines. Frame Ludora as a discovery and exploration tool, not a personalized app.
 - **The AI Assistant has no memory across turns.** Every message is parsed independently, even though a `conversation_id` field exists in the request schema. A multi-step plan's steps can reference each other, but only within one message. Detail: [docs/ml/assistant.md](ml/assistant.md#known-limitation-no-multi-turn-memory).
-- **The assistant has no grammar-constrained structured output.** `ParsedIntent`/`ParsedPlan` validity relies on prompting plus post-hoc JSON repair and retry, not a token-level guarantee. The local serving stack (`mlx_lm.server`) has no schema-aware decode hook. Detail: [docs/ml/assistant.md](ml/assistant.md#parsing-is-repair-first-not-trust-first), [docs/roadmap.md](roadmap.md).
+- **The assistant has no grammar-constrained structured output.** `ParsedIntent`/`ParsedPlan` validity relies on prompting plus validate-and-retry (PydanticAI re-prompts with the validation error attached), not a token-level guarantee. The local serving stack (`mlx_lm.server`) has no schema-aware decode hook. Detail: [docs/ml/assistant.md](ml/assistant.md#validation-is-the-boundary-and-a-failed-validation-is-fed-back), [docs/roadmap.md](roadmap.md).
 
 ## Machine learning
 

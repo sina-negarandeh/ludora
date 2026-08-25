@@ -13,7 +13,11 @@ Local instruction-tuned LLM, `Qwen/Qwen3-30B-A3B-MLX-4bit`, deliberately larger 
 
 The model size and thinking-mode choice are both measured, not assumed. Directly against this server, `Qwen/Qwen3-4B-MLX-4bit` reliably produced a structural JSON bug on a query needing real decomposition: one extra trailing closing brace, reproduced byte-identically across temperatures 0.0 and 0.3, so not a sampling fluke a retry could escape, plus real intent misclassifications on harder chained queries. `Qwen/Qwen3-30B-A3B-MLX-4bit` with thinking mode allowed didn't reproduce either failure in the same tests. The latency cost of always allowing thinking was also measured directly (2.3s to 17.9s for one representative query) and accepted, since latency isn't a constraint for this project.
 
-Parsing is repair-first: a leading `<think>...</think>` block and markdown fences are stripped, then only the first complete JSON value is parsed (`json.JSONDecoder().raw_decode()`, tolerating trailing noise a strict parse would reject outright, exactly what the measured trailing-brace bug needs), then validated. On a validation or JSON-decode failure, it retries up to `AssistantConfig.MAX_LLM_RETRIES` (2) times, bumping temperature on later attempts for the genuinely-stochastic-flake case. There is no schema-enforced or grammar-constrained decoding anywhere in this pipeline, confirmed by reading the installed `mlx_lm.server`'s source (v0.31.3): it has no schema-aware decode hook, and the `response_format` field this code sends is never read server-side. See [docs/ml/assistant.md](../assistant.md#parsing-is-repair-first-not-trust-first).
+Parsing goes through a [PydanticAI](https://ai.pydantic.dev/) agent in `PromptedOutput` mode: the schema is rendered into the prompt and plain JSON comes back, which PydanticAI validates against `ParsedPlan`. On a violation it re-prompts the model with the validation error attached, up to `AssistantConfig.MAX_LLM_RETRIES` (2) times, so each attempt is a different and more constrained question rather than a replay of the same one. Thinking-mode `<think>` blocks are separated out by the library rather than stripped by hand.
+
+`PromptedOutput` is not PydanticAI's default, and the choice was measured against this server rather than assumed. `NativeOutput` (a `json_schema` response format) fails on the plan schema whenever thinking mode is on, which this model always runs with, and kept failing after raising `max_tokens` to this app's own 4,096, so it is not a token ceiling. `ToolOutput`, the library default, needs tool-calling support. `PromptedOutput` is the one mode that works for both this card's model and the single-intent one.
+
+There is still no schema-enforced or grammar-constrained decoding anywhere in this pipeline, confirmed by reading the installed `mlx_lm.server`'s source (v0.31.3): it has no schema-aware decode hook. Validity comes from prompting plus validate-and-retry, not a token-level guarantee. See [docs/ml/assistant.md](../assistant.md).
 
 `ParsedPlan.steps` is truncated to `AssistantConfig.MAX_PLAN_STEPS` (3) after parsing, deterministically in application code, not requested of the model. `AssistantOrchestrator.execute_plan()` then compiles the plan into a validated dependency graph (`plan_graph.compile_plan()`) before executing anything. See [docs/ml/assistant.md](../assistant.md#multi-step-planning-and-execution) for the mechanism, including how a step's `$stepN` placeholder gets resolved against an earlier step's result.
 
@@ -25,8 +29,7 @@ Source of truth: `backend/app/core/ml_config.py::AssistantConfig`; LLM endpoint 
 
 | Param | Value |
 |---|---|
-| `TEMPERATURE` | 0.0 (first attempt) |
-| `RETRY_TEMPERATURE` | 0.3 (later attempts) |
+| `TEMPERATURE` | 0.0 (every attempt, retries included) |
 | `MAX_TOKENS` | 4,096 |
 | `MAX_LLM_RETRIES` | 2 (3 attempts total per call) |
 | `MAX_PLAN_STEPS` | 3, enforced by the app after parsing |

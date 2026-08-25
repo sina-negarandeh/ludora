@@ -72,8 +72,8 @@ Full request/response shapes are in the live Swagger UI (`http://localhost:8000/
 | `ReviewService` | Paginated review browsing, language and rating filters | `routes/games.py`, `AssistantOrchestrator` |
 | `AspectService` | ABSA aggregate lookup per game | `routes/games.py`, `AssistantOrchestrator` |
 | `MetadataService` | Subdomain, category, theme, family, mechanic, designer, publisher, and artist lookups | `routes/metadata.py` |
-| `AssistantService` | Calls the local LLM, validates output against `ParsedIntent` | `routes/assistant.py` |
-| `AssistantOrchestrator` | Dispatches a parsed intent to whichever service handles it | `routes/assistant.py` |
+| `AssistantService` | Drives the local LLM through PydanticAI agents; returns a validated `ParsedIntent`/`ParsedPlan`, retrying with the validation error attached when the model gets the shape wrong | `routes/assistant.py` |
+| `AssistantOrchestrator` | Dispatches a parsed intent to whichever service handles it; multi-step plans are compiled (`plan_graph`), resolved (`plan_resolution`), and walked by a LangGraph state machine (`plan_executor`) | `routes/assistant.py` |
 | `EntityResolver` | Resolves fuzzy game, category, theme, and mechanic names via `SearchService` lexical search plus class-level caches | `AssistantOrchestrator` |
 | `SummarizationService` | Builds the "Community Consensus" paragraph from ABSA aggregates via the local LLM | Offline only, `scripts/generate_summaries.py`; no live route calls it |
 

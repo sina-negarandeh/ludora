@@ -7,7 +7,7 @@ Ludora has four distinct ML/AI systems, documented separately because they solve
 | Search | Find games by keyword or natural-language description | [search.md](search.md) |
 | Recommendation engine | Suggest similar/related games; compare 9 algorithms side by side | [recommenders.md](recommenders.md) |
 | ABSA + summarization | Extract per-aspect sentiment from reviews; synthesize a "Community Consensus" paragraph | [absa.md](absa.md) |
-| AI Assistant | Natural-language chat interface over the catalog | [assistant.md](assistant.md) |
+| AI Assistant | Natural-language chat interface over the catalog, PydanticAI parsing into a typed plan, LangGraph execution | [assistant.md](assistant.md) |
 
 Measured and observed results for all four systems (what's real, what's UI-only, what's missing) are consolidated in [evaluation.md](evaluation.md). The exact reproducibility spec for each individual model, data, hyperparameters, training command, artifact location, evaluation result, is in [model-cards/](model-cards/), one file per model.
 
