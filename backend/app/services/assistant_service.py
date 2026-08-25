@@ -269,6 +269,7 @@ Planning rules (how many steps, and how they connect):
         try:
             result = self._intent_agent.run_sync(user_message)
         except AgentRunError as e:
+            duration_ms = round((time.perf_counter() - start) * 1000, 1)
             # The base class, not just UnexpectedModelBehavior: an
             # unreachable or erroring LLM server raises ModelHTTPError,
             # which is just as much an upstream failure and just as much
@@ -276,7 +277,7 @@ Planning rules (how many steps, and how they connect):
             # step with the route layer, which maps the same class to 502.
             logger.error(
                 "assistant.parse_query", model=self.model,
-                error_type=type(e).__name__,
+                error_type=type(e).__name__, duration_ms=duration_ms,
                 retries=AssistantConfig.MAX_LLM_RETRIES, outcome="failed",
                 error=str(e)[:300], query=user_message[:200],
             )
@@ -310,9 +311,10 @@ Planning rules (how many steps, and how they connect):
             result = self._plan_agent.run_sync(user_message)
         except AgentRunError as e:
             # See parse_query() on why this catches the base class.
+            duration_ms = round((time.perf_counter() - start) * 1000, 1)
             logger.error(
                 "assistant.parse_plan", model=self.plan_model,
-                error_type=type(e).__name__,
+                error_type=type(e).__name__, duration_ms=duration_ms,
                 retries=AssistantConfig.MAX_LLM_RETRIES, outcome="failed",
                 error=str(e)[:300], query=user_message[:200],
             )

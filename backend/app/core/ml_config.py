@@ -426,7 +426,7 @@ class AssistantConfig:
     # is a different, more constrained question -- verified repairing a
     # rejection at temperature 0.0. Every attempt now runs at
     # TEMPERATURE, which also keeps a successful parse reproducible.
-    #
+
     # A hard ceiling on plan length, enforced after parsing rather than
     # requested of the model -- caps a runaway decomposition (or a
     # confidently-wrong one) at a size that's still cheap and legible to
