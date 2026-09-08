@@ -85,7 +85,10 @@ def main():
         cat_name = cat.replace('Cat:', '')
         process_group(cat_df, cat_name)
 
-    out_path = os.path.join(os.path.dirname(__file__), '../frontend/public/distributions.json')
+    # Served by the API (GET /api/distributions), not read off the frontend's
+    # own origin: the web app and the iOS app both need these curves, and a
+    # copy per client is the thing that drifts.
+    out_path = os.path.join(os.path.dirname(__file__), '../backend/app/data/distributions.json')
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     with open(out_path, 'w') as f:
         json.dump(results, f)
