@@ -14,11 +14,22 @@ Input: a query string `q`, a `mode` (`lexical` | `semantic` | `hybrid`), and the
 
 ### Query normalization
 
-Both retrieval legs fold the query through `normalize_query()` (`backend/app/services/search_service.py`) before doing anything with it: strip surrounding whitespace, lowercase. For lexical this changes nothing, since `websearch_to_tsquery` already lowercases while building its lexemes. For semantic it matters, because the embedding model does not: before this existed, "catan" and "Catan" retrieved different neighbourhoods, and hybrid inherited the difference through the RRF union. Measured against the live catalog, hybrid returned 149 matches topped by "Catan: Big Box" for the first and 120 topped by "Catan Card Game" for the second.
+Every user-typed query is folded through `normalize_query()` (`backend/app/core/query_text.py`) before anything is done with it: collapse whitespace runs, `casefold`. It lives in `core` rather than in either service because both search entry points need it and neither imports the other, and a user cannot tell those entry points apart from the search field in front of them:
 
-That was reachable from an ordinary keyboard rather than a contrived one. iOS capitalizes the first letter of a search field by default, so the phone and the web returned different games for the same keystrokes.
+- `/api/search/` (`SearchService`, lexical/semantic/hybrid) folds in both retrieval legs.
+- `/api/games/?query=` (`GameService.get_games`, the browse and catalog path) folds before building its `ILIKE` pattern.
 
-Lowercase specifically, rather than any other canonical form, because that is the case the evaluation set is written in (`backend/evaluation/search_queries.json`, all five queries) and therefore the case the committed baseline in `backend/evaluation/results/` was measured under. Folding to lowercase standardizes on the condition that was actually measured.
+For the lexical leg the fold changes nothing, since `websearch_to_tsquery` already lowercases while building its lexemes and tokenizes away whitespace. For semantic it matters, because the embedding model does neither: before this existed, "catan" and "Catan" retrieved different neighbourhoods, and hybrid inherited the difference through the RRF union. Measured against the live catalog, hybrid returned 149 matches topped by "Catan: Big Box" for the first and 120 topped by "Catan Card Game" for the second.
+
+For the browse path the whitespace fold is what matters. That query string goes straight into a `LIKE` pattern, so an untrimmed `"catan "` required a literal space after the name: measured against the live catalog, 46 matches became 14.
+
+Both were reachable from an ordinary keyboard rather than a contrived one. iOS capitalizes the first letter of a search field by default and inserts a trailing space when a keyboard suggestion is accepted, so the phone and the web returned different games for the same keystrokes.
+
+`casefold` rather than `lower`, because this is a case-insensitive comparison and not a display transform: `lower` leaves the German sharp s alone, so "Straße" and "STRASSE" stay distinct strings and encode to distinct vectors. BGG's catalog carries many German titles. Whitespace runs are collapsed rather than only trimmed, because an internal double space splits a query for the encoder exactly the way a leading one does.
+
+**A blank query retrieves nothing, in every mode.** Normalization reduces `"   "` to `""`, and an empty string is a perfectly good input to an embedding model whose nearest neighbours are arbitrary games: a blank search field used to answer with 100 confident-looking results in semantic and hybrid while lexical answered with none. Both legs now return no candidates for an empty normalized query, so the three modes agree and nothing is sent to the encoder or the database.
+
+This fold is the identity on every query in `backend/evaluation/search_queries.json` (all five are already lowercase, single-spaced ASCII), so the committed baseline in `backend/evaluation/results/` was measured under exactly the condition it now guarantees. That also means those five queries cannot detect a case regression, which is why `evaluate_search.py` reports case invariance separately: it re-runs each query uppercased, title-cased and padded, and checks the top-10 comes back identical. It writes to its own results file so the three quality baselines stay comparable.
 
 Documents keep their natural case: `scripts/update_embeddings.py` does not fold. So the query is slightly out of step with the corpus, which is worth knowing but is not new. That asymmetry already applied to every lowercase query anyone typed, the five evaluation queries included. Folding makes it uniform instead of dependent on whether the caller happened to hold shift. Pinned by `backend/tests/test_search_query_normalization.py`.
 
