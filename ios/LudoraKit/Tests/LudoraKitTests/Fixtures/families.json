@@ -1,0 +1,71 @@
+[
+  {
+    "group": "Admin",
+    "values": [
+      {
+        "id": 1,
+        "value": "Better Description Needed!",
+        "name": "Admin: Better Description Needed!",
+        "game_count": 1240
+      },
+      {
+        "id": 2,
+        "value": "Book entries that should be split",
+        "name": "Admin: Book entries that should be split",
+        "game_count": 1
+      },
+      {
+        "id": 3,
+        "value": "Cancelled Games",
+        "name": "Admin: Cancelled Games",
+        "game_count": 4
+      }
+    ]
+  },
+  {
+    "group": "Ancient",
+    "values": [
+      {
+        "id": 9,
+        "value": "Babylon",
+        "name": "Ancient: Babylon",
+        "game_count": 22
+      },
+      {
+        "id": 10,
+        "value": "Carthage",
+        "name": "Ancient: Carthage",
+        "game_count": 25
+      },
+      {
+        "id": 11,
+        "value": "Corinth",
+        "name": "Ancient: Corinth",
+        "game_count": 5
+      }
+    ]
+  },
+  {
+    "group": "Animals",
+    "values": [
+      {
+        "id": 21,
+        "value": "Alligators / Crocodiles",
+        "name": "Animals: Alligators / Crocodiles",
+        "game_count": 38
+      },
+      {
+        "id": 22,
+        "value": "Ants",
+        "name": "Animals: Ants",
+        "game_count": 30
+      },
+      {
+        "id": 23,
+        "value": "Apes / Monkeys",
+        "name": "Animals: Apes / Monkeys",
+        "game_count": 105
+      }
+    ]
+  }
+]
