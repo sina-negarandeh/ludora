@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 
 from app.core import embeddings as embedding_model
 from app.core.ml_config import SearchConfig
-from app.core.query_text import normalize_query
 from app.database.models import Artist, Category, Designer, Game, GameEmbedding, Mechanic, Publisher, Subdomain, Subfamily, Theme
 from app.schemas.game_query import SORT_FIELD_TO_COLUMN, GameFilter, SortSpec
 from app.schemas.search import PaginatedSearchResults, SearchDebug, SearchQuery, SearchResult
@@ -76,11 +75,7 @@ class SearchService:
         # "Chvatil" against an 'english'-tokenized tsvector containing
         # "Chvátil" returns zero rows, since the two accent forms produce
         # different lexemes under the plain config.
-        normalized = normalize_query(q)
-        if not normalized:
-            return {}
-
-        tsquery = func.websearch_to_tsquery('english_unaccent', normalized)
+        tsquery = func.websearch_to_tsquery('english_unaccent', q)
         
         # Rank the results using ts_rank_cd. Tried adding normalization=1
         # (divide by 1 + log(document length)) to discount long, noisy
@@ -104,16 +99,7 @@ class SearchService:
         return {row.bgg_id: rank + 1 for rank, row in enumerate(results)}
 
     def search_semantic(self, q: str, limit: int = SearchConfig.CANDIDATE_POOL_SIZE) -> dict[int, int]:
-        # An empty query is a perfectly good input to the encoder, and the
-        # nearest neighbours of the empty-string embedding are arbitrary
-        # games, so a blank search field answered with 100 confident-looking
-        # results. Lexical answers nothing for the same input; returning
-        # nothing here is what makes the three modes agree.
-        normalized = normalize_query(q)
-        if not normalized:
-            return {}
-
-        embedding = embedding_model.encode([normalized], is_query=True)[0]
+        embedding = embedding_model.encode([q], is_query=True)[0]
 
         # Filter to the currently-configured model first — game_embeddings can
         # hold rows for more than one model at once (e.g. during a comparison),
@@ -145,6 +131,20 @@ class SearchService:
         return with_value + without_value
 
     def search(self, search_query: SearchQuery, skip: int, limit: int) -> PaginatedSearchResults:
+        # `SearchQuery.q` folds blank input to "". An empty string is a
+        # perfectly good input to an embedding model, whose nearest
+        # neighbours are arbitrary games, so a blank search field used to
+        # answer with 100 confident-looking results in semantic and hybrid
+        # while lexical answered with none.
+        #
+        # Decided here rather than in the retrieval legs because this is the
+        # only layer that can see there are filters: a request with filters
+        # and no text is a browse, and callers that mean that should say so.
+        # `AssistantOrchestrator._handle_search` routes exactly that case to
+        # `_handle_browse`.
+        if not search_query.q:
+            return PaginatedSearchResults(total=0, items=[])
+
         lexical_ranks = {}
         semantic_ranks = {}
         
