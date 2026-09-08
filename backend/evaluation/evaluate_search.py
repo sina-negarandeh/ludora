@@ -73,6 +73,55 @@ def evaluate_mode(service, queries, mode):
         mlflow.log_metrics(metrics)
     write_results_json(f"search_{mode}", {"mode": mode, "n_queries": n, **metrics})
 
+def evaluate_case_invariance(service, queries, mode, k=10):
+    """Does capitalizing a query change what comes back?
+
+    Kept out of `search_queries.json` on purpose. `evaluate_mode` averages
+    over every query in that file and writes only the aggregate, so adding a
+    sixth entry would move all three quality metrics and silently make the
+    committed baseline in `results/` non-comparable. This asks a different
+    question anyway: not "how good are the results" but "are they the same
+    results", which is the property the query normalization is supposed to
+    guarantee and the only one the existing five queries cannot test, since
+    all five are already lowercase.
+    """
+    print(f"\nCase invariance ({mode}):")
+    identical = 0
+
+    for item in queries:
+        q = item["query"]
+        variants = [q.upper(), q.title(), f"  {q}  "]
+
+        baseline = [
+            r.game.bgg_id
+            for r in service.search(
+                SearchQuery(q=q, mode=SearchMode(mode)), skip=0, limit=k
+            ).items
+        ]
+        matches = all(
+            [
+                r.game.bgg_id
+                for r in service.search(
+                    SearchQuery(q=v, mode=SearchMode(mode)), skip=0, limit=k
+                ).items
+            ]
+            == baseline
+            for v in variants
+        )
+        identical += matches
+        if not matches:
+            print(f"  DIFFERS: {q!r}")
+
+    rate = identical / len(queries) if queries else 0.0
+    print(f"  identical top-{k} for every variant: {identical}/{len(queries)}")
+
+    # Its own file, so the three quality baselines stay byte-comparable.
+    write_results_json(
+        f"search_case_invariance_{mode}",
+        {"mode": mode, "n_queries": len(queries), f"invariant_at_{k}": rate},
+    )
+
+
 def main():
     engine = create_engine(settings.DATABASE_URL)
     Session = sessionmaker(bind=engine)
@@ -82,9 +131,11 @@ def main():
     with open(os.path.join(os.path.dirname(__file__), 'search_queries.json')) as f:
         queries = json.load(f)
         
-    evaluate_mode(service, queries, "lexical")
-    evaluate_mode(service, queries, "semantic")
-    evaluate_mode(service, queries, "hybrid")
+    for mode in ("lexical", "semantic", "hybrid"):
+        evaluate_mode(service, queries, mode)
+
+    for mode in ("lexical", "semantic", "hybrid"):
+        evaluate_case_invariance(service, queries, mode)
 
 if __name__ == "__main__":
     main()
