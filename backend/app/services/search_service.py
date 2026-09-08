@@ -9,6 +9,39 @@ from app.schemas.game_query import SORT_FIELD_TO_COLUMN, GameFilter, SortSpec
 from app.schemas.search import PaginatedSearchResults, SearchDebug, SearchQuery, SearchResult
 
 
+def normalize_query(q: str) -> str:
+    """Case- and whitespace-fold a search query.
+
+    The two retrieval legs disagreed about case. `websearch_to_tsquery`
+    lowercases while building its lexemes, so lexical search was already
+    case-insensitive; the embedding model is not, so semantic search returned
+    a different neighbourhood for "catan" than for "Catan" and hybrid
+    inherited the difference through the RRF union. Measured against the live
+    catalog: 149 hybrid matches topped by "Catan: Big Box" for the first,
+    120 topped by "Catan Card Game" for the second.
+
+    That is reachable from an ordinary keyboard, which is what makes it a
+    bug rather than a quirk: iOS capitalizes the first letter of a search
+    field by default, so the phone and the web returned different games for
+    the same keystrokes.
+
+    Lowercase specifically, rather than any other canonical form, because
+    that is the case the search evaluation set is written in
+    (`evaluation/search_queries.json`, all five queries) and therefore the
+    case the committed baseline in `evaluation/results/` was measured under.
+    Folding to lowercase standardizes on the condition that was actually
+    measured, and leaves those numbers meaning what they say.
+
+    Documents are embedded with their natural case
+    (`scripts/update_embeddings.py` does not fold), so this does leave the
+    query slightly out of step with the corpus. That asymmetry is not new:
+    it already applied to every lowercase query anyone typed, including all
+    five evaluation queries. This makes it uniform instead of dependent on
+    whether the caller happened to hold shift.
+    """
+    return q.strip().lower()
+
+
 def apply_game_filters(query, filters: GameFilter | None):
     if not filters:
         return query
@@ -75,7 +108,7 @@ class SearchService:
         # "Chvatil" against an 'english'-tokenized tsvector containing
         # "Chvátil" returns zero rows, since the two accent forms produce
         # different lexemes under the plain config.
-        tsquery = func.websearch_to_tsquery('english_unaccent', q)
+        tsquery = func.websearch_to_tsquery('english_unaccent', normalize_query(q))
         
         # Rank the results using ts_rank_cd. Tried adding normalization=1
         # (divide by 1 + log(document length)) to discount long, noisy
@@ -99,7 +132,7 @@ class SearchService:
         return {row.bgg_id: rank + 1 for rank, row in enumerate(results)}
 
     def search_semantic(self, q: str, limit: int = SearchConfig.CANDIDATE_POOL_SIZE) -> dict[int, int]:
-        embedding = embedding_model.encode([q], is_query=True)[0]
+        embedding = embedding_model.encode([normalize_query(q)], is_query=True)[0]
 
         # Filter to the currently-configured model first — game_embeddings can
         # hold rows for more than one model at once (e.g. during a comparison),
