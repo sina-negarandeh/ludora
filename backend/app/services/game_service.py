@@ -47,7 +47,7 @@ class GameService:
         # "catan " require a literal space after the name and dropped the
         # match count from 46 to 14. iOS inserts exactly that space when a
         # keyboard suggestion is accepted.
-        normalized_query = normalize_query(query_str) if query_str else ""
+        normalized_query = normalize_query(query_str or "")
         if normalized_query:
             query = query.filter(Game.name.ilike(f"%{normalized_query}%"))
 
