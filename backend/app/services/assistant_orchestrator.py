@@ -344,6 +344,16 @@ class AssistantOrchestrator:
         )
 
     def _handle_search(self, intent: ParsedIntent, known_bgg_ids: dict[str, int]) -> AssistantResponse:
+        # A search with no text is a browse. The LLM routes "strategy games
+        # for four players" here often enough, and retrieval has nothing to
+        # rank without a query: the candidate pool would be empty and the
+        # filters would never run, so this answered "I found 0 games
+        # matching 'None'". `_handle_browse` applies the same filters
+        # directly against the catalog, which is what the user asked for.
+        query = (intent.query or "").strip()
+        if not query:
+            return self._handle_browse(intent, known_bgg_ids)
+
         try:
             db_filters = self._map_filters(intent.filters)
         except EntityNotFoundError:
@@ -358,7 +368,7 @@ class AssistantOrchestrator:
         elif intent.search_mode == "semantic":
             mode = SearchMode.SEMANTIC
             
-        sq = SearchQuery(q=intent.query or "", mode=mode, filters=db_filters, sort=intent.sort)
+        sq = SearchQuery(q=query, mode=mode, filters=db_filters, sort=intent.sort)
         results = self.search_service.search(sq, skip=0, limit=intent.limit or 20)
         
         # Serialize the paginated search results
