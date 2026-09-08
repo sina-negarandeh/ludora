@@ -12,6 +12,16 @@ Input: a query string `q`, a `mode` (`lexical` | `semantic` | `hybrid`), and the
 
 ## Approach
 
+### Query normalization
+
+Both retrieval legs fold the query through `normalize_query()` (`backend/app/services/search_service.py`) before doing anything with it: strip surrounding whitespace, lowercase. For lexical this changes nothing, since `websearch_to_tsquery` already lowercases while building its lexemes. For semantic it matters, because the embedding model does not: before this existed, "catan" and "Catan" retrieved different neighbourhoods, and hybrid inherited the difference through the RRF union. Measured against the live catalog, hybrid returned 149 matches topped by "Catan: Big Box" for the first and 120 topped by "Catan Card Game" for the second.
+
+That was reachable from an ordinary keyboard rather than a contrived one. iOS capitalizes the first letter of a search field by default, so the phone and the web returned different games for the same keystrokes.
+
+Lowercase specifically, rather than any other canonical form, because that is the case the evaluation set is written in (`backend/evaluation/search_queries.json`, all five queries) and therefore the case the committed baseline in `backend/evaluation/results/` was measured under. Folding to lowercase standardizes on the condition that was actually measured.
+
+Documents keep their natural case: `scripts/update_embeddings.py` does not fold. So the query is slightly out of step with the corpus, which is worth knowing but is not new. That asymmetry already applied to every lowercase query anyone typed, the five evaluation queries included. Folding makes it uniform instead of dependent on whether the caller happened to hold shift. Pinned by `backend/tests/test_search_query_normalization.py`.
+
 ### Lexical search
 
 `SearchService.search_lexical()` (`backend/app/services/search_service.py`) uses Postgres full-text search: `func.websearch_to_tsquery('english_unaccent', q)` matched against `Game.search_vector` via the `@@` operator, ranked with `ts_rank_cd`. `english_unaccent` (migration `c4d8f21a9e56`) is a custom text search config, not Postgres's plain `english`. Plain `english` doesn't fold diacritics, so "Chvatil" against a tsvector built from "Chvátil" matched nothing at all; about 9-10% of designers and artists have non-ASCII names, making this a substantial real-world failure mode, not an edge case. `search_vector` is a weighted tsvector (name = A, themes+mechanics+categories+subdomains+families = B, description = C, designers+artists+publishers = D), built by a standalone script, `scripts/update_search_vectors.py`, not a DB trigger and not an ORM event listener. There's no GIN index on the column, so this is an out-of-band, must-remember-to-rerun batch job rather than something that stays in sync automatically.
