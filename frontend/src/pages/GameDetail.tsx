@@ -586,7 +586,10 @@ const GameDistributions: React.FC<{ game: Game }> = ({ game }) => {
   const [distributions, setDistributions] = useState<AllDistributions | null>(null);
 
   useEffect(() => {
-    fetch('/distributions.json')
+    // Served by the API rather than read off this origin as a static file:
+    // the iOS client needs the same curves, and a copy per client drifts.
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    fetch(`${baseUrl}/api/distributions`)
       .then(r => r.json())
       .then(data => setDistributions(data))
       .catch(console.error);
