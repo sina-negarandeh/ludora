@@ -7,3 +7,13 @@ venv/
 .venv/
 /data/
 mlruns/
+.claude/
+
+# Xcode / SwiftPM
+.build/
+DerivedData/
+*.xcuserstate
+*.xcuserdatad/
+xcuserdata/
+.swiftpm/
+*.xcodeproj/project.xcworkspace/xcuserdata/
