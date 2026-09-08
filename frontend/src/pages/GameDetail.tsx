@@ -586,15 +586,9 @@ const GameDistributions: React.FC<{ game: Game }> = ({ game }) => {
   const [distributions, setDistributions] = useState<AllDistributions | null>(null);
 
   useEffect(() => {
-    // Served by the API rather than read off this origin as a static file:
-    // the iOS client needs the same curves, and a copy per client drifts.
-    //
-    // Through apiClient, not fetch: it already carries the configured base
-    // URL, and it rejects a non-2xx instead of handing back a parsed error
-    // body. The endpoint answers 503 with valid JSON when the artifact is
-    // missing, and a bare fetch would store {detail: "..."} as though it
-    // were the curves, leaving the section rendering headings with nothing
-    // under them.
+    // Via apiClient, not fetch: the endpoint answers 503 with valid JSON
+    // when the artifact is missing, and a bare fetch would store that error
+    // body as though it were the curves.
     apiClient.get<AllDistributions>('/api/distributions')
       .then(res => setDistributions(res.data))
       .catch(console.error);

@@ -14,7 +14,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.routes import metadata
+from app.api.routes import distributions
 from app.main import app
 from app.services.distribution_service import (
     DISTRIBUTIONS_PATH,
@@ -49,24 +49,35 @@ def test_endpoint_returns_every_group_and_metric(client: TestClient):
         assert METRICS <= set(metrics), f"{group} is missing {METRICS - set(metrics)}"
 
 
-def test_curves_are_internally_consistent(client: TestClient):
-    """x, density and cdf are read positionally by every client drawing them.
+def test_committed_artifact_is_drawable():
+    """Every curve in the shipped file satisfies MetricDistribution.
 
-    A ragged curve would not raise anywhere; it would silently draw a line
-    that stops early.
+    The invariants themselves live on the model, so this is only asserting
+    that the committed artifact passes them -- not restating what they are.
     """
-    body = client.get("/api/distributions").json()
-    for group, metrics in body.items():
-        for name, curve in metrics.items():
-            where = f"{group}/{name}"
-            assert len(curve["x"]) == len(curve["density"]) == len(curve["cdf"]), where
-            assert curve["x"], f"{where} is empty"
-            assert curve["min"] < curve["max"], where
-            assert curve["x"] == sorted(curve["x"]), f"{where} bins are unordered"
-            # A cumulative distribution that does not reach 1 means a client
-            # placing a game on it reads a percentile that is quietly wrong.
-            assert curve["cdf"] == sorted(curve["cdf"]), f"{where} cdf is not monotonic"
-            assert curve["cdf"][-1] == pytest.approx(1.0, abs=1e-6), where
+    read_distributions(DISTRIBUTIONS_PATH)
+
+
+@pytest.mark.parametrize(
+    ("curve", "expected"),
+    [
+        ({"x": [1.0, 2.0], "density": [1.0], "cdf": [1.0]}, "same length"),
+        ({"x": [], "density": [], "cdf": []}, "no bins"),
+        ({"x": [2.0, 1.0], "density": [0.5, 0.5], "cdf": [0.5, 1.0]}, "must ascend"),
+        ({"x": [1.0, 2.0], "density": [0.5, 0.5], "cdf": [1.0, 0.5]}, "non-decreasing"),
+        ({"x": [1.0], "density": [1.0], "cdf": [0.4]}, "must reach 1.0"),
+    ],
+)
+def test_rejects_a_curve_no_client_could_draw(tmp_path, curve, expected):
+    """A ragged or truncated curve raises nowhere; it just draws wrong.
+
+    So it has to fail on read, with the metric named, rather than reach a
+    client. `response_model` would not catch any of these.
+    """
+    source = tmp_path / "distributions.json"
+    source.write_text(json.dumps({"Overall": {"Complexity": {**curve, "min": 1.0, "max": 2.0}}}))
+    with pytest.raises(DistributionsUnavailableError, match=expected):
+        read_distributions(source)
 
 
 def test_reports_a_missing_artifact_rather_than_crashing(tmp_path):
@@ -88,11 +99,10 @@ def test_reports_an_unreadable_artifact_rather_than_crashing(tmp_path):
 
 
 def test_rejects_an_artifact_that_does_not_match_the_schema(tmp_path):
-    """Drift fails on read rather than reaching a client as a partial curve.
+    """A missing field fails on read rather than reaching a client.
 
-    `response_model` alone would not catch this: pydantic drops unknown keys
-    and would happily serve a curve missing `cdf` as one that simply has no
-    cdf.
+    `response_model` would not catch it: returning a `Response` bypasses it,
+    and even enforced it drops unknown keys rather than rejecting them.
     """
     wrong = tmp_path / "distributions.json"
     wrong.write_text(json.dumps({"Overall": {"Complexity": {"x": [1.0], "density": [1.0]}}}))
@@ -124,7 +134,7 @@ def test_serves_503_when_the_artifact_is_unavailable(client: TestClient, monkeyp
     def unavailable() -> bytes:
         raise DistributionsUnavailableError("distributions.json is missing.")
 
-    monkeypatch.setattr(metadata, "load_distributions", unavailable)
+    monkeypatch.setattr(distributions, "load_distributions", unavailable)
     response = client.get("/api/distributions")
     assert response.status_code == 503
     assert "missing" in response.json()["detail"]

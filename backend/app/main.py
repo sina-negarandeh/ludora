@@ -4,7 +4,7 @@ import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import assistant, games, metadata, recommendations, search
+from app.api.routes import assistant, distributions, games, metadata, recommendations, search
 from app.core.logging_config import configure_logging
 
 configure_logging()
@@ -42,6 +42,7 @@ async def log_requests(request: Request, call_next):
 app.include_router(games.router, prefix="/api/games", tags=["games"])
 app.include_router(search.router, prefix="/api/search", tags=["search"])
 app.include_router(metadata.router, prefix="/api", tags=["metadata"])
+app.include_router(distributions.router, prefix="/api", tags=["distributions"])
 app.include_router(recommendations.router, prefix="/api", tags=["recommendations"])
 app.include_router(assistant.router, prefix="/api/assistant", tags=["assistant"])
 @app.get("/health")
