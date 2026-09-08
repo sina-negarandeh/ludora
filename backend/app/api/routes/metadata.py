@@ -1,5 +1,5 @@
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
@@ -48,7 +48,10 @@ def get_artists(search: str = Query(None), limit: int = Query(None), db: Session
 @router.get("/distributions", response_model=dict[str, dict[str, MetricDistribution]], summary="Get Metric Distributions", description="Retrieve precomputed kernel density curves for Complexity, Playtime, Players, Min Players and Min Age, keyed by subdomain plus an 'Overall' group. Produced offline by scripts/generate_distributions.py from the raw Kaggle CSV, so this reads a static artifact rather than the database.")
 def get_distributions():
     try:
-        return load_distributions()
+        # The vetted bytes, served as-is. `response_model` stays for the
+        # OpenAPI schema; the shape is enforced once at read time instead of
+        # re-validated on every request.
+        return Response(content=load_distributions(), media_type="application/json")
     except DistributionsUnavailableError as exc:
         # A 503 rather than a 500: the API is fine, the offline artifact is
         # not, and the fix is to run the pipeline rather than to debug this.
