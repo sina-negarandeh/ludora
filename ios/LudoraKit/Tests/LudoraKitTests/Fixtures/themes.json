@@ -1,0 +1,27 @@
+[
+  {
+    "id": 1,
+    "name": "Aboriginal Australians",
+    "game_count": 1
+  },
+  {
+    "id": 2,
+    "name": "African Americans",
+    "game_count": 8
+  },
+  {
+    "id": 3,
+    "name": "Airships / Blimps / Dirigibles / Zeppelins",
+    "game_count": 35
+  },
+  {
+    "id": 4,
+    "name": "Alchemy",
+    "game_count": 31
+  },
+  {
+    "id": 5,
+    "name": "Alternate History",
+    "game_count": 145
+  }
+]

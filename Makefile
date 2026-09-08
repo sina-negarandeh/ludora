@@ -1,4 +1,4 @@
-.PHONY: help up down logs sync sync-ml backend migrate migration lint typecheck test check frontend frontend-build frontend-lint
+.PHONY: help up down logs sync sync-ml backend migrate migration lint typecheck test check frontend frontend-build frontend-lint ios-build ios-test ios-typecheck ios-fixtures
 
 help:
 	@echo "Infra (docker compose: postgres, pgadmin, frontend dev server)"
@@ -16,6 +16,12 @@ help:
 	@echo "  make typecheck      pyright"
 	@echo "  make test           pytest (backend/tests/ only, see docs/engineering/testing.md)"
 	@echo "  make check          lint + typecheck + test, same order as CI"
+	@echo ""
+	@echo "iOS (native SwiftUI client, see ios/AGENTS.md)"
+	@echo "  make ios-build      build LudoraKit (no Xcode needed)"
+	@echo "  make ios-test       run the decoding + query tests"
+	@echo "  make ios-typecheck  typecheck the SwiftUI sources against the iOS SDK"
+	@echo "  make ios-fixtures   re-capture test fixtures from a running backend"
 	@echo ""
 	@echo "Frontend (runs inside the docker container -- no host node/npm, see frontend/AGENTS.md)"
 	@echo "  make frontend       start just the frontend dev server"
@@ -72,3 +78,33 @@ frontend-build:
 
 frontend-lint:
 	docker compose exec frontend npm run lint
+
+## iOS
+
+# LudoraKit imports only Foundation, so it builds and tests on the Mac with
+# no Xcode project and no simulator runtime. The app target is built from
+# Xcode; see ios/README.md.
+ios-build:
+	cd ios/LudoraKit && swift build
+
+ios-test:
+	cd ios/LudoraKit && swift test
+
+# The SwiftUI sources cannot be built by SwiftPM (they are an app target,
+# not a package), but they can still be typechecked against the iOS SDK,
+# which is enough to catch a break without opening Xcode.
+ios-typecheck:
+	@SDK=$$(xcrun --sdk iphonesimulator --show-sdk-path); \
+	rm -rf /tmp/ludora-kit-ios && \
+	xcrun swiftc -sdk "$$SDK" -target arm64-apple-ios17.0-simulator \
+		-emit-module -emit-module-path /tmp/ludora-kit-ios/LudoraKit.swiftmodule \
+		-module-name LudoraKit $$(find ios/LudoraKit/Sources -name "*.swift") && \
+	xcrun swiftc -sdk "$$SDK" -target arm64-apple-ios17.0-simulator \
+		-I /tmp/ludora-kit-ios -typecheck $$(find ios/Ludora -name "*.swift") && \
+	echo "ios: typecheck clean"
+
+# Fixtures are captured from a live backend, never hand-written: they are
+# what makes a backend shape change fail an iOS test. Needs `make up` and
+# `make backend` running first.
+ios-fixtures:
+	@bash scripts/capture_ios_fixtures.sh

@@ -1,0 +1,568 @@
+{
+  "total": 109,
+  "items": [
+    {
+      "game": {
+        "name": "Anno 1800: The Board Game",
+        "description": "In Anno 1800, a board game based on the popular PC game from Ubisoft, you continuously build up your own industry to develop your home island.&#10;&#10;Ship fleets allow for lively trade and the development of new islands in the Old and New World. You have to fulfill the wishes of your own population. While the inhabitants are initially satisfied with bread and clothing, they soon demand valuable luxury goods. You must plan production chains sensibly and keep an eye on the specialization of your population. The goal: A wise distribution of farmers, workers, craftsmen, engineers, and investors &mdash; but the competition never sleeps and can snatch the new achievements from under your nose at any time! Who can create the most prosperous island?&#10;&#10;&mdash;description from the publisher (translated)&#10;&#10;",
+        "year_published": 2020,
+        "game_weight": 3.125,
+        "avg_rating": 7.71444,
+        "bayes_avg_rating": 7.20276,
+        "stddev_rating": 1.19197,
+        "num_weight_votes": 280,
+        "min_players": 1,
+        "max_players": 4,
+        "mfg_playtime": 120,
+        "min_playtime": 120,
+        "max_playtime": 120,
+        "min_age": 12,
+        "image_path": "https://cf.geekdo-images.com/B21RQfIBnt2A_CYq8iZvrg__original/img/UXIVL5GrcjSmLRQwjCa-8fviulU=/0x0/filters:format(jpeg)/pic6220821.jpg",
+        "thumbnail_url": "https://cf.geekdo-images.com/B21RQfIBnt2A_CYq8iZvrg__thumb/img/CtIlRyLdXN0b3TC8nM_8KZCrlN8=/fit-in/200x150/filters:strip_icc()/pic6220821.jpg",
+        "kickstarted": false,
+        "is_reimplementation": false,
+        "rank": 289,
+        "num_ratings": 7835,
+        "num_comments": 1214,
+        "rating_distribution": [
+          9,
+          0,
+          9,
+          0,
+          42,
+          2,
+          61,
+          2,
+          184,
+          24,
+          538,
+          150,
+          1626,
+          617,
+          2523,
+          488,
+          1121,
+          89,
+          350
+        ],
+        "subdomain_ranks": {
+          "Strategy": 187
+        },
+        "suggested_num_players": [
+          {
+            "@numplayers": "1",
+            "result": [
+              {
+                "@value": "Best",
+                "@numvotes": "3"
+              },
+              {
+                "@value": "Recommended",
+                "@numvotes": "26"
+              },
+              {
+                "@value": "Not Recommended",
+                "@numvotes": "69"
+              }
+            ]
+          },
+          {
+            "@numplayers": "2",
+            "result": [
+              {
+                "@value": "Best",
+                "@numvotes": "30"
+              },
+              {
+                "@value": "Recommended",
+                "@numvotes": "94"
+              },
+              {
+                "@value": "Not Recommended",
+                "@numvotes": "18"
+              }
+            ]
+          },
+          {
+            "@numplayers": "3",
+            "result": [
+              {
+                "@value": "Best",
+                "@numvotes": "108"
+              },
+              {
+                "@value": "Recommended",
+                "@numvotes": "26"
+              },
+              {
+                "@value": "Not Recommended",
+                "@numvotes": "6"
+              }
+            ]
+          },
+          {
+            "@numplayers": "4",
+            "result": [
+              {
+                "@value": "Best",
+                "@numvotes": "29"
+              },
+              {
+                "@value": "Recommended",
+                "@numvotes": "72"
+              },
+              {
+                "@value": "Not Recommended",
+                "@numvotes": "29"
+              }
+            ]
+          },
+          {
+            "@numplayers": "4+",
+            "result": [
+              {
+                "@value": "Best",
+                "@numvotes": "0"
+              },
+              {
+                "@value": "Recommended",
+                "@numvotes": "1"
+              },
+              {
+                "@value": "Not Recommended",
+                "@numvotes": "70"
+              }
+            ]
+          }
+        ],
+        "suggested_playerage": [
+          {
+            "@value": "2",
+            "@numvotes": "0"
+          },
+          {
+            "@value": "3",
+            "@numvotes": "0"
+          },
+          {
+            "@value": "4",
+            "@numvotes": "0"
+          },
+          {
+            "@value": "5",
+            "@numvotes": "0"
+          },
+          {
+            "@value": "6",
+            "@numvotes": "0"
+          },
+          {
+            "@value": "8",
+            "@numvotes": "0"
+          },
+          {
+            "@value": "10",
+            "@numvotes": "9"
+          },
+          {
+            "@value": "12",
+            "@numvotes": "15"
+          },
+          {
+            "@value": "14",
+            "@numvotes": "2"
+          },
+          {
+            "@value": "16",
+            "@numvotes": "0"
+          },
+          {
+            "@value": "18",
+            "@numvotes": "0"
+          },
+          {
+            "@value": "21 and up",
+            "@numvotes": "0"
+          }
+        ],
+        "suggested_language_dependence": [
+          {
+            "@level": "16",
+            "@value": "No necessary in-game text",
+            "@numvotes": "9"
+          },
+          {
+            "@level": "17",
+            "@value": "Some necessary text - easily memorized or small crib sheet",
+            "@numvotes": "7"
+          },
+          {
+            "@level": "18",
+            "@value": "Moderate in-game text - needs crib sheet or paste ups",
+            "@numvotes": "1"
+          },
+          {
+            "@level": "19",
+            "@value": "Extensive use of text - massive conversion needed to be playable",
+            "@numvotes": "0"
+          },
+          {
+            "@level": "20",
+            "@value": "Unplayable in another language",
+            "@numvotes": "0"
+          }
+        ],
+        "subdomains": [
+          "Strategy"
+        ],
+        "categories": [
+          "Card Game",
+          "City Building",
+          "Economic",
+          "Industry / Manufacturing",
+          "Napoleonic",
+          "Video Game Theme"
+        ],
+        "themes": [],
+        "families": [
+          "History: Industrial Revolution",
+          "Mechanism: Tableau Building",
+          "Video Game Theme: Anno"
+        ],
+        "mechanics": [
+          "End Game Bonuses",
+          "Hand Management",
+          "Race",
+          "Tech Trees / Tech Tracks",
+          "Variable Set-up",
+          "Worker Placement, Different Worker Types"
+        ],
+        "designers": [
+          "Martin Wallace"
+        ],
+        "publishers": [
+          "999 Games",
+          "Albi",
+          "Devir",
+          "Galakta",
+          "Giochi Uniti",
+          "IELLO",
+          "KOSMOS",
+          "Zvezda"
+        ],
+        "artists": [
+          "Fiore GmbH"
+        ],
+        "bgg_id": 311193,
+        "customer_summary": null
+      },
+      "score": 0.031024531024531024,
+      "debug": {
+        "lexical_rank": 6,
+        "semantic_rank": 3,
+        "rrf_score": 0.031024531024531024
+      }
+    },
+    {
+      "game": {
+        "name": "Brass: Birmingham",
+        "description": "Brass: Birmingham is an economic strategy game sequel to Martin Wallace's 2007 masterpiece, Brass. Brass: Birmingham tells the story of competing entrepreneurs in Birmingham during the industrial revolution between the years of 1770 and 1870.&#10;&#10;It offers a very different story arc and experience from its predecessor. As in its predecessor, you must develop, build and establish your industries and network in an effort to exploit low or high market demands. The game is played over two halves: the canal era (years 1770-1830) and the rail era (years 1830-1870). To win the game, score the most VPs. VPs are counted at the end of each half for the canals, rails and established (flipped) industry tiles.&#10;&#10;Each round, players take turns according to the turn order track, receiving two actions to perform any of the following actions (found in the original game):&#10;&#10;1) Build - Pay required resources and place an industry tile.&#10;2) Network - Add a rail / canal link, expanding your network.&#10;3) Develop - Increase the VP value of an industry.&#10;4) Sell - Sell your cotton, manufactured goods and pottery.&#10;5) Loan - Take a &pound;30 loan and reduce your income.&#10;&#10;Brass: Birmingham also features a new sixth action:&#10;&#10;6) Scout - Discard three cards and take a wild location and wild industry card. (This action replaces Double Action Build in original Brass.)&#10;&#10;",
+        "year_published": 2018,
+        "game_weight": 3.8703,
+        "avg_rating": 8.58506,
+        "bayes_avg_rating": 8.40871,
+        "stddev_rating": 1.41723,
+        "num_weight_votes": 2413,
+        "min_players": 2,
+        "max_players": 4,
+        "mfg_playtime": 120,
+        "min_playtime": 60,
+        "max_playtime": 120,
+        "min_age": 14,
+        "image_path": "https://cf.geekdo-images.com/x3zxjr-Vw5iU4yDPg70Jgw__original/img/FpyxH41Y6_ROoePAilPNEhXnzO8=/0x0/filters:format(jpeg)/pic3490053.jpg",
+        "thumbnail_url": "https://cf.geekdo-images.com/x3zxjr-Vw5iU4yDPg70Jgw__thumb/img/o18rjEemoWaVru9Y2TyPwuIaRfE=/fit-in/200x150/filters:strip_icc()/pic3490053.jpg",
+        "kickstarted": true,
+        "is_reimplementation": true,
+        "rank": 1,
+        "num_ratings": 50029,
+        "num_comments": 6888,
+        "rating_distribution": [
+          344,
+          2,
+          121,
+          5,
+          220,
+          7,
+          285,
+          20,
+          552,
+          40,
+          1483,
+          236,
+          3847,
+          1069,
+          9759,
+          2880,
+          14360,
+          2430,
+          12369
+        ],
+        "subdomain_ranks": {
+          "Strategy": 1
+        },
+        "suggested_num_players": [
+          {
+            "@numplayers": "1",
+            "result": [
+              {
+                "@value": "Best",
+                "@numvotes": "0"
+              },
+              {
+                "@value": "Recommended",
+                "@numvotes": "59"
+              },
+              {
+                "@value": "Not Recommended",
+                "@numvotes": "647"
+              }
+            ]
+          },
+          {
+            "@numplayers": "2",
+            "result": [
+              {
+                "@value": "Best",
+                "@numvotes": "120"
+              },
+              {
+                "@value": "Recommended",
+                "@numvotes": "757"
+              },
+              {
+                "@value": "Not Recommended",
+                "@numvotes": "152"
+              }
+            ]
+          },
+          {
+            "@numplayers": "3",
+            "result": [
+              {
+                "@value": "Best",
+                "@numvotes": "642"
+              },
+              {
+                "@value": "Recommended",
+                "@numvotes": "388"
+              },
+              {
+                "@value": "Not Recommended",
+                "@numvotes": "16"
+              }
+            ]
+          },
+          {
+            "@numplayers": "4",
+            "result": [
+              {
+                "@value": "Best",
+                "@numvotes": "644"
+              },
+              {
+                "@value": "Recommended",
+                "@numvotes": "326"
+              },
+              {
+                "@value": "Not Recommended",
+                "@numvotes": "44"
+              }
+            ]
+          },
+          {
+            "@numplayers": "4+",
+            "result": [
+              {
+                "@value": "Best",
+                "@numvotes": "1"
+              },
+              {
+                "@value": "Recommended",
+                "@numvotes": "6"
+              },
+              {
+                "@value": "Not Recommended",
+                "@numvotes": "534"
+              }
+            ]
+          }
+        ],
+        "suggested_playerage": [
+          {
+            "@value": "2",
+            "@numvotes": "1"
+          },
+          {
+            "@value": "3",
+            "@numvotes": "0"
+          },
+          {
+            "@value": "4",
+            "@numvotes": "0"
+          },
+          {
+            "@value": "5",
+            "@numvotes": "0"
+          },
+          {
+            "@value": "6",
+            "@numvotes": "0"
+          },
+          {
+            "@value": "8",
+            "@numvotes": "6"
+          },
+          {
+            "@value": "10",
+            "@numvotes": "13"
+          },
+          {
+            "@value": "12",
+            "@numvotes": "38"
+          },
+          {
+            "@value": "14",
+            "@numvotes": "91"
+          },
+          {
+            "@value": "16",
+            "@numvotes": "26"
+          },
+          {
+            "@value": "18",
+            "@numvotes": "2"
+          },
+          {
+            "@value": "21 and up",
+            "@numvotes": "0"
+          }
+        ],
+        "suggested_language_dependence": [
+          {
+            "@level": "96",
+            "@value": "No necessary in-game text",
+            "@numvotes": "52"
+          },
+          {
+            "@level": "97",
+            "@value": "Some necessary text - easily memorized or small crib sheet",
+            "@numvotes": "2"
+          },
+          {
+            "@level": "98",
+            "@value": "Moderate in-game text - needs crib sheet or paste ups",
+            "@numvotes": "0"
+          },
+          {
+            "@level": "99",
+            "@value": "Extensive use of text - massive conversion needed to be playable",
+            "@numvotes": "0"
+          },
+          {
+            "@level": "100",
+            "@value": "Unplayable in another language",
+            "@numvotes": "0"
+          }
+        ],
+        "subdomains": [
+          "Strategy"
+        ],
+        "categories": [
+          "Age of Reason",
+          "Economic",
+          "Industry / Manufacturing",
+          "Post-Napoleonic",
+          "Trains",
+          "Transportation"
+        ],
+        "themes": [
+          "Canals"
+        ],
+        "families": [
+          "Cities: Birmingham (England)",
+          "Components: Map (Regional scale)",
+          "Components: Multi-Use Cards",
+          "Country: England",
+          "Crowdfunding: Kickstarter",
+          "Crowdfunding: Spieleschmiede",
+          "Digital Implementations: Steam",
+          "Digital Implementations: Tabletopia",
+          "Digital Implementations: VASSAL",
+          "Food & Drink: Beer",
+          "Game: Brass",
+          "History: Industrial Revolution",
+          "Misc: LongPack Games",
+          "Misc: Watch It Played How To Videos",
+          "Occupation: Engineer",
+          "Organizations: The Game Artisans of Canada",
+          "Theme: Canals"
+        ],
+        "mechanics": [
+          "Hand Management",
+          "Income",
+          "Loans",
+          "Market",
+          "Multi-Use Cards",
+          "Network and Route Building",
+          "Tags",
+          "Tech Trees / Tech Tracks",
+          "Turn Order: Stat-Based",
+          "Variable Set-up"
+        ],
+        "designers": [
+          "Gavan Brown",
+          "Martin Wallace",
+          "Matt Tolman"
+        ],
+        "publishers": [
+          "Arclight Games",
+          "Board Game Rookie",
+          "BoardM Factory",
+          "CMON Global Limited",
+          "Conclave Editora",
+          "CrowD Games",
+          "Dexker Games",
+          "Funforge",
+          "Ghenos Games",
+          "Giant Roc",
+          "G\u00e9m Klub Kft.",
+          "Lanlalen",
+          "Lord of Boards",
+          "Maldito Games",
+          "PHALANX",
+          "Rebel Sp. z o.o.",
+          "Roxley",
+          "TLAMA games",
+          "White Goblin Games",
+          "\u76d2\u62cd\u5de5\u4f5c\u5ba4 Hepa Studio"
+        ],
+        "artists": [
+          "Gavan Brown",
+          "Lina Cossette",
+          "David Forest",
+          "Gui Landgraf",
+          "Damien Mammoliti",
+          "Matt Tolman"
+        ],
+        "bgg_id": 224517,
+        "customer_summary": null
+      },
+      "score": 0.030117753623188408,
+      "debug": {
+        "lexical_rank": 9,
+        "semantic_rank": 4,
+        "rrf_score": 0.030117753623188408
+      }
+    }
+  ]
+}
