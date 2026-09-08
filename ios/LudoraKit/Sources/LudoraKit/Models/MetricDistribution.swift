@@ -99,13 +99,44 @@ public struct MetricDistribution: Codable, Hashable, Sendable {
             residual <= 1 ? 1 : residual <= 2 ? 2 : residual <= 5 ? 5 : 10
         let step = niceResidual * magnitude
 
+        // A step that is zero or not finite would never advance `value`, and
+        // the loop below would spin forever on whatever thread drew the axis.
+        // Reachable through underflow: a small enough `max - min` sends
+        // `magnitude` to zero, which makes `residual` NaN and `step` zero.
+        guard step.isFinite, step > 0 else { return [min, max] }
+
         var ticks: [Double] = []
         var value = (min / step).rounded(.up) * step
-        while value <= max + step * 1e-6 {
+        // Bounded independently of `step`, so no arithmetic edge case can
+        // turn an axis into a hang.
+        while value <= max + step * 1e-6, ticks.count < Self.maxTicks {
             ticks.append((value * 1000).rounded() / 1000)
             value += step
         }
         return ticks
+    }
+
+    /// The largest number of ticks an axis will ever be given.
+    static let maxTicks = 64
+
+    /// The x-axis domain, or nil when the curve's bounds cannot form one.
+    ///
+    /// `ClosedRange` traps rather than failing softly when its bounds are
+    /// inverted, so a chart must never build one straight from a decoded
+    /// payload: this client validates nothing on the way in, and a backend
+    /// serving `min > max` would take the screen down instead of drawing a
+    /// worse chart.
+    public var valueDomain: ClosedRange<Double>? {
+        guard min.isFinite, max.isFinite, min < max else { return nil }
+        return min...max
+    }
+
+    /// The y-axis domain with headroom, or nil when the curve is flat or
+    /// unusable. Same reasoning as `valueDomain`.
+    public var densityDomain: ClosedRange<Double>? {
+        let peak = peakDensity
+        guard peak.isFinite, peak > 0 else { return nil }
+        return 0...(peak * 1.05)
     }
 
     /// Where `value` sits across the binned range, 0...1, for positioning a

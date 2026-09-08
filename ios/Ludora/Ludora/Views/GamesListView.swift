@@ -293,7 +293,25 @@ struct GamesListView: View {
                         }
                     }
 
-                    if browser.hasMore {
+                    if let pagingError = browser.pagingError {
+                        // A page that failed under a screenful of results is
+                        // invisible in the `.failed` state, which only renders
+                        // when there is nothing else to show.
+                        page(pageSize) {
+                            ContentUnavailableView {
+                                Label("Could not load more games",
+                                      systemImage: "exclamationmark.triangle")
+                            } description: {
+                                Text(pagingError)
+                            } actions: {
+                                Button("Try Again") {
+                                    Task { await browser.retryPaging() }
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .tint(.ludoraPrimary)
+                            }
+                        }
+                    } else if browser.hasMore {
                         page(pageSize) { ProgressView().tint(.ludoraPrimary) }
                     }
                 }

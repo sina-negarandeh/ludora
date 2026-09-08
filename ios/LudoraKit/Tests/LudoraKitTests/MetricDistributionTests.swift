@@ -118,4 +118,52 @@ struct MetricDistributionTests {
         let share = try #require(complexity.distribution.share(atOrBelow: 3.87))
         #expect(share > 0.5 && share <= 1.0)
     }
+
+    // MARK: - Degenerate curves
+
+    /// `ClosedRange` traps on inverted bounds, so a chart must never build
+    /// one straight from a decoded payload.
+    @Test("has no value domain when the bounds are inverted or unusable")
+    func valueDomainRejectsBadBounds() {
+        func curve(min: Double, max: Double) -> MetricDistribution {
+            MetricDistribution(x: [1], density: [1], cdf: [1], min: min, max: max)
+        }
+        #expect(curve(min: 5, max: 2).valueDomain == nil)
+        #expect(curve(min: 1, max: 1).valueDomain == nil)
+        #expect(curve(min: .nan, max: 2).valueDomain == nil)
+        #expect(curve(min: 1, max: .infinity).valueDomain == nil)
+        #expect(curve(min: 1, max: 5).valueDomain == 1...5)
+    }
+
+    @Test("has no density domain for a flat or empty curve")
+    func densityDomainRejectsFlatCurves() {
+        let flat = MetricDistribution(x: [1, 2], density: [0, 0], cdf: [0, 1], min: 1, max: 2)
+        #expect(flat.densityDomain == nil)
+
+        let empty = MetricDistribution(x: [], density: [], cdf: [], min: 0, max: 1)
+        #expect(empty.densityDomain == nil)
+
+        let real = MetricDistribution(x: [1, 2], density: [1, 2], cdf: [0.5, 1], min: 1, max: 2)
+        #expect(real.densityDomain == 0...(2 * 1.05))
+    }
+
+    /// A step of zero would never advance the loop counter, hanging whatever
+    /// thread drew the axis.
+    @Test("returns bare bounds rather than looping on a degenerate range")
+    func niceTicksSurvivesUnderflow() {
+        // Verified: this range drives `step` to exactly zero, so without the
+        // guard the loop only stops at the tick cap, emitting 64 copies of
+        // the same number.
+        let tiny = MetricDistribution(
+            x: [1], density: [1], cdf: [1], min: 0, max: .leastNonzeroMagnitude
+        )
+        #expect(tiny.niceTicks() == [0, .leastNonzeroMagnitude])
+        #expect(!tiny.niceTicks().contains { $0.isNaN })
+    }
+
+    @Test("never returns more ticks than the cap")
+    func niceTicksIsBounded() {
+        let wide = MetricDistribution(x: [1], density: [1], cdf: [1], min: 0, max: 1_000_000)
+        #expect(wide.niceTicks(targetCount: 100_000).count <= MetricDistribution.maxTicks)
+    }
 }

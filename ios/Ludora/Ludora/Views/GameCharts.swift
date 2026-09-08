@@ -38,6 +38,14 @@ struct DistributionChartCard: View {
         zip(distribution.x, distribution.density).map { (x: $0, y: $1) }
     }
 
+    /// Nil bounds mean the curve cannot be drawn at all, so the card shows
+    /// its heading and skips the plot instead of trapping.
+    private var valueDomain: ClosedRange<Double> { distribution.valueDomain ?? 0...1 }
+    private var densityDomain: ClosedRange<Double> { distribution.densityDomain ?? 0...1 }
+    private var isDrawable: Bool {
+        distribution.valueDomain != nil && distribution.densityDomain != nil
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
@@ -50,10 +58,19 @@ struct DistributionChartCard: View {
                     .foregroundStyle(Color.ludoraPrimary)
             }
 
-            chart
-                // Room above the plot for the AVG chip and the marker labels
-                // stacked over it, which the web also places outside the plot.
-                .padding(.top, markers.count > 1 ? 52 : 36)
+            if isDrawable {
+                chart
+                    // Room above the plot for the AVG chip and the marker
+                    // labels stacked over it, which the web also places
+                    // outside the plot.
+                    .padding(.top, markers.count > 1 ? 52 : 36)
+            } else {
+                Text("No comparison available for this metric.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.ludoraSecondaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 12)
+            }
 
             HStack {
                 Text(leftLabel.uppercased())
@@ -160,8 +177,11 @@ struct DistributionChartCard: View {
                 }
             }
         }
-        .chartXScale(domain: distribution.min...distribution.max)
-        .chartYScale(domain: 0...(distribution.peakDensity * 1.05))
+        // Domains come from the model, which returns nil rather than an
+        // inverted range: `ClosedRange` traps on bad bounds, and nothing
+        // validates this payload on the way in.
+        .chartXScale(domain: valueDomain)
+        .chartYScale(domain: densityDomain)
         .chartYAxis(.hidden)
         .chartXAxis {
             AxisMarks(values: distribution.niceTicks()) { value in

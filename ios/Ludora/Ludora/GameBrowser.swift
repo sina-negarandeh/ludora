@@ -45,6 +45,23 @@ final class GameBrowser {
 
     var hasMore: Bool { games.count < total }
 
+    /// Whether this request goes to `/api/games/` rather than `/api/search/`.
+    ///
+    /// Browsing and lexical search share the games endpoint, which is what
+    /// lets them keep the filters and page by offset. Semantic and hybrid go
+    /// to the search endpoint, which does neither.
+    private var usesGamesEndpoint: Bool {
+        searchText.isEmpty || searchMode == .lexical
+    }
+
+    /// Set when appending a page failed, so the list can say so and offer a
+    /// retry instead of silently stopping.
+    ///
+    /// Separate from `state`: the browse screen only renders `.failed` when
+    /// it has nothing to show, which is right for a first load and wrong for
+    /// a page that failed underneath a screenful of results.
+    private(set) var pagingError: String?
+
     private let client: LudoraClient
 
     init(client: LudoraClient) {
@@ -53,9 +70,10 @@ final class GameBrowser {
 
     func load() async {
         state = .loading
+        pagingError = nil
         query.skip = 0
         do {
-            if searchText.isEmpty || searchMode == .lexical {
+            if usesGamesEndpoint {
                 var q = query
                 q.query = searchText.isEmpty ? nil : searchText
                 let page = try await client.games(q)
@@ -79,7 +97,10 @@ final class GameBrowser {
     /// search: `/api/search/` returns one fused page rather than an offset
     /// window, so paging there would need a different request shape.
     func loadMore() async {
-        guard hasMore, state != .loading, searchText.isEmpty || searchMode == .lexical
+        // Stops after a failure rather than retrying forever: every card
+        // that scrolls into view calls this, so without the `pagingError`
+        // guard a dead backend means one silent failed request per swipe.
+        guard hasMore, state != .loading, pagingError == nil, usesGamesEndpoint
         else { return }
 
         state = .loading
@@ -90,8 +111,16 @@ final class GameBrowser {
             games += try await client.games(q).items
             state = .idle
         } catch {
-            state = .failed(message(for: error))
+            pagingError = message(for: error)
+            state = .idle
         }
+    }
+
+    /// Clears a paging failure and tries the same page again.
+    func retryPaging() async {
+        guard pagingError != nil else { return }
+        pagingError = nil
+        await loadMore()
     }
 
     private func message(for error: any Error) -> String {

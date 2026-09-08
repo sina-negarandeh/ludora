@@ -28,25 +28,39 @@ public enum LudoraError: Error, LocalizedError, Sendable {
     /// The server answered, but not with success. Carries the status so a
     /// caller can tell "no such game" (404) from "the backend is broken"
     /// (500) without parsing a message string.
-    case httpStatus(Int)
+    ///
+    /// Carries the server's own `detail` when it sent one. FastAPI puts a
+    /// usable sentence there -- "Run scripts/generate_distributions.py" for a
+    /// missing artifact, the offending parameter for a 422 -- and throwing it
+    /// away left the user with a status code and no idea what to do.
+    case httpStatus(Int, detail: String?)
     /// The response did not match the model. This is the drift case, and it
     /// keeps the underlying error rather than collapsing to a bool, because
     /// the field name is the whole diagnostic value.
     case decoding(any Error)
     case transport(any Error)
+    /// The base URL and path could not form a request. Only reachable via a
+    /// malformed `LudoraConfiguration`.
+    case invalidURL(String)
 
     public var errorDescription: String? {
         switch self {
-        case .httpStatus(404):
+        // The server's own words when it supplied any, since they are always
+        // more specific than anything written here.
+        case .httpStatus(_, .some(let detail)) where !detail.isEmpty:
+            detail
+        case .httpStatus(404, _):
             "That game could not be found."
-        case .httpStatus(let code) where code >= 500:
+        case .httpStatus(let code, _) where code >= 500:
             "The server had a problem (HTTP \(code)). Is the backend running?"
-        case .httpStatus(let code):
+        case .httpStatus(let code, _):
             "The request failed (HTTP \(code))."
         case .decoding:
             "The server sent something this app could not read."
         case .transport:
             "Could not reach the server. Is it running?"
+        case .invalidURL(let path):
+            "Could not build a request for \(path)."
         }
     }
 }
@@ -136,23 +150,54 @@ public actor LudoraClient {
         _ path: String,
         queryItems: [URLQueryItem] = []
     ) async throws -> T {
-        var components = URLComponents(
-            url: configuration.baseURL.appending(path: path),
-            resolvingAgainstBaseURL: false
-        )!
-        if !queryItems.isEmpty { components.queryItems = queryItems }
-        return try await perform(URLRequest(url: components.url!))
+        try await perform(URLRequest(url: try url(for: path, queryItems: queryItems)))
     }
 
     private func post<Body: Encodable, T: Decodable>(
         _ path: String,
         body: Body
     ) async throws -> T {
-        var request = URLRequest(url: configuration.baseURL.appending(path: path))
+        var request = URLRequest(url: try url(for: path))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
         return try await perform(request)
+    }
+
+    /// Joins the base URL to an endpoint path.
+    ///
+    /// Built through `URLComponents` rather than `URL.appending(path:)`,
+    /// which infers a directory from a trailing slash and adds a second one:
+    /// `/api/games/` came out as `/api/games//`, which the backend answers
+    /// with 404. That resolved differently per platform, so the app worked
+    /// while the package's own tests could not reach the same endpoint.
+    ///
+    /// `+` is percent-encoded by hand afterwards. `URLComponents` treats it
+    /// as legal in a query value and leaves it alone, but the server reads a
+    /// literal `+` as a space, so searching for "a+b" silently searched for
+    /// "a b".
+    nonisolated func url(for path: String, queryItems: [URLQueryItem] = []) throws -> URL {
+        guard var components = URLComponents(
+            url: configuration.baseURL, resolvingAgainstBaseURL: false
+        ) else {
+            throw LudoraError.invalidURL(path)
+        }
+
+        // Keep any prefix the base URL carries, without doubling the slash
+        // between it and the endpoint path.
+        let base = components.path.hasSuffix("/")
+            ? String(components.path.dropLast())
+            : components.path
+        components.path = base + path
+
+        if !queryItems.isEmpty {
+            components.queryItems = queryItems
+            components.percentEncodedQuery = components.percentEncodedQuery?
+                .replacingOccurrences(of: "+", with: "%2B")
+        }
+
+        guard let url = components.url else { throw LudoraError.invalidURL(path) }
+        return url
     }
 
     private func perform<T: Decodable>(_ request: URLRequest) async throws -> T {
@@ -165,7 +210,7 @@ public actor LudoraClient {
         }
 
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-            throw LudoraError.httpStatus(http.statusCode)
+            throw LudoraError.httpStatus(http.statusCode, detail: Self.detail(from: data))
         }
 
         do {
@@ -173,5 +218,21 @@ public actor LudoraClient {
         } catch {
             throw LudoraError.decoding(error)
         }
+    }
+
+    /// FastAPI's error envelope is `{"detail": ...}`, where the value is a
+    /// string for a raised `HTTPException` and an array of field errors for a
+    /// validation failure. Only the string form is worth showing a user; the
+    /// array reduces to the first message rather than a wall of JSON.
+    static func detail(from data: Data) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let detail = object["detail"]
+        else { return nil }
+
+        if let message = detail as? String { return message }
+        if let failures = detail as? [[String: Any]] {
+            return failures.compactMap { $0["msg"] as? String }.first
+        }
+        return nil
     }
 }
