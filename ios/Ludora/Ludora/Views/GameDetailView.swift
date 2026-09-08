@@ -122,7 +122,7 @@ struct GameDetailView: View {
                 if !game.subdomains.isEmpty {
                     WrapLayout(horizontalSpacing: 8, verticalSpacing: 8) {
                         ForEach(game.subdomains, id: \.self) { subdomain in
-                            SubdomainPill(GameCardView.displayName(for: subdomain))
+                            SubdomainPill(Subdomain.displayName(subdomain))
                         }
                     }
                     .padding(.top, 4)
@@ -224,22 +224,10 @@ struct GameDetailView: View {
     /// which is alphabetical and would compare a Thematic-and-Strategy game
     /// against whichever name sorted first rather than the one it actually
     /// places highest in.
-    private func primaryGroup(for game: Game) -> String {
-        (game.subdomainRanks ?? [:])
-            .sorted { $0.value < $1.value }
-            .first?.key ?? MetricDistributions.overallGroup
-    }
-
-    private func fieldName(_ group: String) -> String {
-        group == MetricDistributions.overallGroup
-            ? "All Games"
-            : "\(GameCardView.displayName(for: group)) Games"
-    }
-
     @ViewBuilder
     private func statisticsSection(for game: Game) -> some View {
         if let distributions {
-            let group = primaryGroup(for: game)
+            let group = game.primarySubdomain
 
             CollapsibleSection(title: "Stats", expanded: $showStats) {
                 VStack(alignment: .leading, spacing: 20) {
@@ -254,48 +242,53 @@ struct GameDetailView: View {
         }
     }
 
-    /// What the publisher states.
+    /// What the publisher states: one chart per stated field.
+    ///
+    /// A table rather than four near-identical call sites. Only the title,
+    /// the metric and the game's own value differ; everything else the old
+    /// version passed in per call is a property of the metric and now lives
+    /// on `Metric.axis`.
     @ViewBuilder
     private func officialCharts(
         for game: Game, in group: String, from distributions: MetricDistributions
     ) -> some View {
-        if let playtime = game.mfgPlaytime, playtime > 0 {
-            curveCard(
-                title: "Playtime", metric: "Playtime", group: group, from: distributions,
-                markers: [CurveMarker(value: Double(playtime), label: "This Game")],
-                summary: "\(playtime) Mins",
-                leftLabel: "Shorter", rightLabel: "Longer", comparative: "Longer than",
-                formatAverage: { String(Int($0.rounded())) }
-            )
-        }
-        if let age = game.minAge, age > 0 {
-            curveCard(
-                title: "Minimum Age", metric: "Min Age", group: group, from: distributions,
-                markers: [CurveMarker(value: Double(age), label: "This Game")],
-                summary: "\(age)+ Years",
-                leftLabel: "Younger", rightLabel: "Older", comparative: "More mature than",
-                formatAverage: { String(format: "%.1f", $0) }
-            )
-        }
-        if let minPlayers = game.minPlayers, minPlayers > 0 {
-            curveCard(
-                title: "Min Players", metric: "Min Players", group: group, from: distributions,
-                markers: [CurveMarker(value: Double(minPlayers), label: "This Game")],
-                summary: "\(minPlayers) Players",
-                leftLabel: "Fewer", rightLabel: "More", comparative: "Requires more players than",
-                formatAverage: { String(format: "%.1f", $0) }
-            )
-        }
-        if let maxPlayers = game.maxPlayers, maxPlayers > 0 {
-            curveCard(
-                title: "Max Players", metric: "Players", group: group, from: distributions,
-                markers: [CurveMarker(value: Double(maxPlayers), label: "This Game")],
-                summary: "\(maxPlayers) Players",
-                leftLabel: "Fewer", rightLabel: "More", comparative: "Accommodates more players than",
-                formatAverage: { String(format: "%.1f", $0) }
-            )
+        ForEach(Self.officialCharts, id: \.title) { spec in
+            if let value = spec.value(game), value > 0 {
+                curveCard(
+                    spec, in: group, from: distributions,
+                    markers: [CurveMarker(value: value, label: "This Game")],
+                    summary: spec.summary(value)
+                )
+            }
         }
     }
+
+    /// The four official charts. `Max Players` reads the `players` curve
+    /// while `Min Players` reads its own, which is easy to miss when these
+    /// are six lines apart in four separate call sites and obvious when they
+    /// are one column apart here.
+    private static let officialCharts: [CurveSpec] = [
+        CurveSpec(
+            title: "Playtime", metric: .playtime,
+            value: { $0.mfgPlaytime.map(Double.init) },
+            summary: { "\(Int($0)) Mins" }
+        ),
+        CurveSpec(
+            title: "Minimum Age", metric: .minAge,
+            value: { $0.minAge.map(Double.init) },
+            summary: { "\(Int($0))+ Years" }
+        ),
+        CurveSpec(
+            title: "Min Players", metric: .minPlayers,
+            value: { $0.minPlayers.map(Double.init) },
+            summary: { "\(Int($0)) Players" }
+        ),
+        CurveSpec(
+            title: "Max Players", metric: .players,
+            value: { $0.maxPlayers.map(Double.init) },
+            summary: { "\(Int($0)) Players" }
+        ),
+    ]
 
     /// What players report.
     @ViewBuilder
@@ -313,75 +306,81 @@ struct GameDetailView: View {
                 )
             } else {
                 curveCard(
-                    title: "Playtime", metric: "Playtime", group: group, from: distributions,
+                    CurveSpec(title: "Playtime", metric: .playtime),
+                    in: group, from: distributions,
                     markers: [
                         CurveMarker(value: Double(low), label: "Community Min"),
                         CurveMarker(value: Double(high), label: "Community Max"),
                     ],
-                    summary: "\(low)-\(high) Mins",
-                    leftLabel: "Shorter", rightLabel: "Longer", comparative: "Longer than",
-                    formatAverage: { String(Int($0.rounded())) }
+                    summary: "\(low)-\(high) Mins"
                 )
             }
         }
 
         if let weight = game.gameWeight, weight > 0 {
             curveCard(
-                title: "Complexity", metric: "Complexity", group: group, from: distributions,
+                CurveSpec(title: "Complexity", metric: .complexity),
+                in: group, from: distributions,
                 markers: [CurveMarker(value: weight, label: "This Game")],
-                summary: "\(weight.formatted(.number.precision(.fractionLength(2)))) / 5",
-                leftLabel: "Lighter", rightLabel: "Heavier", comparative: "Heavier than",
-                formatAverage: { String(format: "%.2f", $0) }
+                summary: "\(weight.formatted(.number.precision(.fractionLength(2)))) / 5"
             )
         }
 
-        let playerBars = CommunityPoll.playerCountBars(game.suggestedNumPlayers)
-        if playerBars.contains(where: { $0.votes > 0 }) {
-            PollChartCard(
-                title: "Suggested Player Number",
-                bars: playerBars,
-                distribution: distributions.curve(for: "Players", in: group)?.distribution,
-                leftLabel: "Fewer", rightLabel: "More",
-                formatLabel: { "\($0) Players" }
-            )
-        }
+        pollCard(
+            title: "Suggested Player Number", metric: .players, group: group,
+            from: distributions, bars: CommunityPoll.playerCountBars(game.suggestedNumPlayers),
+            formatLabel: { "\($0) Players" }
+        )
 
-        let ageBars = CommunityPoll.ageBars(game.suggestedPlayerage)
-        if ageBars.contains(where: { $0.votes > 0 }) {
-            PollChartCard(
-                title: "Suggested Player Age",
-                bars: ageBars,
-                distribution: distributions.curve(for: "Min Age", in: group)?.distribution,
-                leftLabel: "Younger", rightLabel: "Older",
-                formatLabel: { $0 == "21 and up" ? $0 : "\($0) Years" }
+        pollCard(
+            title: "Suggested Player Age", metric: .minAge, group: group,
+            from: distributions, bars: CommunityPoll.ageBars(game.suggestedPlayerage),
+            formatLabel: { $0 == "21 and up" ? $0 : "\($0) Years" }
+        )
+    }
+
+    @ViewBuilder
+    private func curveCard(
+        _ spec: CurveSpec,
+        in group: String,
+        from distributions: MetricDistributions,
+        markers: [CurveMarker],
+        summary: String
+    ) -> some View {
+        if let found = distributions.curve(for: spec.metric, in: group) {
+            let axis = spec.metric.axis
+            DistributionChartCard(
+                title: spec.title,
+                summary: summary,
+                markers: markers,
+                distribution: found.distribution,
+                fieldName: Subdomain.fieldName(found.group),
+                leftLabel: axis.low,
+                rightLabel: axis.high,
+                comparative: axis.comparative,
+                formatAverage: axis.formatAverage
             )
         }
     }
 
     @ViewBuilder
-    private func curveCard(
+    private func pollCard(
         title: String,
-        metric: String,
+        metric: Metric,
         group: String,
         from distributions: MetricDistributions,
-        markers: [CurveMarker],
-        summary: String,
-        leftLabel: String,
-        rightLabel: String,
-        comparative: String,
-        formatAverage: @escaping (Double) -> String
+        bars: [PollBar],
+        formatLabel: @escaping (String) -> String
     ) -> some View {
-        if let found = distributions.curve(for: metric, in: group) {
-            DistributionChartCard(
+        if bars.contains(where: { $0.votes > 0 }) {
+            let axis = metric.axis
+            PollChartCard(
                 title: title,
-                summary: summary,
-                markers: markers,
-                distribution: found.distribution,
-                fieldName: fieldName(found.group),
-                leftLabel: leftLabel,
-                rightLabel: rightLabel,
-                comparative: comparative,
-                formatAverage: formatAverage
+                bars: bars,
+                distribution: distributions.curve(for: metric, in: group)?.distribution,
+                leftLabel: axis.low,
+                rightLabel: axis.high,
+                formatLabel: formatLabel
             )
         }
     }
@@ -404,7 +403,7 @@ struct GameDetailView: View {
                         )
                     }
                     ForEach(bySubdomain, id: \.key) { subdomain, rank in
-                        let name = GameCardView.displayName(for: subdomain)
+                        let name = Subdomain.displayName(subdomain)
                         RankingCard(
                             label: "\(name) Games", rank: rank,
                             fieldSize: subdomainSizes[subdomain], noun: "\(name) games"
@@ -834,4 +833,16 @@ extension String {
             .replacingOccurrences(of: "&mdash;", with: "-")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
+}
+
+/// One distribution chart: what to call it, which curve it reads, and how to
+/// pull its value off a game.
+///
+/// The axis vocabulary and the average format are deliberately absent --
+/// they belong to the metric, not to the chart, and live on `Metric.axis`.
+struct CurveSpec {
+    let title: String
+    let metric: Metric
+    var value: (Game) -> Double? = { _ in nil }
+    var summary: (Double) -> String = { String(Int($0)) }
 }

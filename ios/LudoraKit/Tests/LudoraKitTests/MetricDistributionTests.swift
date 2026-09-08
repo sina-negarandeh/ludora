@@ -77,7 +77,7 @@ struct MetricDistributionTests {
             "Strategy": ["Complexity": flat],
             "Overall": ["Complexity": flat],
         ])
-        let found = try #require(all.curve(for: "Complexity", in: "Strategy"))
+        let found = try #require(all.curve(for: .complexity, in: "Strategy"))
         #expect(found.group == "Strategy")
     }
 
@@ -86,14 +86,14 @@ struct MetricDistributionTests {
     @Test("falls back to Overall and says so")
     func fallsBackToOverall() throws {
         let all = distributions(["Overall": ["Complexity": flat]])
-        let found = try #require(all.curve(for: "Complexity", in: "Party"))
+        let found = try #require(all.curve(for: .complexity, in: "Party"))
         #expect(found.group == MetricDistributions.overallGroup)
     }
 
     @Test("has nothing for a metric nobody computed")
     func missingMetric() {
         let all = distributions(["Overall": ["Complexity": flat]])
-        #expect(all.curve(for: "Playtime", in: "Strategy") == nil)
+        #expect(all.curve(for: .playtime, in: "Strategy") == nil)
     }
 
     // MARK: - The real artifact
@@ -109,7 +109,7 @@ struct MetricDistributionTests {
 
         #expect(all.groups.keys.contains(MetricDistributions.overallGroup))
 
-        let complexity = try #require(all.curve(for: "Complexity", in: "Strategy"))
+        let complexity = try #require(all.curve(for: .complexity, in: "Strategy"))
         #expect(complexity.group == "Strategy")
         #expect(complexity.distribution.x.count == complexity.distribution.density.count)
         #expect(complexity.distribution.x.count == complexity.distribution.cdf.count)

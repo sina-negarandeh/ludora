@@ -375,27 +375,3 @@ struct GamesListView: View {
         }
     }
 }
-
-extension Game {
-    /// "2-4" or "3", or nil when the scrape has neither bound.
-    var playerRange: String? {
-        switch (minPlayers, maxPlayers) {
-        case let (min?, max?) where min != max: "\(min)-\(max)"
-        case let (min?, _): "\(min)"
-        case let (_, max?): "\(max)"
-        default: nil
-        }
-    }
-
-    /// The web card shows the manufacturer's estimate, so this does too,
-    /// falling back to the community range when that is missing.
-    var playtimeSummary: String? {
-        if let mfg = mfgPlaytime, mfg > 0 { return "\(mfg) min" }
-        switch (minPlaytime, maxPlaytime) {
-        case let (min?, max?) where min != max: return "\(min)-\(max) min"
-        case let (min?, _): return "\(min) min"
-        case let (_, max?): return "\(max) min"
-        default: return nil
-        }
-    }
-}

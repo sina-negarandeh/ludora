@@ -179,10 +179,10 @@ public struct MetricDistributions: Codable, Hashable, Sendable {
     /// caller is told which group it got so the caption can say so rather
     /// than claiming a subdomain comparison it did not make.
     public func curve(
-        for metric: String, in group: String
+        for metric: Metric, in group: String
     ) -> (group: String, distribution: MetricDistribution)? {
-        if let found = groups[group]?[metric] { return (group, found) }
-        if let overall = groups[Self.overallGroup]?[metric] {
+        if let found = groups[group]?[metric.rawValue] { return (group, found) }
+        if let overall = groups[Self.overallGroup]?[metric.rawValue] {
             return (Self.overallGroup, overall)
         }
         return nil

@@ -228,8 +228,8 @@ struct FiltersView: View {
             VStack(alignment: .leading, spacing: 12) {
                 FieldLabel("Playtime")
                 WrapLayout {
-                    ForEach(PlaytimePreset.all) { preset in
-                        FilterChip(preset.label, isSelected: isSelected(preset)) {
+                    ForEach(RangePreset.playtime) { preset in
+                        FilterChip(preset.label, isSelected: preset.matches(draft.minPlaytime, draft.maxPlaytime)) {
                             draft.minPlaytime = preset.minimum
                             draft.maxPlaytime = preset.maximum
                         }
@@ -248,8 +248,8 @@ struct FiltersView: View {
             VStack(alignment: .leading, spacing: 12) {
                 FieldLabel("Complexity (1.0 - 5.0)")
                 WrapLayout {
-                    ForEach(WeightPreset.all) { preset in
-                        FilterChip(preset.label, isSelected: isSelected(preset)) {
+                    ForEach(RangePreset.weight) { preset in
+                        FilterChip(preset.label, isSelected: preset.matches(draft.minWeight, draft.maxWeight)) {
                             draft.minWeight = preset.minimum
                             draft.maxWeight = preset.maximum
                         }
@@ -291,13 +291,7 @@ struct FiltersView: View {
         draft.exactPlayers == preset.value && draft.minPlayers == nil && draft.maxPlayers == nil
     }
 
-    private func isSelected(_ preset: PlaytimePreset) -> Bool {
-        draft.minPlaytime == preset.minimum && draft.maxPlaytime == preset.maximum
-    }
 
-    private func isSelected(_ preset: WeightPreset) -> Bool {
-        draft.minWeight == preset.minimum && draft.maxWeight == preset.maximum
-    }
 
     private func dismissKeyboard() {
         UIApplication.shared.sendAction(
@@ -340,33 +334,42 @@ struct PlayerPreset: Identifiable {
     ]
 }
 
-struct PlaytimePreset: Identifiable {
+/// A named band over a numeric field, generic in the bound so playtime
+/// (whole minutes) and complexity (a decimal weight) share one type instead
+/// of two identical ones.
+struct RangePreset<Bound: Equatable>: Identifiable {
     var id: String { label }
     let label: String
-    let minimum: Int?
-    let maximum: Int?
+    let minimum: Bound?
+    let maximum: Bound?
 
-    static let all = [
-        PlaytimePreset(label: "Any", minimum: nil, maximum: nil),
-        PlaytimePreset(label: "< 30 min", minimum: nil, maximum: 30),
-        PlaytimePreset(label: "30-60 min", minimum: 30, maximum: 60),
-        PlaytimePreset(label: "60-120 min", minimum: 60, maximum: 120),
-        PlaytimePreset(label: "120+ min", minimum: 120, maximum: nil),
-    ]
+    /// Whether a query currently sits exactly on this band.
+    func matches(_ lower: Bound?, _ upper: Bound?) -> Bool {
+        lower == minimum && upper == maximum
+    }
 }
 
-struct WeightPreset: Identifiable {
-    var id: String { label }
-    let label: String
-    let minimum: Double?
-    let maximum: Double?
+extension RangePreset where Bound == Int {
+    static var playtime: [RangePreset<Int>] {
+        [
+            .init(label: "Any", minimum: nil, maximum: nil),
+            .init(label: "< 30 min", minimum: nil, maximum: 30),
+            .init(label: "30-60 min", minimum: 30, maximum: 60),
+            .init(label: "60-120 min", minimum: 60, maximum: 120),
+            .init(label: "120+ min", minimum: 120, maximum: nil),
+        ]
+    }
+}
 
-    static let all = [
-        WeightPreset(label: "Any", minimum: nil, maximum: nil),
-        WeightPreset(label: "Light (1-2)", minimum: 1.0, maximum: 2.0),
-        WeightPreset(label: "Medium (2-3.5)", minimum: 2.0, maximum: 3.5),
-        WeightPreset(label: "Heavy (3.5-5)", minimum: 3.5, maximum: 5.0),
-    ]
+extension RangePreset where Bound == Double {
+    static var weight: [RangePreset<Double>] {
+        [
+            .init(label: "Any", minimum: nil, maximum: nil),
+            .init(label: "Light (1-2)", minimum: 1.0, maximum: 2.0),
+            .init(label: "Medium (2-3.5)", minimum: 2.0, maximum: 3.5),
+            .init(label: "Heavy (3.5-5)", minimum: 3.5, maximum: 5.0),
+        ]
+    }
 }
 
 // MARK: - Building blocks
@@ -422,422 +425,5 @@ struct FilterChip: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-    }
-}
-
-/// Chips that wrap onto as many lines as they need.
-///
-/// There is no `flex-wrap` here to borrow: `HStack` never wraps, and
-/// `LazyVGrid` makes every chip share one column width, which looks wrong
-/// when "Any" sits beside "60-120 min".
-struct WrapLayout: Layout {
-    var horizontalSpacing: CGFloat = 8
-    var verticalSpacing: CGFloat = 8
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let laid = rows(of: subviews, within: proposal.width ?? .infinity)
-        let height = laid.reduce(0) { $0 + $1.height }
-            + verticalSpacing * CGFloat(max(laid.count - 1, 0))
-        return CGSize(width: proposal.width ?? laid.map(\.width).max() ?? 0, height: height)
-    }
-
-    func placeSubviews(
-        in bounds: CGRect,
-        proposal: ProposedViewSize,
-        subviews: Subviews,
-        cache: inout ()
-    ) {
-        var y = bounds.minY
-        for row in rows(of: subviews, within: bounds.width) {
-            var x = bounds.minX
-            for index in row.indices {
-                let size = subviews[index].sizeThatFits(.unspecified)
-                subviews[index].place(
-                    at: CGPoint(x: x, y: y),
-                    anchor: .topLeading,
-                    proposal: ProposedViewSize(size)
-                )
-                x += size.width + horizontalSpacing
-            }
-            y += row.height + verticalSpacing
-        }
-    }
-
-    private struct Row {
-        var indices: [Int] = []
-        var width: CGFloat = 0
-        var height: CGFloat = 0
-    }
-
-    private func rows(of subviews: Subviews, within maxWidth: CGFloat) -> [Row] {
-        var laid: [Row] = []
-        var current = Row()
-
-        for index in subviews.indices {
-            let size = subviews[index].sizeThatFits(.unspecified)
-            let extended = current.indices.isEmpty
-                ? size.width
-                : current.width + horizontalSpacing + size.width
-
-            // A chip wider than the row on its own still has to go
-            // somewhere, so only wrap when the row already holds something.
-            if extended > maxWidth, !current.indices.isEmpty {
-                laid.append(current)
-                current = Row(indices: [index], width: size.width, height: size.height)
-            } else {
-                current.indices.append(index)
-                current.width = extended
-                current.height = max(current.height, size.height)
-            }
-        }
-
-        if !current.indices.isEmpty { laid.append(current) }
-        return laid
-    }
-}
-
-/// Two thumbs on one track.
-///
-/// SwiftUI has no range slider, and the alternative here was two `Slider`s
-/// that can cross each other into an empty query. Each thumb clamps against
-/// the other, so the invalid state is unrepresentable rather than merely
-/// discouraged.
-struct RangeSlider: View {
-    @Binding var lower: Double
-    @Binding var upper: Double
-    let bounds: ClosedRange<Double>
-    let step: Double
-
-    private let thumb: CGFloat = 26
-    private let track: CGFloat = 6
-    private let space = "rangeSlider"
-
-    var body: some View {
-        GeometryReader { proxy in
-            let usable = max(proxy.size.width - thumb, 1)
-            let midY = proxy.size.height / 2
-
-            ZStack {
-                Capsule()
-                    .fill(Color.ludoraNeutral.opacity(0.3))
-                    .frame(height: track)
-                    .padding(.horizontal, thumb / 2)
-
-                Capsule()
-                    .fill(Color.ludoraPrimary)
-                    .frame(
-                        width: max(x(upper, usable) - x(lower, usable), 0),
-                        height: track
-                    )
-                    .position(x: (x(lower, usable) + x(upper, usable)) / 2, y: midY)
-
-                knob(
-                    at: x(lower, usable), y: midY, usable: usable,
-                    label: "Minimum complexity", value: lower
-                ) { lower = min($0, upper) }
-
-                knob(
-                    at: x(upper, usable), y: midY, usable: usable,
-                    label: "Maximum complexity", value: upper
-                ) { upper = max($0, lower) }
-            }
-            .coordinateSpace(.named(space))
-        }
-        .frame(height: thumb)
-        .overlay(alignment: .bottomLeading) { bound(lower) }
-        .overlay(alignment: .bottomTrailing) { bound(upper) }
-        .padding(.bottom, 18)
-    }
-
-    private func bound(_ value: Double) -> some View {
-        Text(value.formatted(.number.precision(.fractionLength(1))))
-            .font(.caption.bold())
-            .foregroundStyle(Color.ludoraSecondaryText)
-            .offset(y: 18)
-    }
-
-    private func x(_ value: Double, _ usable: CGFloat) -> CGFloat {
-        let fraction = (value - bounds.lowerBound) / (bounds.upperBound - bounds.lowerBound)
-        return thumb / 2 + CGFloat(fraction) * usable
-    }
-
-    private func value(atX position: CGFloat, _ usable: CGFloat) -> Double {
-        let clamped = min(max(position - thumb / 2, 0), usable)
-        let fraction = Double(clamped / usable)
-        let raw = bounds.lowerBound + fraction * (bounds.upperBound - bounds.lowerBound)
-        return (raw / step).rounded() * step
-    }
-
-    private func knob(
-        at position: CGFloat,
-        y: CGFloat,
-        usable: CGFloat,
-        label: String,
-        value current: Double,
-        onDrag: @escaping (Double) -> Void
-    ) -> some View {
-        Circle()
-            .fill(.white)
-            .frame(width: thumb, height: thumb)
-            .overlay(Circle().strokeBorder(Color.ludoraPrimary, lineWidth: 3))
-            .shadow(color: .ludoraText.opacity(0.25), radius: 3, y: 1)
-            // Attached before `position` so the gesture only claims the
-            // knob's own area; a gesture added afterwards would cover the
-            // whole track and the second knob would never see a drag.
-            .gesture(
-                DragGesture(minimumDistance: 0, coordinateSpace: .named(space))
-                    .onChanged { onDrag(value(atX: $0.location.x, usable)) }
-            )
-            .position(x: position, y: y)
-            .accessibilityLabel(label)
-            .accessibilityValue(current.formatted(.number.precision(.fractionLength(1))))
-            .accessibilityAdjustableAction { direction in
-                switch direction {
-                case .increment: onDrag(min(current + step, bounds.upperBound))
-                case .decrement: onDrag(max(current - step, bounds.lowerBound))
-                @unknown default: break
-                }
-            }
-    }
-}
-
-/// The web's "Specify Min/Max" disclosure: collapsed by default, because
-/// the presets above cover almost every real request.
-struct CustomRange: View {
-    let title: String
-    let unit: String
-    @Binding var minimum: Int?
-    @Binding var maximum: Int?
-    let onEdit: () -> Void
-
-    init(
-        _ title: String,
-        unit: String,
-        minimum: Binding<Int?>,
-        maximum: Binding<Int?>,
-        onEdit: @escaping () -> Void
-    ) {
-        self.title = title
-        self.unit = unit
-        self._minimum = minimum
-        self._maximum = maximum
-        self.onEdit = onEdit
-    }
-
-    var body: some View {
-        DisclosureGroup {
-            HStack(spacing: 10) {
-                field("Min", value: $minimum)
-                field("Max", value: $maximum)
-            }
-            .padding(.top, 4)
-        } label: {
-            Text(title)
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(Color.ludoraSecondaryText)
-        }
-    }
-
-    private func field(_ placeholder: String, value: Binding<Int?>) -> some View {
-        TextField(placeholder, text: Binding(
-            get: { value.wrappedValue.map { String($0) } ?? "" },
-            set: {
-                // Empty clears the bound rather than pinning it to zero.
-                value.wrappedValue = $0.isEmpty ? nil : Int($0)
-                onEdit()
-            }
-        ))
-        .keyboardType(.numberPad)
-        .font(.subheadline)
-        .foregroundStyle(Color.ludoraText)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(Color.ludoraNeutral.opacity(0.15), in: .rect(cornerRadius: 10))
-        .accessibilityLabel("\(placeholder) \(unit)")
-    }
-}
-
-/// A multi-select over a long vocabulary. Mechanics alone runs to hundreds
-/// of values, so this is a searchable pushed list, not an inline picker.
-struct TagRow: View {
-    let title: String
-    let options: [String]
-    @Binding var selection: [String]
-
-    init(_ title: String, options: [String], selection: Binding<[String]>) {
-        self.title = title
-        self.options = options
-        self._selection = selection
-    }
-
-    var body: some View {
-        NavigationLink {
-            TagPicker(title: title, options: options, selection: $selection)
-        } label: {
-            LabeledContent {
-                SelectionSummary(count: selection.count)
-            } label: {
-                Text(title).foregroundStyle(Color.ludoraText)
-            }
-        }
-    }
-}
-
-struct SelectionSummary: View {
-    let count: Int
-
-    var body: some View {
-        Text(count == 0 ? "Any" : "\(count) selected")
-            .foregroundStyle(count == 0 ? Color.ludoraSecondaryText : Color.ludoraPrimary)
-            .fontWeight(count == 0 ? .regular : .bold)
-    }
-}
-
-struct TagPicker: View {
-    let title: String
-    let options: [String]
-    @Binding var selection: [String]
-    @State private var search = ""
-
-    private var visible: [String] {
-        search.isEmpty
-            ? options
-            : options.filter { $0.localizedCaseInsensitiveContains(search) }
-    }
-
-    var body: some View {
-        List(visible, id: \.self) { option in
-            SelectableRow(label: option, isSelected: selection.contains(option)) {
-                toggle(option, in: &selection)
-            }
-            .listRowBackground(Color.white)
-        }
-        .scrollContentBackground(.hidden)
-        .background(Color.ludoraBackground)
-        .searchable(text: $search)
-        .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-/// Families are namespaced ("Animals: Bears"), and some namespaces hold
-/// thousands of values, so the groups are a level of their own rather than
-/// one flat list. Searching cuts across all of them.
-struct FamilyRow: View {
-    let groups: [FamilyGroup]
-    @Binding var selection: [String]
-
-    var body: some View {
-        NavigationLink {
-            FamilyPicker(groups: groups, selection: $selection)
-        } label: {
-            LabeledContent {
-                SelectionSummary(count: selection.count)
-            } label: {
-                Text("Family").foregroundStyle(Color.ludoraText)
-            }
-        }
-    }
-}
-
-struct FamilyPicker: View {
-    let groups: [FamilyGroup]
-    @Binding var selection: [String]
-    @State private var search = ""
-
-    private var matches: [FamilyValue] {
-        guard !search.isEmpty else { return [] }
-        return groups
-            .flatMap(\.values)
-            .filter { $0.name.localizedCaseInsensitiveContains(search) }
-    }
-
-    var body: some View {
-        List {
-            if search.isEmpty {
-                ForEach(groups) { group in
-                    NavigationLink {
-                        FamilyValueList(
-                            title: group.group,
-                            values: group.values,
-                            selection: $selection
-                        )
-                    } label: {
-                        LabeledContent {
-                            SelectionSummary(count: selectedCount(in: group))
-                        } label: {
-                            Text(group.group).foregroundStyle(Color.ludoraText)
-                        }
-                    }
-                    .listRowBackground(Color.white)
-                }
-            } else {
-                ForEach(matches) { value in
-                    SelectableRow(label: value.name, isSelected: selection.contains(value.name)) {
-                        toggle(value.name, in: &selection)
-                    }
-                    .listRowBackground(Color.white)
-                }
-            }
-        }
-        .scrollContentBackground(.hidden)
-        .background(Color.ludoraBackground)
-        .searchable(text: $search, prompt: "Search families")
-        .navigationTitle("Family")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private func selectedCount(in group: FamilyGroup) -> Int {
-        group.values.count { selection.contains($0.name) }
-    }
-}
-
-struct FamilyValueList: View {
-    let title: String
-    let values: [FamilyValue]
-    @Binding var selection: [String]
-
-    var body: some View {
-        List(values) { value in
-            SelectableRow(label: value.value, isSelected: selection.contains(value.name)) {
-                toggle(value.name, in: &selection)
-            }
-            .listRowBackground(Color.white)
-        }
-        .scrollContentBackground(.hidden)
-        .background(Color.ludoraBackground)
-        .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-struct SelectableRow: View {
-    let label: String
-    let isSelected: Bool
-    let toggle: () -> Void
-
-    var body: some View {
-        Button(action: toggle) {
-            HStack {
-                Text(label).foregroundStyle(Color.ludoraText)
-                Spacer()
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(Color.ludoraPrimary)
-                        .fontWeight(.bold)
-                }
-            }
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-    }
-}
-
-private func toggle(_ value: String, in selection: inout [String]) {
-    if let index = selection.firstIndex(of: value) {
-        selection.remove(at: index)
-    } else {
-        selection.append(value)
     }
 }

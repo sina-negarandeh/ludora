@@ -168,7 +168,7 @@ struct GameCardView: View {
         if !game.subdomains.isEmpty {
             HStack(spacing: 6) {
                 ForEach(game.subdomains.prefix(3), id: \.self) { subdomain in
-                    Text(Self.displayName(for: subdomain).uppercased())
+                    Text(Subdomain.displayName(subdomain).uppercased())
                         .font(.ludoraTag)
                         .tracking(0.5)
                         .foregroundStyle(Color.ludoraSecondaryText)
@@ -181,16 +181,6 @@ struct GameCardView: View {
                         }
                 }
             }
-        }
-    }
-
-    /// Two of BGG's subdomain codes are abbreviations that mean nothing on
-    /// sight. Same mapping the web card applies.
-    static func displayName(for subdomain: String) -> String {
-        switch subdomain {
-        case "CGS": "Collectible Game System"
-        case "Childrens": "Children's"
-        default: subdomain
         }
     }
 
