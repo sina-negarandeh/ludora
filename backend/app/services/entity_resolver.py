@@ -2,6 +2,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.core.query_text import normalize_query
 from app.database.models import Artist, Category, Designer, Mechanic, Publisher, Subdomain, Subfamily, Theme
 from app.schemas.game_query import GameFilter
 from app.schemas.search import SearchMode, SearchQuery
@@ -119,7 +120,12 @@ class EntityResolver:
             raise EntityNotFoundError(query)
 
         items = results.items
-        exact_matches = [r for r in items if r.game.name.lower() == query.lower()]
+        # The canonical fold, not `.lower()`: it collapses whitespace and
+        # folds the German sharp s, so "Straße" typed as "STRASSE" counts as
+        # the exact match it plainly is. Retrieval already compares queries
+        # this way; two notions of equality in one lookup is one too many.
+        wanted = normalize_query(query)
+        exact_matches = [r for r in items if normalize_query(r.game.name) == wanted]
         if len(exact_matches) == 1:
             return exact_matches[0].game.bgg_id
 

@@ -2,6 +2,7 @@
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.query_text import normalize_query
 from app.database.models import Artist, Category, Designer, Game, GameSummary, Mechanic, Publisher, Subdomain, Subfamily, Theme
 
 
@@ -38,8 +39,17 @@ class GameService:
         query = self.db.query(Game)
 
         # Filters
-        if query_str:
-            query = query.filter(Game.name.ilike(f"%{query_str}%"))
+        # Normalized on the same terms as `/api/search/`, because a user
+        # cannot tell these two entry points apart from the search field in
+        # front of them. `ilike` was already case-insensitive, so the case
+        # fold is a no-op here; the whitespace fold is not. The raw string
+        # goes straight into the LIKE pattern, so a trailing space made
+        # "catan " require a literal space after the name and dropped the
+        # match count from 46 to 14. iOS inserts exactly that space when a
+        # keyboard suggestion is accepted.
+        normalized_query = normalize_query(query_str or "")
+        if normalized_query:
+            query = query.filter(Game.name.ilike(f"%{normalized_query}%"))
 
         if exact_players is not None:
             query = query.filter(Game.min_players <= exact_players, Game.max_players >= exact_players)

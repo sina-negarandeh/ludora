@@ -131,6 +131,20 @@ class SearchService:
         return with_value + without_value
 
     def search(self, search_query: SearchQuery, skip: int, limit: int) -> PaginatedSearchResults:
+        # `SearchQuery.q` folds blank input to "". An empty string is a
+        # perfectly good input to an embedding model, whose nearest
+        # neighbours are arbitrary games, so a blank search field used to
+        # answer with 100 confident-looking results in semantic and hybrid
+        # while lexical answered with none.
+        #
+        # Decided here rather than in the retrieval legs because this is the
+        # only layer that can see there are filters: a request with filters
+        # and no text is a browse, and callers that mean that should say so.
+        # `AssistantOrchestrator._handle_search` routes exactly that case to
+        # `_handle_browse`.
+        if not search_query.q:
+            return PaginatedSearchResults(total=0, items=[])
+
         lexical_ranks = {}
         semantic_ranks = {}
         
