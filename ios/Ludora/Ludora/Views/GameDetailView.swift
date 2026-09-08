@@ -1,0 +1,1298 @@
+import LudoraKit
+import SwiftUI
+
+/// One game: metadata, tags, charts, and its reviews.
+///
+/// Follows the web detail page (`frontend/src/pages/GameDetail.tsx`) section
+/// for section: cover and serif title, the six stat tiles, the description
+/// and vocabularies, Stats split into Official and Community, Rankings,
+/// Ratings, then Reviews.
+///
+/// The one structural difference is that the big sections collapse. The web
+/// lays this out in two columns you can skim past; a phone has one column and
+/// no such affordance, so folding a section away is how it gets one.
+///
+/// Deliberately does not show the ABSA aspect breakdown, the community
+/// consensus paragraph, or recommendations. Those exist on the backend and
+/// are out of scope for this version; see ios/AGENTS.md.
+struct GameDetailView: View {
+    let bggID: Int
+
+    @Environment(\.ludoraClient) private var client
+    @State private var game: Game?
+    @State private var reviews: PaginatedReviews?
+    @State private var errorMessage: String?
+
+    /// Field sizes for the ranking cards: how many games in the catalog, and
+    /// how many in each subdomain. Both are decoration. When they fail to
+    /// load the cards show the rank without the "out of" line rather than
+    /// failing the screen.
+    @State private var catalogSize: Int?
+    @State private var subdomainSizes: [String: Int] = [:]
+
+    /// Precomputed density curves. Also decoration: no curves, no section.
+    @State private var distributions: MetricDistributions?
+
+    /// Reviews are paged and filtered independently of the rest of the
+    /// screen, so they reload on their own rather than through `load()`.
+    @State private var reviewQuery = ReviewQuery()
+    @State private var loadingReviews = false
+    /// Separate from `reviews == nil`, which is also the loading state.
+    /// Without it a failed fetch leaves a spinner turning forever.
+    @State private var reviewsFailed = false
+
+    @State private var showAbout = true
+    @State private var showStats = true
+    @State private var showRankings = true
+    @State private var showRatings = true
+    @State private var showReviews = true
+
+    /// Anchor for scrolling back to the top of the reviews after paging.
+    private let reviewsAnchor = "reviews"
+
+    var body: some View {
+        ZStack {
+            Color.ludoraBackground.ignoresSafeArea()
+
+            if let game {
+                content(for: game)
+            } else if let errorMessage {
+                ContentUnavailableView {
+                    Label("Could not load this game", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(errorMessage)
+                }
+                .foregroundStyle(Color.ludoraSecondaryText)
+            } else {
+                ProgressView().tint(.ludoraPrimary)
+            }
+        }
+        // No navigation title: the serif name in the hero is the title, and
+        // the bar repeating it in SF a few points above was a second, worse
+        // one. The bar stays for the back button and its scroll edge blur.
+        .navigationBarTitleDisplayMode(.inline)
+        .tint(.ludoraPrimary)
+        .task { await load() }
+    }
+
+    private func content(for game: Game) -> some View {
+        ScrollViewReader { scroller in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 32) {
+                    hero(for: game)
+                    statGrid(for: game)
+                    about(for: game)
+                    tagSections(for: game)
+                    // The web's order, which is not arbitrary: how this game
+                    // compares to the field, then where it places, then what
+                    // people scored it, then what they said.
+                    statisticsSection(for: game)
+                    rankingsSection(for: game)
+                    ratingsSection(for: game)
+                    reviewsSection(for: game, scroller: scroller)
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 48)
+            }
+        }
+    }
+
+    // MARK: - Hero
+
+    private func hero(for game: Game) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            CoverArt(url: game.imagePath ?? game.thumbnailURL)
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text(game.name)
+                    .font(.ludoraTitle(32))
+                    .foregroundStyle(Color.ludoraText)
+
+                if let year = game.yearPublished {
+                    Text("Published \(String(year))")
+                        .font(.ludoraTitle(20))
+                        .foregroundStyle(Color.ludoraSecondaryText)
+                }
+
+                // Two rows, as on the web: the subdomains as solid pills,
+                // then the categories as outlined ones. Categories belong
+                // here rather than in a section far below; they are how the
+                // game is described ("Age of Reason", "Economic"), not a
+                // vocabulary to go browsing through.
+                if !game.subdomains.isEmpty {
+                    WrapLayout(horizontalSpacing: 8, verticalSpacing: 8) {
+                        ForEach(game.subdomains, id: \.self) { subdomain in
+                            SubdomainPill(GameCardView.displayName(for: subdomain))
+                        }
+                    }
+                    .padding(.top, 4)
+                }
+
+                if !game.categories.isEmpty {
+                    WrapLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                        ForEach(game.categories, id: \.self) { CategoryPill($0) }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Stats tiles
+
+    /// The web's six tiles, in its order, with its icons.
+    ///
+    /// Missing values show a dash instead of dropping the tile, so the grid
+    /// keeps its shape between games. Rank is the one exception, omitted
+    /// entirely when absent: the web does the same, because an unranked game
+    /// has no rank rather than an unknown one.
+    private func statGrid(for game: Game) -> some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) {
+            if let rank = game.rank, rank > 0 {
+                StatTile(icon: "trophy.fill", label: "Rank", value: "#\(rank)")
+            }
+            StatTile(
+                icon: "star.fill",
+                label: "Rating",
+                value: game.avgRating.map { "\($0.formatted(.number.precision(.fractionLength(1)))) / 10" }
+            )
+            StatTile(icon: "clock.fill", label: "Playtime", value: game.playtimeSummary)
+            StatTile(icon: "person.2.fill", label: "Players", value: game.playerRange)
+            StatTile(
+                icon: "graduationcap.fill",
+                label: "Complexity",
+                value: game.gameWeight.map { "\($0.formatted(.number.precision(.fractionLength(2)))) / 5" }
+            )
+            StatTile(icon: "person.fill", label: "Min Age", value: game.minAge.map { "\($0)+" })
+        }
+    }
+
+    // MARK: - Description and vocabularies
+
+    @ViewBuilder
+    private func about(for game: Game) -> some View {
+        if let description = game.description, !description.isEmpty {
+            CollapsibleSection(title: "About the Game", expanded: $showAbout) {
+                // The API returns BGG's raw HTML. Rendering it as plain text
+                // is honest about that rather than half-parsing it into
+                // something misleading.
+                ExpandableText(description.strippingHTML)
+            }
+        }
+    }
+
+    /// The vocabularies below the description, each with the web's own
+    /// treatment and collapse limit.
+    ///
+    /// Separate sections because they mean different things: see
+    /// docs/data/README.md#bgg-terminology. Categories are missing here on
+    /// purpose, having moved up beside the title where the web puts them.
+    @ViewBuilder
+    private func tagSections(for game: Game) -> some View {
+        if !game.mechanics.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                DetailHeading("Mechanics")
+                ExpandableChips(items: game.mechanics, limit: 8)
+            }
+        }
+
+        if !game.families.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                DetailHeading("Family")
+                FamilyGroups(items: game.families, groupLimit: 6)
+            }
+        }
+
+        // People and companies read as a list, not as chips: they are names
+        // to scan down, and a wrapped row of pills makes long ones ragged.
+        ForEach([
+            ("Designers", game.designers),
+            ("Artists", game.artists),
+            ("Publishers", game.publishers),
+        ].filter { !$0.1.isEmpty }, id: \.0) { title, values in
+            VStack(alignment: .leading, spacing: 12) {
+                DetailHeading(title)
+                ExpandableLines(items: values, limit: 3)
+            }
+        }
+    }
+
+    // MARK: - Stats
+
+    /// The group whose curves this game is compared against.
+    ///
+    /// Its best-ranked subdomain, matching the web. Not `subdomains.first`,
+    /// which is alphabetical and would compare a Thematic-and-Strategy game
+    /// against whichever name sorted first rather than the one it actually
+    /// places highest in.
+    private func primaryGroup(for game: Game) -> String {
+        (game.subdomainRanks ?? [:])
+            .sorted { $0.value < $1.value }
+            .first?.key ?? MetricDistributions.overallGroup
+    }
+
+    private func fieldName(_ group: String) -> String {
+        group == MetricDistributions.overallGroup
+            ? "All Games"
+            : "\(GameCardView.displayName(for: group)) Games"
+    }
+
+    @ViewBuilder
+    private func statisticsSection(for game: Game) -> some View {
+        if let distributions {
+            let group = primaryGroup(for: game)
+
+            CollapsibleSection(title: "Stats", expanded: $showStats) {
+                VStack(alignment: .leading, spacing: 20) {
+                    DetailSubheading("Official")
+                    officialCharts(for: game, in: group, from: distributions)
+
+                    DetailSubheading("Community")
+                        .padding(.top, 8)
+                    communityCharts(for: game, in: group, from: distributions)
+                }
+            }
+        }
+    }
+
+    /// What the publisher states.
+    @ViewBuilder
+    private func officialCharts(
+        for game: Game, in group: String, from distributions: MetricDistributions
+    ) -> some View {
+        if let playtime = game.mfgPlaytime, playtime > 0 {
+            curveCard(
+                title: "Playtime", metric: "Playtime", group: group, from: distributions,
+                markers: [CurveMarker(value: Double(playtime), label: "This Game")],
+                summary: "\(playtime) Mins",
+                leftLabel: "Shorter", rightLabel: "Longer", comparative: "Longer than",
+                formatAverage: { String(Int($0.rounded())) }
+            )
+        }
+        if let age = game.minAge, age > 0 {
+            curveCard(
+                title: "Minimum Age", metric: "Min Age", group: group, from: distributions,
+                markers: [CurveMarker(value: Double(age), label: "This Game")],
+                summary: "\(age)+ Years",
+                leftLabel: "Younger", rightLabel: "Older", comparative: "More mature than",
+                formatAverage: { String(format: "%.1f", $0) }
+            )
+        }
+        if let minPlayers = game.minPlayers, minPlayers > 0 {
+            curveCard(
+                title: "Min Players", metric: "Min Players", group: group, from: distributions,
+                markers: [CurveMarker(value: Double(minPlayers), label: "This Game")],
+                summary: "\(minPlayers) Players",
+                leftLabel: "Fewer", rightLabel: "More", comparative: "Requires more players than",
+                formatAverage: { String(format: "%.1f", $0) }
+            )
+        }
+        if let maxPlayers = game.maxPlayers, maxPlayers > 0 {
+            curveCard(
+                title: "Max Players", metric: "Players", group: group, from: distributions,
+                markers: [CurveMarker(value: Double(maxPlayers), label: "This Game")],
+                summary: "\(maxPlayers) Players",
+                leftLabel: "Fewer", rightLabel: "More", comparative: "Accommodates more players than",
+                formatAverage: { String(format: "%.1f", $0) }
+            )
+        }
+    }
+
+    /// What players report.
+    @ViewBuilder
+    private func communityCharts(
+        for game: Game, in group: String, from distributions: MetricDistributions
+    ) -> some View {
+        if let low = game.minPlaytime, let high = game.maxPlaytime {
+            // BGG falls back to the manufacturer's playtime when no distinct
+            // community range was recorded, so min == max == mfg means the
+            // data is absent rather than that everyone agreed.
+            if low == high && low == game.mfgPlaytime {
+                EmptyChartCard(
+                    title: "Playtime",
+                    message: "No distinct community range recorded."
+                )
+            } else {
+                curveCard(
+                    title: "Playtime", metric: "Playtime", group: group, from: distributions,
+                    markers: [
+                        CurveMarker(value: Double(low), label: "Community Min"),
+                        CurveMarker(value: Double(high), label: "Community Max"),
+                    ],
+                    summary: "\(low)-\(high) Mins",
+                    leftLabel: "Shorter", rightLabel: "Longer", comparative: "Longer than",
+                    formatAverage: { String(Int($0.rounded())) }
+                )
+            }
+        }
+
+        if let weight = game.gameWeight, weight > 0 {
+            curveCard(
+                title: "Complexity", metric: "Complexity", group: group, from: distributions,
+                markers: [CurveMarker(value: weight, label: "This Game")],
+                summary: "\(weight.formatted(.number.precision(.fractionLength(2)))) / 5",
+                leftLabel: "Lighter", rightLabel: "Heavier", comparative: "Heavier than",
+                formatAverage: { String(format: "%.2f", $0) }
+            )
+        }
+
+        let playerBars = CommunityPoll.playerCountBars(game.suggestedNumPlayers)
+        if playerBars.contains(where: { $0.votes > 0 }) {
+            PollChartCard(
+                title: "Suggested Player Number",
+                bars: playerBars,
+                distribution: distributions.curve(for: "Players", in: group)?.distribution,
+                leftLabel: "Fewer", rightLabel: "More",
+                formatLabel: { "\($0) Players" }
+            )
+        }
+
+        let ageBars = CommunityPoll.ageBars(game.suggestedPlayerage)
+        if ageBars.contains(where: { $0.votes > 0 }) {
+            PollChartCard(
+                title: "Suggested Player Age",
+                bars: ageBars,
+                distribution: distributions.curve(for: "Min Age", in: group)?.distribution,
+                leftLabel: "Younger", rightLabel: "Older",
+                formatLabel: { $0 == "21 and up" ? $0 : "\($0) Years" }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func curveCard(
+        title: String,
+        metric: String,
+        group: String,
+        from distributions: MetricDistributions,
+        markers: [CurveMarker],
+        summary: String,
+        leftLabel: String,
+        rightLabel: String,
+        comparative: String,
+        formatAverage: @escaping (Double) -> String
+    ) -> some View {
+        if let found = distributions.curve(for: metric, in: group) {
+            DistributionChartCard(
+                title: title,
+                summary: summary,
+                markers: markers,
+                distribution: found.distribution,
+                fieldName: fieldName(found.group),
+                leftLabel: leftLabel,
+                rightLabel: rightLabel,
+                comparative: comparative,
+                formatAverage: formatAverage
+            )
+        }
+    }
+
+    // MARK: - Rankings
+
+    @ViewBuilder
+    private func rankingsSection(for game: Game) -> some View {
+        let overall = (game.rank ?? 0) > 0 ? game.rank : nil
+        // Best rank first, as on the web.
+        let bySubdomain = (game.subdomainRanks ?? [:]).sorted { $0.value < $1.value }
+
+        if overall != nil || !bySubdomain.isEmpty {
+            CollapsibleSection(title: "Rankings", expanded: $showRankings) {
+                VStack(alignment: .leading, spacing: 16) {
+                    if let overall {
+                        RankingCard(
+                            label: "Overall", rank: overall,
+                            fieldSize: catalogSize, noun: "games"
+                        )
+                    }
+                    ForEach(bySubdomain, id: \.key) { subdomain, rank in
+                        let name = GameCardView.displayName(for: subdomain)
+                        RankingCard(
+                            label: "\(name) Games", rank: rank,
+                            fieldSize: subdomainSizes[subdomain], noun: "\(name) games"
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Ratings
+
+    @ViewBuilder
+    private func ratingsSection(for game: Game) -> some View {
+        if let breakdown = RatingBreakdown(
+            distribution: game.ratingDistribution, numRatings: game.numRatings
+        ) {
+            CollapsibleSection(
+                title: "Ratings",
+                detail: game.numRatings.map { "\($0.formatted()) ratings" },
+                expanded: $showRatings
+            ) {
+                VStack(alignment: .leading, spacing: 24) {
+                    // Summary first, then the distribution: the headline
+                    // numbers are what most readers came for, and the
+                    // histogram is the detail behind them.
+                    HStack(alignment: .top, spacing: 24) {
+                        if let average = game.avgRating {
+                            AverageRating(average: average)
+                        }
+                        Spacer(minLength: 0)
+                        if let share = breakdown.positiveShare {
+                            PositiveRatings(share: share)
+                        }
+                    }
+
+                    RatingHistogram(breakdown: breakdown)
+                }
+            }
+        }
+    }
+
+    // MARK: - Reviews
+
+    @ViewBuilder
+    private func reviewsSection(for game: Game, scroller: ScrollViewProxy) -> some View {
+        if (game.numRatings ?? 0) > 0 {
+            CollapsibleSection(
+                title: "Reviews",
+                detail: reviews.map { "\($0.total.formatted()) reviews" },
+                expanded: $showReviews
+            ) {
+                VStack(alignment: .leading, spacing: 16) {
+                    ReviewFilterBar(
+                        query: $reviewQuery,
+                        languageBreakdown: reviews?.languageBreakdown,
+                        ratingBreakdown: reviews?.ratingBreakdown
+                    )
+
+                    if reviewsFailed {
+                        Text("Could not load reviews. Pull to try again.")
+                            .font(.callout)
+                            .foregroundStyle(Color.ludoraSecondaryText)
+                            .padding(.vertical, 24)
+                    } else if let reviews, reviews.items.isEmpty {
+                        Text("No reviews match these filters.")
+                            .font(.callout)
+                            .foregroundStyle(Color.ludoraSecondaryText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 24)
+                    } else if let reviews {
+                        ForEach(reviews.items) { review in
+                            ReviewCard(review: review)
+                        }
+                        ReviewPager(
+                            page: $reviewQuery.page,
+                            total: reviews.total,
+                            pageSize: ReviewQuery.pageSize,
+                            busy: loadingReviews
+                        ) {
+                            // Paging without this leaves you at the bottom of
+                            // the screen looking at the pager, with the new
+                            // page's first review off-screen above: the list
+                            // changes and nothing appears to happen.
+                            withAnimation { scroller.scrollTo(reviewsAnchor, anchor: .top) }
+                        }
+                    } else {
+                        ProgressView()
+                            .tint(.ludoraPrimary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 32)
+                    }
+                }
+            }
+            .id(reviewsAnchor)
+            .task(id: reviewQuery) { await loadReviews() }
+        }
+    }
+
+    private func loadReviews() async {
+        loadingReviews = true
+        defer { loadingReviews = false }
+        do {
+            reviews = try await client.reviews(
+                bggID: bggID,
+                page: reviewQuery.page,
+                pageSize: ReviewQuery.pageSize,
+                language: reviewQuery.language,
+                minRating: reviewQuery.rating.range?.lowerBound,
+                maxRating: reviewQuery.rating.range?.upperBound
+            )
+            reviewsFailed = false
+        } catch {
+            reviewsFailed = true
+        }
+    }
+
+    private func load() async {
+        guard game == nil else { return }
+        do {
+            // Independent requests, so run them concurrently rather than
+            // making each wait on the one before. Only the detail is
+            // required; the rest degrade to a missing section or a missing
+            // line, so they are fetched with `try?`.
+            async let detail = client.game(bggID: bggID)
+            async let counts = try? client.subdomains()
+            async let catalog = try? client.games(oneRow)
+            async let curves = try? client.distributions()
+
+            game = try await detail
+            distributions = await curves
+            subdomainSizes = Dictionary(
+                (await counts ?? []).map { ($0.name, $0.gameCount) },
+                uniquingKeysWith: { first, _ in first }
+            )
+            catalogSize = await catalog?.total
+        } catch {
+            errorMessage = (error as? LudoraError)?.errorDescription
+                ?? "Something went wrong."
+        }
+    }
+
+    /// Asks for a single game purely to read `total` off the envelope. The
+    /// API has no count endpoint, and this is how the web gets the same
+    /// number for its ranking cards.
+    private var oneRow: GameQuery {
+        var query = GameQuery()
+        query.limit = 1
+        return query
+    }
+}
+
+// MARK: - Building blocks
+
+/// A section heading, in the serif the web sets its headings in.
+struct DetailHeading: View {
+    let title: String
+
+    init(_ title: String) { self.title = title }
+
+    var body: some View {
+        Text(title)
+            .font(.ludoraTitle(24))
+            .foregroundStyle(Color.ludoraText)
+    }
+}
+
+struct StatTile: View {
+    let icon: String
+    let label: String
+    let value: String?
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 22))
+                .foregroundStyle(Color.ludoraPrimary.opacity(0.85))
+                .padding(.bottom, 2)
+            Text(label)
+                .font(.caption.bold())
+                .foregroundStyle(Color.ludoraSecondaryText)
+            Text(value ?? "—")
+                .font(.title3.bold())
+                .foregroundStyle(value == nil ? Color.ludoraSecondaryText : Color.ludoraText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
+        .background(Color.ludoraSurface, in: .rect(cornerRadius: 16))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(Color.ludoraNeutral.opacity(0.5))
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label), \(value ?? "unknown")")
+    }
+}
+
+/// A vocabulary value in one of the sections: tan, bordered, rounded.
+struct TagChip: View {
+    let label: String
+
+    init(_ label: String) { self.label = label }
+
+    var body: some View {
+        Text(label)
+            .font(.system(size: 14, weight: .medium))
+            .foregroundStyle(Color.ludoraSecondaryText)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color.ludoraSurface, in: .rect(cornerRadius: 8))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Color.ludoraNeutral.opacity(0.7))
+            }
+    }
+}
+
+/// The solid pill beside the title. The heavier of the two hero rows,
+/// because a subdomain is the game's primary classification.
+struct SubdomainPill: View {
+    let label: String
+
+    init(_ label: String) { self.label = label }
+
+    var body: some View {
+        Text(label)
+            .font(.system(size: 13, weight: .bold))
+            .foregroundStyle(Color.ludoraText)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .background(Color.ludoraNeutral.opacity(0.28), in: .capsule)
+    }
+}
+
+/// The outlined pill beside the title, one step quieter than a subdomain.
+struct CategoryPill: View {
+    let label: String
+
+    init(_ label: String) { self.label = label }
+
+    var body: some View {
+        Text(label)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(Color.ludoraSecondaryText)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 5)
+            .overlay { Capsule().strokeBorder(Color.ludoraNeutral.opacity(0.55)) }
+    }
+}
+
+/// The "+ N more..." / "Show less" control the web uses everywhere it
+/// collapses a list.
+struct MoreButton: View {
+    let title: String
+    let action: () -> Void
+
+    init(_ title: String, action: @escaping () -> Void) {
+        self.title = title
+        self.action = action
+    }
+
+    var body: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { action() }
+        } label: {
+            Text(title)
+                .font(.subheadline.bold())
+                .foregroundStyle(Color.ludoraPrimary)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// A wrapped chip list, collapsed past `limit`.
+///
+/// Truncating silently, which is what a bare `prefix` does, is the worst of
+/// the options: the reader cannot tell a game with eight mechanics from one
+/// with thirty. The count in the button is the point.
+struct ExpandableChips: View {
+    let items: [String]
+    var limit: Int = 8
+
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            WrapLayout(horizontalSpacing: 8, verticalSpacing: 8) {
+                ForEach(expanded ? items : Array(items.prefix(limit)), id: \.self) {
+                    TagChip($0)
+                }
+            }
+            if items.count > limit {
+                MoreButton(expanded ? "Show less" : "+ \(items.count - limit) more...") {
+                    expanded.toggle()
+                }
+            }
+        }
+    }
+}
+
+/// Names, one per line, collapsed past `limit`.
+struct ExpandableLines: View {
+    let items: [String]
+    var limit: Int = 3
+
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(expanded ? items : Array(items.prefix(limit)), id: \.self) { item in
+                Text(item)
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(Color.ludoraSecondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if items.count > limit {
+                MoreButton(expanded ? "Show less" : "+ \(items.count - limit) more...") {
+                    expanded.toggle()
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Families, grouped by their namespace rather than listed raw.
+///
+/// The API sends them fully qualified, as "Category: Industry / Manufacturing"
+/// and "Region: Great Britain". Rendered as-is that is a column of repeated
+/// prefixes, which is what this screen used to show. Splitting on the first
+/// ": " turns the prefix into a heading and leaves the values readable,
+/// which is what the web does with the same strings.
+struct FamilyGroups: View {
+    let items: [String]
+    var groupLimit: Int = 6
+
+    @State private var expanded = false
+
+    var body: some View {
+        let all = FamilyGrouping.grouping(items)
+        let visible = expanded ? all : Array(all.prefix(groupLimit))
+
+        VStack(alignment: .leading, spacing: 20) {
+            ForEach(visible, id: \.name) { group in
+                VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(group.name.uppercased())
+                            .font(.system(size: 11, weight: .bold))
+                            .tracking(0.8)
+                            .foregroundStyle(Color.ludoraSecondaryText)
+                        Rectangle()
+                            .fill(Color.ludoraNeutral.opacity(0.35))
+                            .frame(height: 1)
+                    }
+                    WrapLayout(horizontalSpacing: 8, verticalSpacing: 8) {
+                        ForEach(group.values, id: \.self) { TagChip($0) }
+                    }
+                }
+            }
+
+            if all.count > groupLimit {
+                MoreButton(expanded ? "Show less" : "+ \(all.count - groupLimit) more groups...") {
+                    expanded.toggle()
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// The description, clipped with a fade until it is asked to open.
+struct ExpandableText: View {
+    let text: String
+    /// The web collapses past 1600 characters, but that is a threshold for a
+    /// wide column. The same text on a phone is roughly three screens, so
+    /// this clips far sooner; the web's number would leave most descriptions
+    /// uncollapsed here, which is the case that prompted this.
+    private let longEnough = 600
+    private let collapsedHeight: CGFloat = 260
+
+    @State private var expanded = false
+
+    init(_ text: String) { self.text = text }
+
+    private var isLong: Bool { text.count > longEnough }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(text)
+                .font(.body)
+                .foregroundStyle(Color.ludoraText)
+                .lineSpacing(3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxHeight: expanded || !isLong ? nil : collapsedHeight, alignment: .top)
+                .clipped()
+                .overlay(alignment: .bottom) {
+                    if isLong && !expanded {
+                        LinearGradient(
+                            colors: [.ludoraBackground.opacity(0), .ludoraBackground],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 72)
+                        .allowsHitTesting(false)
+                    }
+                }
+
+            if isLong {
+                MoreButton(expanded ? "Show less" : "Read more") { expanded.toggle() }
+            }
+        }
+    }
+}
+
+/// Which slice of reviews is on screen. One value so the whole thing is a
+/// single `task(id:)` key: changing a filter and changing the page are the
+/// same kind of event, and both have to reset nothing else.
+struct ReviewQuery: Hashable {
+    /// The API caps `page_size` at 50. Ten is what the web asks for, and it
+    /// is enough to fill a phone screen twice over.
+    static let pageSize = 10
+
+    var page = 1
+    /// Nil is every language.
+    var language: String?
+    var rating: ReviewRatingFilter = .all
+
+    /// Changing a filter has to go back to page one: page 4 of "positive
+    /// only" is usually past the end of the filtered set, and the user would
+    /// get an empty screen for a filter that has plenty of matches.
+    mutating func apply(_ change: (inout ReviewQuery) -> Void) {
+        change(&self)
+        page = 1
+    }
+}
+
+enum ReviewRatingFilter: String, CaseIterable, Hashable {
+    case all, positive, mixed, negative
+
+    var label: String {
+        switch self {
+        case .all: "All Ratings"
+        case .positive: "Positive"
+        case .mixed: "Mixed"
+        case .negative: "Negative"
+        }
+    }
+
+    /// The web's bands, kept exactly so the two clients filter identically.
+    var range: ClosedRange<Double>? {
+        switch self {
+        case .all: nil
+        case .positive: 7.0...10.0
+        case .mixed: 4.0...6.9
+        case .negative: 1.0...3.9
+        }
+    }
+
+    /// The key this band appears under in the API's `rating_breakdown`.
+    var breakdownKey: String? { self == .all ? nil : rawValue }
+}
+
+/// Language and rating pickers, styled as the web's two dropdown pills.
+struct ReviewFilterBar: View {
+    @Binding var query: ReviewQuery
+    let languageBreakdown: [String: Double]?
+    let ratingBreakdown: [String: Double]?
+
+    var body: some View {
+        WrapLayout(horizontalSpacing: 8, verticalSpacing: 8) {
+            Menu {
+                Picker("Language", selection: languageBinding) {
+                    Text("All Languages").tag(String?.none)
+                    ForEach(languages, id: \.code) { language in
+                        Text(label(for: language)).tag(String?.some(language.code))
+                    }
+                }
+            } label: {
+                FilterPill(
+                    icon: "globe",
+                    title: query.language.map { $0.uppercased() } ?? "ALL"
+                )
+            }
+
+            Menu {
+                Picker("Rating", selection: ratingBinding) {
+                    ForEach(ReviewRatingFilter.allCases, id: \.self) { option in
+                        Text(label(for: option)).tag(option)
+                    }
+                }
+            } label: {
+                FilterPill(icon: "star.fill", title: query.rating.label)
+            }
+        }
+    }
+
+    // Bindings rather than direct writes so every change routes through
+    // `apply`, which is what resets the page.
+    private var languageBinding: Binding<String?> {
+        Binding(
+            get: { query.language },
+            set: { value in query.apply { $0.language = value } }
+        )
+    }
+
+    private var ratingBinding: Binding<ReviewRatingFilter> {
+        Binding(
+            get: { query.rating },
+            set: { value in query.apply { $0.rating = value } }
+        )
+    }
+
+    /// Most-used language first, which is the order the web shows.
+    private var languages: [(code: String, share: Double)] {
+        (languageBreakdown ?? [:])
+            .map { (code: $0.key, share: $0.value) }
+            .sorted { $0.share > $1.share }
+    }
+
+    private func label(for language: (code: String, share: Double)) -> String {
+        let name = Locale.current.localizedString(forLanguageCode: language.code)
+            ?? language.code.uppercased()
+        return "\(name)  \(percent(language.share))"
+    }
+
+    private func label(for option: ReviewRatingFilter) -> String {
+        guard
+            let key = option.breakdownKey,
+            let share = ratingBreakdown?[key]
+        else { return option.label }
+        return "\(option.label)  \(percent(share))"
+    }
+
+    /// The API reports these as percentages already, not as fractions.
+    private func percent(_ share: Double) -> String {
+        "\(Int(share.rounded()))%"
+    }
+}
+
+struct FilterPill: View {
+    let icon: String
+    let title: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 12))
+                .foregroundStyle(Color.ludoraSecondaryText)
+            Text(title)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(Color.ludoraText)
+                .lineLimit(1)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(Color.ludoraSecondaryText)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.ludoraSurface, in: .capsule)
+        .overlay { Capsule().strokeBorder(Color.ludoraNeutral.opacity(0.5)) }
+    }
+}
+
+struct ReviewPager: View {
+    @Binding var page: Int
+    let total: Int
+    let pageSize: Int
+    let busy: Bool
+    /// Called after the page changes, so the caller can scroll back up.
+    let onPageChange: () -> Void
+
+    private var lastPage: Int { max(1, Int(ceil(Double(total) / Double(pageSize)))) }
+
+    var body: some View {
+        HStack {
+            step("Previous", systemImage: "chevron.left", to: page - 1, enabled: page > 1)
+            Spacer()
+            Text("Page \(page.formatted()) of \(lastPage.formatted())")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(Color.ludoraSecondaryText)
+                .opacity(busy ? 0.4 : 1)
+            Spacer()
+            step("Next", systemImage: "chevron.right", to: page + 1, enabled: page < lastPage)
+        }
+        .padding(.top, 4)
+    }
+
+    private func step(
+        _ title: String, systemImage: String, to target: Int, enabled: Bool
+    ) -> some View {
+        Button {
+            page = target
+            onPageChange()
+        } label: {
+            HStack(spacing: 4) {
+                if systemImage == "chevron.left" { Image(systemName: systemImage) }
+                Text(title)
+                if systemImage == "chevron.right" { Image(systemName: systemImage) }
+            }
+            .font(.system(size: 13, weight: .bold))
+            .foregroundStyle(Color.ludoraText)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(.white, in: .capsule)
+            .overlay { Capsule().strokeBorder(Color.ludoraSurface) }
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled || busy)
+        .opacity(enabled && !busy ? 1 : 0.35)
+    }
+}
+
+struct ReviewCard: View {
+    let review: Review
+
+    /// Long enough that clipping it saves real scrolling, short enough that
+    /// most reviews are never clipped at all.
+    private let longEnough = 320
+    @State private var expanded = false
+
+    private var isLong: Bool { (review.comment?.count ?? 0) > longEnough }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(review.user)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(Color.ludoraText)
+                Spacer()
+                if let rating = review.rating {
+                    Label {
+                        Text(rating.formatted(.number.precision(.fractionLength(1))))
+                            .fontWeight(.bold)
+                    } icon: {
+                        Image(systemName: "star.fill")
+                            .foregroundStyle(Color.ludoraPrimary)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(Color.ludoraText)
+                }
+            }
+
+            if let comment = review.comment, !comment.isEmpty {
+                Text(comment)
+                    .font(.callout)
+                    .foregroundStyle(Color.ludoraText)
+                    .lineSpacing(2)
+                    .lineLimit(expanded || !isLong ? nil : 6)
+
+                if isLong {
+                    MoreButton(expanded ? "Show less" : "Read more") { expanded.toggle() }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(.white, in: .rect(cornerRadius: 16))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(Color.ludoraSurface)
+        }
+    }
+}
+
+
+struct AverageRating: View {
+    let average: Double
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Average Rating")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(Color.ludoraSecondaryText)
+            Text(average, format: .number.precision(.fractionLength(1)))
+                .font(.system(size: 60, weight: .bold))
+                .foregroundStyle(Color.ludoraText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            // Five stars over a ten-point scale, so each star is two points.
+            HStack(spacing: 4) {
+                ForEach(1...5, id: \.self) { star in
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 20))
+                        .foregroundStyle(
+                            Double(star) <= (average / 2).rounded()
+                                ? Color.ludoraPrimary
+                                : Color.ludoraNeutral.opacity(0.4)
+                        )
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "Average rating \(average.formatted(.number.precision(.fractionLength(1)))) out of 10"
+        )
+    }
+}
+
+/// The share of ratings at 7.0 or better, on the web's three-quarter arc.
+struct PositiveRatings: View {
+    let share: Double
+
+    private var percent: Int { Int((share * 100).rounded()) }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ZStack {
+                arc(to: 1).stroke(
+                    Color.ludoraNeutral.opacity(0.25),
+                    style: .init(lineWidth: 12, lineCap: .round)
+                )
+                arc(to: share).stroke(
+                    Color.ludoraPositive,
+                    style: .init(lineWidth: 12, lineCap: .round)
+                )
+                Text("\(percent)%")
+                    .font(.system(size: percent == 100 ? 24 : 28, weight: .bold))
+                    .foregroundStyle(Color.ludoraPositive)
+                // Sits in the arc's own gap, which is why the gauge is three
+                // quarters of a circle rather than a full ring.
+                Image(systemName: "hand.thumbsup.fill")
+                    .font(.system(size: 22))
+                    .foregroundStyle(Color.ludoraPositive)
+                    .offset(y: 58)
+            }
+            .frame(width: 118, height: 118)
+            .padding(.bottom, 18)
+
+            Text("Positive Ratings")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(Color.ludoraText)
+            Text("SCORES 7-10")
+                .font(.system(size: 10, weight: .medium))
+                .tracking(0.8)
+                .foregroundStyle(Color.ludoraSecondaryText)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(percent) percent of ratings are 7 or above")
+    }
+
+    /// Three quarters of a circle, opened at the bottom, so the gap reads as
+    /// a gauge rather than as an unfinished ring.
+    private func arc(to fraction: Double) -> some Shape {
+        Circle()
+            .trim(from: 0, to: 0.75 * max(0, min(1, fraction)))
+            .rotation(.degrees(135))
+    }
+}
+
+/// One rank, against the size of the field it was ranked in.
+struct RankingCard: View {
+    let label: String
+    let rank: Int
+    let fieldSize: Int?
+    let noun: String
+
+    private var share: Double? {
+        fieldSize.flatMap { Ranking.betterThanShare(rank: rank, outOf: $0) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label.uppercased())
+                .font(.system(size: 11, weight: .heavy))
+                .tracking(1.2)
+                .foregroundStyle(Color.ludoraSecondaryText)
+
+            Text("#\(rank)")
+                .font(.system(size: 40, weight: .bold))
+                .foregroundStyle(Color.ludoraPrimary)
+
+            if let fieldSize {
+                Text("Out of \(fieldSize.formatted()) \(noun)")
+                    .font(.caption)
+                    .foregroundStyle(Color.ludoraSecondaryText.opacity(0.7))
+            }
+
+            if let share {
+                VStack(alignment: .trailing, spacing: 6) {
+                    Text("Better than \(Ranking.formatBetterThan(share))")
+                        .font(.caption)
+                        .foregroundStyle(Color.ludoraSecondaryText)
+                    ProgressView(value: share)
+                        .progressViewStyle(.linear)
+                        .tint(.ludoraPrimary)
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.top, 14)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .background(.white, in: .rect(cornerRadius: 16))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16).strokeBorder(Color.ludoraSurface)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// The detail hero's art, sized by the artwork itself.
+///
+/// No card, no fixed aspect box, no border. The web detail page renders the
+/// cover as `w-full h-auto object-contain`, so a tall box and a wide one
+/// each take the height they need, and behind it puts an "ambient glow": the
+/// same image blurred, scaled slightly past the edges and nudged down. The
+/// browse card's letterboxed backdrop exists to fill a fixed cell in a grid;
+/// nothing here is a cell, so the art is simply the art.
+///
+/// The glow is a `background`, applied after `clipShape` so the clip takes
+/// the artwork and not the glow, which needs to spill past the edges to read
+/// as light rather than as a second picture.
+struct CoverArt: View {
+    let url: String?
+
+    /// The web caps the mobile column at 320px and centres it. Without a cap
+    /// a square cover would eat most of a tall screen before the title.
+    private let maxWidth: CGFloat = 320
+
+    var body: some View {
+        content
+            .frame(maxWidth: maxWidth)
+            .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let url = url.flatMap(URL.init(string:)) {
+            AsyncImage(url: url, transaction: .init(animation: .easeOut(duration: 0.25))) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFit()
+                        .clipShape(.rect(cornerRadius: 16))
+                        .background {
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .blur(radius: 30)
+                                .opacity(0.4)
+                                .scaleEffect(1.05)
+                                .offset(y: 16)
+                        }
+                        .shadow(color: .ludoraText.opacity(0.22), radius: 22, y: 12)
+                case .failure:
+                    placeholder
+                default:
+                    // Holds the row open while the image loads, so the title
+                    // below does not jump up and back down. No "no image"
+                    // wording here: nothing has failed yet.
+                    well.overlay { ProgressView().tint(.ludoraNeutral) }
+                }
+            }
+        } else {
+            placeholder
+        }
+    }
+
+    private var placeholder: some View {
+        well.overlay {
+            Text("No image available")
+                .font(.footnote)
+                .foregroundStyle(Color.ludoraSecondaryText)
+        }
+    }
+
+    /// A stand-in the size of a typical box, so the layout settles once.
+    private var well: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .fill(Color.ludoraNeutral.opacity(0.15))
+            .aspectRatio(3 / 4, contentMode: .fit)
+    }
+}
+
+extension String {
+    /// BGG descriptions arrive as HTML. This is a deliberate minimum: strip
+    /// tags and decode the handful of entities that actually show up,
+    /// rather than pulling in a parser for text that is only ever read.
+    var strippingHTML: String {
+        replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#10;", with: "\n")
+            .replacingOccurrences(of: "&rsquo;", with: "'")
+            .replacingOccurrences(of: "&mdash;", with: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
