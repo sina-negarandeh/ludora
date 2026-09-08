@@ -114,11 +114,11 @@ For the Official numbers (manufacturer-stated playtime, minimum age) and the Com
 
 ![Game Detail community stats distributions for Brass: Birmingham](../assets/images/game_detail_page.stats.community.brass_birmingham.png)
 
-`scripts/generate_distributions.py` reads `data/raw/games.csv` directly, clips per-metric outliers to fixed ranges, box-smooths (`np.histogram` + `np.convolve`) Complexity and Playtime, and writes a static `frontend/public/distributions.json` (25 KB, committed). `DistributionChart` (`GameDetail.tsx:170-314`) fetches that file and draws the curve as a hand-computed SVG path with Catmull-Rom-style smoothing; percentile lookup is a nearest-index CDF search. Worth being precise about: these are box-smoothed histograms, not true Gaussian KDE, visually close but a different method underneath.
+`scripts/generate_distributions.py` reads `data/raw/games.csv` directly, clips per-metric outliers to fixed ranges, box-smooths (`np.histogram` + `np.convolve`) Complexity and Playtime, and writes `backend/app/data/distributions.json` (28 KB, committed), served at `GET /api/distributions`. `DistributionChart` (`GameDetail.tsx:170-314`) fetches that endpoint and draws the curve as a hand-computed SVG path with Catmull-Rom-style smoothing; percentile lookup is a nearest-index CDF search. Worth being precise about: these are box-smoothed histograms, not true Gaussian KDE, visually close but a different method underneath.
 
 Overall and per-subdomain rank badges render as a separate component just below the distributions, reading the same `rank` and `subdomain_ranks` fields the hero section's stat tiles use.
 
-**Evidence**: `frontend/public/distributions.json` is committed and can be inspected directly; the generation script is deterministic and rerunnable.
+**Evidence**: `backend/app/data/distributions.json` is committed and can be inspected directly, or fetched from `/api/distributions`; the generation script is deterministic and rerunnable.
 
 ---
 

@@ -30,7 +30,7 @@ Exact dataset provenance and the category/subdomain/theme sourcing logic: [docs/
 | `scripts/detect_languages.py` | Backfills `reviews.language` and `reviews.language_confidence` (added by two Alembic migrations, so run `uv run alembic upgrade head` first) in batches of 10,000 using the fastText `lid.176.ftz` language-ID model. Stores the detected code regardless of confidence; low-confidence guesses are kept, not discarded, so downstream consumers can threshold on `language_confidence` themselves. Only empty or unparseable comments get `language='unknown'`. |
 | `scripts/update_embeddings.py` and `scripts/update_search_vectors.py` | Populate `game_embeddings` (one upserted row per `(game_id, model)`, `Qwen3-Embedding-0.6B` via `mlx-embeddings` by default, over name, description, themes, mechanics, categories, subdomains, families, and bucketed weight/playtime; designers, artists, and publishers are explicitly excluded) and `games.search_vector` (a weighted `tsvector`: name=A, themes/mechanics/categories/subdomains/families=B, description=C, designers/artists/publishers=D) respectively. |
 
-`scripts/generate_distributions.py` is independent of the database (it reads `data/raw/games.csv` directly) and writes the static frontend asset `frontend/public/distributions.json`; it can run at any point once the raw data exists.
+`scripts/generate_distributions.py` is independent of the database (it reads `data/raw/games.csv` directly) and writes `backend/app/data/distributions.json`, which the API serves at `GET /api/distributions`; it can run at any point once the raw data exists.
 
 ## Stage 4: the ABSA chain (sequential, each step depends on the previous one's output)
 

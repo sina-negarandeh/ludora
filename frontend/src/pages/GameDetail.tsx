@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import axios from 'axios';
-import { fetchGame, fetchRecommendations, fetchRecommendationModels, fetchReviews, fetchGames, fetchSubdomains } from '../api/games';
+import { apiClient, fetchGame, fetchRecommendations, fetchRecommendationModels, fetchReviews, fetchGames, fetchSubdomains } from '../api/games';
 import type { Game, Review, PlayerCountPoll, AgePollResult } from '../api/games';
 import { GameCard } from '../components/GameCard';
 import { StarIcon, ClockIcon, UserGroupIcon, AcademicCapIcon, TrophyIcon, UserIcon, ArrowLeftIcon, HandThumbUpIcon, HandThumbDownIcon, ScaleIcon, SparklesIcon, ChatBubbleLeftRightIcon, LanguageIcon, XMarkIcon } from '@heroicons/react/24/solid';
@@ -586,9 +586,11 @@ const GameDistributions: React.FC<{ game: Game }> = ({ game }) => {
   const [distributions, setDistributions] = useState<AllDistributions | null>(null);
 
   useEffect(() => {
-    fetch('/distributions.json')
-      .then(r => r.json())
-      .then(data => setDistributions(data))
+    // Via apiClient, not fetch: the endpoint answers 503 with valid JSON
+    // when the artifact is missing, and a bare fetch would store that error
+    // body as though it were the curves.
+    apiClient.get<AllDistributions>('/api/distributions')
+      .then(res => setDistributions(res.data))
       .catch(console.error);
   }, []);
 
