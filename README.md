@@ -15,6 +15,7 @@ Ludora is a board game discovery app built on two merged [BoardGameGeek](https:/
 - **Recommendation engine.** Nine model IDs across four paradigms: popularity, content-based (TF-IDF, metadata blend, semantic embedding, graph Jaccard, DeepWalk), collaborative filtering (item-item cosine, ALS), and a live cross-paradigm hybrid blend. Compare coverage and diversity across all nine from the UI. See [docs/ml/recommenders.md](docs/ml/recommenders.md) for which models compute live and which read from a precomputed table.
 - **Aspect-based sentiment analysis.** A 17-aspect zero-shot classifier (`yangheng/deberta-v3-base-absa-v1.1`) extracts what reviewers actually said about mechanics, strategy, theme, and more. Shown as per-aspect cards, plus an LLM-written "Community Consensus" paragraph once one's been generated for that game.
 - **AI assistant.** A chat sidebar that parses natural language into a typed plan (browse, search, compare, recommend, look up one game) with a locally hosted LLM (Apple MLX, OpenAI-compatible), then renders the result as structured cards instead of a wall of text. [PydanticAI](https://ai.pydantic.dev/) turns the model's output into a validated schema, re-prompting it with the validation error when it gets the shape wrong; [LangGraph](https://langchain-ai.github.io/langgraph/) executes the resulting plan, and can loosen an over-constrained request one filter at a time when nothing matches. Ask for "a quick, very heavy party game" and it tells you it relaxed the complexity limit rather than silently answering a different question.
+- **Native iOS client.** A SwiftUI app reading the same API: browse, filter, sort, search, game detail, statistics, rankings, ratings, and reviews.
 
 Full breakdown with screenshots: [docs/product/features.md](docs/product/features.md).
 
@@ -28,6 +29,8 @@ No user accounts, so no personalization: every visitor sees the same catalog. Fu
 
 **Frontend:** React 19, TypeScript (strict), Vite, TanStack Query, Tailwind CSS.
 
+**iOS:** Swift 6 (strict concurrency), SwiftUI, iOS 17+, Swift Package Manager, no third-party dependencies.
+
 **AI/LLM:** Apple MLX for local inference behind an OpenAI-compatible endpoint. PydanticAI for typed, self-repairing structured output; LangGraph for stateful plan execution.
 
 **Infra:** Docker Compose for Postgres, frontend, and pgAdmin. The backend runs natively since MLX needs macOS on Apple Silicon. 27 tracked Alembic migrations, 21 offline ETL/ML scripts.
@@ -37,6 +40,8 @@ No user accounts, so no personalization: every visitor sees the same catalog. Fu
 **Machine learning.** Four subsystems, each a different problem. Search fuses Postgres full-text and pgvector semantic retrieval with Reciprocal Rank Fusion (k=60) at request time. Reviews NLP runs a 17-aspect zero-shot ABSA classifier (DeBERTa) over free-text reviews, then an LLM synthesizes the per-aspect output into a "Community Consensus" paragraph. Recommendations span nine model IDs across four paradigms. The assistant is the agentic one: PydanticAI parses a request into a typed schema against a local LLM, a compile step rejects any plan whose step references don't resolve, and a LangGraph state machine executes it against the same services the rest of the app uses. The model decides what to do; everything downstream is deterministic code. Detail in [docs/ml/](docs/ml/).
 
 **Frontend.** React 19 and strict TypeScript. The statistics section on the game detail page (density curves, percentile positioning, rating histograms, an arc gauge) is hand-rolled SVG with Catmull-Rom-style smoothing, not a charting library. See [docs/product/features.md#4-statistics--distribution-charts](docs/product/features.md#4-statistics--distribution-charts).
+
+**iOS.** A native SwiftUI client. The models, the API client, and the values derived from them live in a `LudoraKit` Swift package that imports only Foundation. Its tests therefore run from the command line, with no Xcode project and no simulator. View code stays in the app target. See [ios/AGENTS.md](ios/AGENTS.md).
 
 **Backend.** A layered FastAPI service where routes call services, services call the ORM or a recommender class, and nothing skips a layer. 19 REST endpoints. See [docs/architecture/README.md](docs/architecture/README.md).
 
@@ -55,6 +60,10 @@ No user accounts, so no personalization: every visitor sees the same catalog. Fu
 | Statistics & distributions | Community Consensus (ABSA) |
 |---|---|
 | ![Stats](docs/assets/images/game_detail_page.stats.official.brass_birmingham.png) | ![Community Consensus](docs/assets/images/game_detail_page.reviews.community_consensus.brass_birmingham.png) |
+
+| iOS: browse | iOS: game detail | iOS: statistics |
+|---|---|---|
+| <img src="docs/assets/images/ios_app.browse.default.png" alt="iOS browse" width="240"> | <img src="docs/assets/images/ios_app.game_detail.hero.brass_birmingham.png" alt="iOS game detail" width="240"> | <img src="docs/assets/images/ios_app.game_detail.stats.official.brass_birmingham.png" alt="iOS statistics" width="240"> |
 
 More in [docs/product/features.md](docs/product/features.md), including the ratings histogram, user reviews, and every AI assistant response type.
 
@@ -78,6 +87,8 @@ A root `Makefile` wraps both of the above plus lint/typecheck/test (`make help` 
 
 This brings up an **empty** database; nothing here seeds it. To populate the catalog, run the data pipeline (raw CSVs, then a master dataset, then Postgres, then embeddings and search vectors). See [docs/setup/README.md](docs/setup/README.md) for exact commands and [docs/architecture/data-pipeline.md](docs/architecture/data-pipeline.md) for what each of the 21 scripts does. The AI assistant and "Community Consensus" generation also need a local MLX server (Apple Silicon only); everything else works without it.
 
+The iOS client is a separate Xcode project at `ios/Ludora/Ludora.xcodeproj`. Open it and press Run with the backend running. `make ios-test` runs its package tests without Xcode or a simulator. See [ios/README.md](ios/README.md).
+
 ## Data
 
 Two Kaggle datasets, merged on BGG ID: [threnjen/board-games-database-from-boardgamegeek](https://www.kaggle.com/datasets/threnjen/board-games-database-from-boardgamegeek/) for game metadata, and [jvanelteren/boardgamegeek-reviews](https://www.kaggle.com/datasets/jvanelteren/boardgamegeek-reviews/) for ratings and reviews. Not every file in either dataset ends up used by the pipeline; see [docs/data/README.md](docs/data/README.md) for exactly which CSVs feed which tables.
@@ -99,8 +110,9 @@ All of it traces back to [BoardGameGeek](https://boardgamegeek.com/) and its com
 | [docs/setup/README.md](docs/setup/README.md) | Verified setup and environment variable reference |
 | [docs/roadmap.md](docs/roadmap.md) | Concretely evidenced planned or unfinished work |
 | [docs/limitations.md](docs/limitations.md) | Every known gap, in one place |
+| [ios/README.md](ios/README.md) | Building and running the native iOS client |
 | [AGENTS.md](AGENTS.md) | Navigation and invariants for anyone, human or AI, extending this repo |
 
 ## Status
 
-Actively developed, local-first, not deployed anywhere public. Built end to end (schema through 27 migrations, 21 pipeline scripts, 19 API endpoints, and both frontends) over a short, concentrated build window rather than long-lived incremental development.
+Actively developed, local-first, not deployed anywhere public. Built end to end over a short, concentrated build window rather than long-lived incremental development. That covers the schema through 27 migrations, 21 pipeline scripts, 19 API endpoints, a React web app, and a native iOS client.
