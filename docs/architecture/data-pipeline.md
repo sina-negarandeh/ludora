@@ -1,6 +1,6 @@
 # Offline data pipeline
 
-Ludora's ML features (search, recommendations, ABSA, summaries) are populated by 27 standalone Python scripts run by hand, in order, against a local Postgres instance. There's no orchestrator: no Airflow, no Prefect, no Makefile, no CI job. This doc reconstructs the actual run order from each script's read/write dependencies, not from filesystem timestamps, which aren't reliable (see the note at the bottom).
+Ludora's ML features (search, recommendations, ABSA, summaries) are populated by 21 standalone Python scripts run by hand, in order, against a local Postgres instance. There's no orchestrator: no Airflow, no Prefect, no Makefile, no CI job. This doc reconstructs the actual run order from each script's read/write dependencies, not from filesystem timestamps, which aren't reliable (see the note at the bottom).
 
 For dataset sources and schema, see [docs/data/README.md](../data/README.md). This doc is about *execution order*, not data shape.
 

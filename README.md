@@ -30,7 +30,7 @@ No user accounts, so no personalization: every visitor sees the same catalog. Fu
 
 **AI/LLM:** Apple MLX for local inference behind an OpenAI-compatible endpoint. PydanticAI for typed, self-repairing structured output; LangGraph for stateful plan execution.
 
-**Infra:** Docker Compose for Postgres, frontend, and pgAdmin. The backend runs natively since MLX needs macOS on Apple Silicon. 21 tracked Alembic migrations, 27 offline ETL/ML scripts.
+**Infra:** Docker Compose for Postgres, frontend, and pgAdmin. The backend runs natively since MLX needs macOS on Apple Silicon. 27 tracked Alembic migrations, 21 offline ETL/ML scripts.
 
 ## Under the hood
 
@@ -38,9 +38,9 @@ No user accounts, so no personalization: every visitor sees the same catalog. Fu
 
 **Frontend.** React 19 and strict TypeScript. The statistics section on the game detail page (density curves, percentile positioning, rating histograms, an arc gauge) is hand-rolled SVG with Catmull-Rom-style smoothing, not a charting library. See [docs/product/features.md#4-statistics--distribution-charts](docs/product/features.md#4-statistics--distribution-charts).
 
-**Backend.** A layered FastAPI service where routes call services, services call the ORM or a recommender class, and nothing skips a layer. 18 REST endpoints. See [docs/architecture/README.md](docs/architecture/README.md).
+**Backend.** A layered FastAPI service where routes call services, services call the ORM or a recommender class, and nothing skips a layer. 19 REST endpoints. See [docs/architecture/README.md](docs/architecture/README.md).
 
-**Database.** PostgreSQL with the pgvector extension for embedding search, a normalized schema with dedicated entity and join tables for every taxonomy type (subdomain, category, theme, family), and 21 tracked, reversible Alembic migrations. See [docs/data/README.md](docs/data/README.md).
+**Database.** PostgreSQL with the pgvector extension for embedding search, a normalized schema with dedicated entity and join tables for every taxonomy type (subdomain, category, theme, family), and 27 tracked, reversible Alembic migrations. See [docs/data/README.md](docs/data/README.md).
 
 ## Screenshots
 
@@ -76,7 +76,7 @@ cd backend && uv sync && uv run uvicorn app.main:app --reload
 
 A root `Makefile` wraps both of the above plus lint/typecheck/test (`make help` for the full list).
 
-This brings up an **empty** database; nothing here seeds it. To populate the catalog, run the data pipeline (raw CSVs, then a master dataset, then Postgres, then embeddings and search vectors). See [docs/setup/README.md](docs/setup/README.md) for exact commands and [docs/architecture/data-pipeline.md](docs/architecture/data-pipeline.md) for what each of the 27 scripts does. The AI assistant and "Community Consensus" generation also need a local MLX server (Apple Silicon only); everything else works without it.
+This brings up an **empty** database; nothing here seeds it. To populate the catalog, run the data pipeline (raw CSVs, then a master dataset, then Postgres, then embeddings and search vectors). See [docs/setup/README.md](docs/setup/README.md) for exact commands and [docs/architecture/data-pipeline.md](docs/architecture/data-pipeline.md) for what each of the 21 scripts does. The AI assistant and "Community Consensus" generation also need a local MLX server (Apple Silicon only); everything else works without it.
 
 ## Data
 
@@ -103,4 +103,4 @@ All of it traces back to [BoardGameGeek](https://boardgamegeek.com/) and its com
 
 ## Status
 
-Actively developed, local-first, not deployed anywhere public. Built end to end (schema through 21 migrations, 27 pipeline scripts, 18 API endpoints, and both frontends) over a short, concentrated build window rather than long-lived incremental development.
+Actively developed, local-first, not deployed anywhere public. Built end to end (schema through 27 migrations, 21 pipeline scripts, 19 API endpoints, and both frontends) over a short, concentrated build window rather than long-lived incremental development.
