@@ -21,7 +21,7 @@ There are no user accounts, no login, no saved preferences, and no personalizati
 
 ## Architecture
 
-The backend is a layered FastAPI service: routes call services, services call the ORM or a recommender class, and nothing skips a layer. 18 REST endpoints across 6 route files, all but the health check carrying explicit OpenAPI summaries. The schema is normalized down to the taxonomy level: Category, Subdomain, Theme, and Family each get their own entity and join tables rather than one denormalized string column, tracked across 21 sequential, reversible Alembic migrations.
+The backend is a layered FastAPI service: routes call services, services call the ORM or a recommender class, and nothing skips a layer. 19 REST endpoints across 6 route files, all but the health check carrying explicit OpenAPI summaries. The schema is normalized down to the taxonomy level: Category, Subdomain, Theme, and Family each get their own entity and join tables rather than one denormalized string column, tracked across 27 sequential, reversible Alembic migrations.
 
 The more interesting architectural fact is what the FastAPI layer *doesn't* do. With the exception of live search and 3 of the 9 recommendation model IDs (`popularity`, `embedding`, `hybrid`), almost everything the API serves was computed by an offline Python script and written to Postgres ahead of time. Full breakdown: [docs/architecture/README.md](architecture/README.md) and [docs/architecture/data-pipeline.md](architecture/data-pipeline.md).
 

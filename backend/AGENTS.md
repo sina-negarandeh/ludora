@@ -33,7 +33,7 @@ Only two recommender classes exist, under `app/recommenders/collaborative/` (`It
 
 ## Offline pipeline
 
-All 27 ML/data scripts (build/ingest, ABSA, summarization, embeddings, search vectors, recommendation precompute) live in the repo-root `scripts/`, not under `backend/`. Confirm what a script actually writes before assuming it's live; several compute output nothing downstream reads. Run order: `docs/architecture/data-pipeline.md`.
+All 21 ML/data scripts (build/ingest, ABSA, summarization, embeddings, search vectors, recommendation precompute) live in the repo-root `scripts/`, not under `backend/`. Confirm what a script actually writes before assuming it's live; several compute output nothing downstream reads. Run order: `docs/architecture/data-pipeline.md`.
 
 ## Local LLM
 

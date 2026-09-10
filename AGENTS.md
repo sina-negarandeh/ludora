@@ -6,6 +6,7 @@ This file covers what's true across the whole repo. Also read the nested file fo
 
 - [backend/AGENTS.md](backend/AGENTS.md): FastAPI, SQLAlchemy, the ML pipeline, Python conventions
 - [frontend/AGENTS.md](frontend/AGENTS.md): React, TypeScript, component conventions
+- [ios/AGENTS.md](ios/AGENTS.md): Swift, SwiftUI, the LudoraKit package, iOS conventions
 
 ## Orient yourself
 
@@ -18,6 +19,7 @@ This file covers what's true across the whole repo. Also read the nested file fo
 | How search / recommenders / ABSA / assistant work | `docs/ml/README.md` |
 | What's measured vs. observed vs. not evaluated | `docs/ml/evaluation.md` |
 | Every known gap and its fix priority | `docs/roadmap.md`, `docs/limitations.md` |
+| What the native iOS client covers, and what it leaves out | `ios/AGENTS.md` |
 
 Link to the relevant doc instead of re-explaining it here.
 
@@ -26,9 +28,11 @@ Link to the relevant doc instead of re-explaining it here.
 ```
 backend/          FastAPI app (app/), evaluation (evaluation/)
 frontend/          React 19 + TypeScript + Vite
+ios/               Native SwiftUI client (LudoraKit package + app target)
 data/raw/          Two Kaggle datasets, as downloaded; do not hand-edit
 data/processed/    Pipeline output (master_*.csv, model artifacts); regenerable, do not hand-edit
 scripts/           All offline ETL/ML pipeline scripts, in one place; run via `uv run --project backend python scripts/<name>.py`
+scripts/tools/     Repo tooling, kept out of the pipeline count above (e.g. `check_docs.py`)
 docs/              Documentation set (see table above)
 ```
 

@@ -1,4 +1,4 @@
-.PHONY: help up down logs sync sync-ml backend migrate migration lint typecheck test check frontend frontend-build frontend-lint ios-build ios-test ios-typecheck ios-fixtures
+.PHONY: help up down logs sync sync-ml backend migrate migration lint typecheck test check docs-check frontend frontend-build frontend-lint ios-build ios-test ios-typecheck ios-fixtures
 
 help:
 	@echo "Infra (docker compose: postgres, pgadmin, frontend dev server)"
@@ -15,7 +15,8 @@ help:
 	@echo "  make lint           ruff check app/"
 	@echo "  make typecheck      pyright"
 	@echo "  make test           pytest (backend/tests/ only, see docs/engineering/testing.md)"
-	@echo "  make check          lint + typecheck + test, same order as CI"
+	@echo "  make check          lint + typecheck + test + docs-check, same order as CI"
+	@echo "  make docs-check     assert the counts docs quote still match the repo"
 	@echo ""
 	@echo "iOS (native SwiftUI client, see ios/AGENTS.md)"
 	@echo "  make ios-build      build LudoraKit (no Xcode needed)"
@@ -65,8 +66,15 @@ typecheck:
 test:
 	cd backend && uv run pytest
 
-# Same order as .github/workflows/backend-ci.yml: ruff -> pyright -> pytest.
-check: lint typecheck test
+# Docs quote counts that are derivable (migrations, pipeline scripts, REST
+# endpoints). They went stale silently once, so they are checked rather than
+# tracked by hand. Stdlib only, no backend deps, no running server.
+docs-check:
+	@python3 scripts/tools/check_docs.py
+
+# Same order as .github/workflows/backend-ci.yml: ruff -> pyright -> pytest,
+# then the docs check.
+check: lint typecheck test docs-check
 
 ## Frontend
 

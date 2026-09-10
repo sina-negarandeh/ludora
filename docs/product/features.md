@@ -1,6 +1,6 @@
 # Feature catalogue
 
-The screenshots below are real captures of the running app (`docs/assets/images/`), not mockups. Most use **Brass: Birmingham** (BGG ID 174430) as the example game.
+The screenshots below are real captures of the running app (`docs/assets/images/`), not mockups. Most use **Brass: Birmingham** (BGG ID 224517) as the example game.
 
 Each entry states what exists, how it's built, and what's genuinely missing or limited. No feature here is described as more finished than it is.
 
@@ -201,6 +201,56 @@ Selecting a model live-refetches the recommendation list for it. This is the mos
 `GameRecommendations` defaults to the `hybrid` model id and refetches `GET /api/games/{id}/recommendations?model=...` on selection. See [docs/ml/recommenders.md](../ml/recommenders.md) for exactly which model IDs compute live versus read from a precomputed table.
 
 **Evidence**: Coverage/ILD diversity metrics for 6 of the 9 models are computed by `backend/evaluation/evaluate_recommenders.py`, which can log the run to MLflow and write a results file, but hasn't been run to produce a committed one yet, so these numbers are labeled "Observed" rather than "Measured" ([docs/ml/evaluation.md](../ml/evaluation.md)).
+
+---
+
+## 11. Native iOS client
+
+A native SwiftUI client reading the same API: browse, filter, sort, search, game detail, statistics, rankings, ratings, and reviews. Swift 6, iOS 17+, no third-party dependencies. The AI Assistant, Community Consensus, and the recommendation engine are not part of it.
+
+**Browse** puts one card per screen, swiped vertically.
+
+![Ludora for iOS, browse screen](../assets/images/ios_app.browse.default.png)
+
+**Filters** open in a sheet, grouped into Classification, Gameplay, and Experience. Retrieval mode and sort sit above them.
+
+![iOS filter sheet: retrieval mode, sort, and classification](../assets/images/ios_app.filters.retrieval_and_classification.png)
+
+![iOS filter sheet: gameplay and experience, with the complexity range](../assets/images/ios_app.filters.gameplay_and_experience.png)
+
+**Search** runs in Lexical, Semantic, or Hybrid mode.
+
+![iOS hybrid search results for "an economic strategy game about the industrial revolution"](../assets/images/ios_app.search.hybrid.png)
+
+**Game detail** opens with the cover, title, year, a Subdomain pill, Category pills, and six stat tiles.
+
+![Ludora for iOS, game detail hero](../assets/images/ios_app.game_detail.hero.brass_birmingham.png)
+
+Mechanics, Family, and the credits collapse past the first few values. Family groups by namespace.
+
+![iOS mechanics, family, and credits](../assets/images/ios_app.game_detail.mechanics_and_family.brass_birmingham.png)
+
+**Statistics** draw a density curve per metric, with a "This Game" marker, a catalog-average line, and a percentile readout. Official and Community numbers sit in separate groups. The two suggested-player polls in the Community group render as vote bars over that curve instead.
+
+![iOS official stats distributions](../assets/images/ios_app.game_detail.stats.official.brass_birmingham.png)
+
+![iOS community stats distributions](../assets/images/ios_app.game_detail.stats.community.brass_birmingham.png)
+
+**Rankings** show an overall card and one card per subdomain.
+
+![iOS rankings for Brass: Birmingham](../assets/images/ios_app.game_detail.rankings.brass_birmingham.png)
+
+**Ratings** show a 10-bar histogram and an arc gauge for the share of ratings at 7.0 or above.
+
+![iOS ratings section](../assets/images/ios_app.game_detail.ratings.brass_birmingham.png)
+
+**Reviews** paginate, with a language filter and a rating-bucket filter.
+
+![iOS reviews](../assets/images/ios_app.game_detail.reviews.brass_birmingham.png)
+
+![iOS review language filter](../assets/images/ios_app.game_detail.reviews.language_filter.brass_birmingham.png)
+
+![iOS review rating filter](../assets/images/ios_app.game_detail.reviews.rating_filter.brass_birmingham.png)
 
 ---
 

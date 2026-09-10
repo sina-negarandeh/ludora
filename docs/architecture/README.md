@@ -1,6 +1,6 @@
 # Architecture
 
-Ludora is two systems joined by PostgreSQL: an **offline Python pipeline** (27 scripts) that turns raw CSVs into populated tables and precomputed recommendation/ABSA rows, and a **stateless FastAPI service** that reads those tables at request time. Almost nothing is computed live except lexical/semantic search and three of the nine recommendation model IDs: `popularity`, `embedding`, and `hybrid` (see [Recommendation routing](#recommendation-routing-live-vs-precomputed) below).
+Ludora is two systems joined by PostgreSQL: an **offline Python pipeline** (21 scripts) that turns raw CSVs into populated tables and precomputed recommendation/ABSA rows, and a **stateless FastAPI service** that reads those tables at request time. Almost nothing is computed live except lexical/semantic search and three of the nine recommendation model IDs: `popularity`, `embedding`, and `hybrid` (see [Recommendation routing](#recommendation-routing-live-vs-precomputed) below).
 
 For the step-by-step data pipeline (what runs in what order, what each script reads/writes), see [data-pipeline.md](data-pipeline.md). For dataset provenance and schema, see [docs/data/README.md](../data/README.md).
 
@@ -47,7 +47,7 @@ The backend follows a **routes → services → (ORM models / recommenders)** la
 
 Every request is logged (method, path, status, duration) via a `structlog`-based middleware in `backend/app/main.py`, console-rendered for local reading, not shipped anywhere. `AssistantService`'s two LLM-calling methods log the same way per attempt (model, duration, outcome). See `backend/app/core/logging_config.py`.
 
-### API surface: 18 endpoints across 6 files
+### API surface: 19 endpoints across 6 files
 
 | File → mount | Endpoints |
 |---|---|

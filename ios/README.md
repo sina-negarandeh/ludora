@@ -1,6 +1,6 @@
 # Ludora for iOS
 
-A native SwiftUI client for the Ludora catalog: browse, filter, sort, search, game detail, and reviews.
+A native SwiftUI client for the Ludora catalog: browse, filter, sort, search, game detail, statistics, rankings, ratings, and reviews.
 
 Swift 6, SwiftUI, iOS 17+, no third-party dependencies.
 
