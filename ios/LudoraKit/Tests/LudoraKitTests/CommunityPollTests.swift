@@ -33,7 +33,7 @@ struct CommunityPollTests {
     }
 
     /// "4+" has no numeric value of its own. Placing it at 4 would stack it
-    /// on the "4" bar; the web puts it one step past.
+    /// on the "4" bar. The web puts it one step past.
     @Test("places the open-ended bucket past the count it contains")
     func placesOpenBucket() {
         let bars = CommunityPoll.playerCountBars([

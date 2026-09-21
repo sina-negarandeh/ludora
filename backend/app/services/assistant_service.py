@@ -40,7 +40,7 @@ class AssistantService:
     also what this service did by hand before.
 
     PydanticAI owns schema presentation and the "output only JSON"
-    instruction; the rules text below stays hand-written, since that's
+    instruction. The rules text below stays hand-written, since that's
     domain knowledge about BGG's taxonomy, not plumbing.
     """
 
@@ -64,7 +64,7 @@ class AssistantService:
         # the previous hand-rolled loop bumped it to 0.3 on later
         # attempts. That bump existed because the old retry replayed a
         # byte-identical prompt, so a deterministic malformation would
-        # reproduce forever; jitter was the only way out. PydanticAI's
+        # reproduce forever. Jitter was the only way out. PydanticAI's
         # retry is not a replay -- it appends the specific validation
         # error, so the model is answering a different, more constrained
         # question each time. Verified directly against this server: a
@@ -183,7 +183,7 @@ class AssistantService:
 17. "search_mode" (lexical, semantic, or hybrid) almost always stays unset -- the default hybrid blends exact-text and thematic matching, right for nearly every request. Only set it when the user explicitly asks for one kind specifically: "lexical" for an exact-title/keyword lookup, "semantic" for a purely thematic/vibe-based ask unrelated to exact wording."""
 
     def _build_system_prompt(self) -> str:
-        """The full, static single-step system prompt — independent of any
+        """The full, static single-step system prompt, independent of any
         user message, so callers (e.g. an eval harness computing a
         prompt-version hash) can reconstruct exactly what was sent without
         duplicating it.
@@ -194,7 +194,7 @@ class AssistantService:
 
         /no_think: LLM_MODEL_NAME is Qwen3-4B, the same "thinking"-capable
         model family SummarizationService's prompts already prefix with
-        /no_think — single-shot JSON classification doesn't need or want
+        /no_think. Single-shot JSON classification doesn't need or want
         extended reasoning, and thinking output costs latency for nothing
         on a task this shallow.
         """
@@ -211,8 +211,8 @@ Important Rules:
         """The plan-based system prompt used by parse_plan(). Reuses the
         same per-step rules as the single-step prompt above (via
         _intent_rules_text()), then adds decomposition-specific rules on
-        top -- most requests should still come back as a one-step plan;
-        the model only needs to reach for a second step when a later
+        top -- most requests should still come back as a one-step plan.
+        The model only needs to reach for a second step when a later
         step's input genuinely can't be filled in without an earlier
         step's result.
 
@@ -222,12 +222,12 @@ Important Rules:
         this server: with /no_think, Qwen3-4B reliably emitted a
         structurally invalid JSON plan (one extra closing brace) on a
         query needing real decomposition -- byte-identical across
-        temperatures 0.0 and 0.3, so not a sampling fluke; allowing
+        temperatures 0.0 and 0.3, so not a sampling fluke. Allowing
         thinking mode fixed it in the same test (valid JSON, correctly
         structured) at roughly 8x the latency (2.3s -> 17.9s).
 
         As with the single-step prompt above, no JSON schema and no
-        "output only JSON" rule live here -- PromptedOutput appends both.
+        "output only JSON" rule live here -- PromptedOut. T appends both.
         """
         thinking_directive = "" if allow_thinking else "/no_think\n"
         return f"""{thinking_directive}You are the Ludora Assistant, an expert in board games.

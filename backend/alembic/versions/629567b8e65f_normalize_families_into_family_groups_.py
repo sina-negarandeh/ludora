@@ -24,7 +24,7 @@ def upgrade() -> None:
     # a proper two-level hierarchy: families = the 72 BGG namespaces
     # ("Animals", "Mechanism", "Theme", ...) as first-class rows, subfamilies
     # = the 4,208 specific values within a group, FK'd to their family.
-    # Games link to the leaf level only (game_subfamilies) — a game is never
+    # Games link to the leaf level only (game_subfamilies). A game is never
     # tagged with a bare group in the source data, so a direct game<->family
     # join table would just be derived/redundant. See docs/data/README.md.
     op.drop_table('game_families')

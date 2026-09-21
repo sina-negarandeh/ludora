@@ -42,7 +42,7 @@ public extension FamilyGrouping {
 
     /// Groups families by namespace, sorted by namespace name.
     ///
-    /// Only the groups are sorted; values keep the order they arrived in, so
+    /// Only the groups are sorted. Values keep the order they arrived in, so
     /// any ranking the API applied survives.
     static func grouping(_ families: [String]) -> [FamilyGrouping] {
         var valuesByName: [String: [String]] = [:]

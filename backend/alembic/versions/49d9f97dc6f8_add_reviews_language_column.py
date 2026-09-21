@@ -4,7 +4,7 @@ Revision ID: 49d9f97dc6f8
 Revises: 629567b8e65f
 Create Date: 2026-08-17 11:55:05.324698
 
-Backfills nothing by itself — detected via fastText and populated by
+Backfills nothing by itself. Values are detected via fastText and populated by
 scripts/detect_languages.py, which now finds the column ready instead of
 requiring the ad hoc scripts/alter_table.py to have been run first.
 """

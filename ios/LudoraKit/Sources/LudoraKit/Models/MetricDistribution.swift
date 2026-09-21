@@ -174,7 +174,7 @@ public struct MetricDistributions: Codable, Hashable, Sendable {
 
     /// The curve for a metric within a group, falling back to "Overall".
     ///
-    /// A game in a thin subdomain should still get a curve to sit on; a
+    /// A game in a thin subdomain should still get a curve to sit on. A
     /// comparison against every game is more useful than no comparison. The
     /// caller is told which group it got so the caption can say so rather
     /// than claiming a subdomain comparison it did not make.

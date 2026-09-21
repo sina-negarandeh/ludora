@@ -8,7 +8,7 @@ from app.services.metadata_service import MetadataService
 
 router = APIRouter(tags=["metadata"])
 
-@router.get("/subdomains", response_model=list[SubdomainMetadata], summary="Get Subdomains", description="Retrieve BGG's rank/leaderboard classifications (Strategy, Family, Party, etc.) — not content categories, see /categories for those — along with how many ranked games fall under each.")
+@router.get("/subdomains", response_model=list[SubdomainMetadata], summary="Get Subdomains", description="Retrieve BGG's rank/leaderboard classifications (Strategy, Family, Party, etc.), not content categories, see /categories for those. Includes how many ranked games fall under each.")
 def get_subdomains(search: str = Query(None), limit: int = Query(None), db: Session = Depends(get_db)):
     return MetadataService(db).get_subdomains(search=search, limit=limit)
 
@@ -20,7 +20,7 @@ def get_categories(search: str = Query(None), limit: int = Query(None), db: Sess
 def get_themes(search: str = Query(None), limit: int = Query(None), db: Session = Depends(get_db)):
     return MetadataService(db).get_themes(search=search, limit=limit)
 
-@router.get("/families", response_model=list[FamilyGroupMetadata], summary="Get Families", description="Retrieve BGG Family tags (boardgamefamily, all 72 namespaces — e.g. Animals, Mechanism, Theme, Crowdfunding), grouped by namespace with per-value usage counts.")
+@router.get("/families", response_model=list[FamilyGroupMetadata], summary="Get Families", description="Retrieve BGG Family tags (boardgamefamily, all 72 namespaces: e.g. Animals, Mechanism, Theme, Crowdfunding), grouped by namespace with per-value usage counts.")
 def get_families(search: str = Query(None), db: Session = Depends(get_db)):
     return MetadataService(db).get_families(search=search)
 

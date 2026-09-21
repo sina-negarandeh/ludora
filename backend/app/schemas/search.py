@@ -18,7 +18,7 @@ class SearchQuery(BaseModel):
     # caller builds one of these -- the route, the assistant, the entity
     # resolver, the evaluation harness -- so folding here covers all of them
     # by construction instead of by each one remembering. It also puts the
-    # guarantee in the OpenAPI contract. Folds to "" for blank input; see
+    # guarantee in the OpenAPI contract. Folds to "" for blank input. See
     # `SearchService.search`, which treats that as "no query".
     q: Annotated[str, AfterValidator(normalize_query)] = Field(
         ..., description="The search string provided by the user. Whitespace-collapsed and case-folded before retrieval."

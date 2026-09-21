@@ -80,7 +80,7 @@ struct RatingBreakdownTests {
         #expect(breakdown.peak == 0)
     }
 
-    /// `numRatings` is optional on the model; the bars still add up.
+    /// `numRatings` is optional on the model. The bars still add up.
     @Test("falls back to the distribution's own sum")
     func fallsBackToSum() throws {
         var distribution = Array(repeating: 0, count: 19)

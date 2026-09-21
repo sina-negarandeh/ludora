@@ -12,13 +12,13 @@ import mlflow
 client = TestClient(app)
 
 # Bump this whenever TEST_CASES changes meaningfully (new/changed queries or
-# expectations) — an LLM-prompted feature's "eval dataset" is this fixed set
+# expectations). An LLM-prompted feature's "eval dataset" is this fixed set
 # of cases, and its version should move independently of the code version.
 # v2: the "compare" intent (and its two test cases below) was removed
 # entirely from the assistant.
 EVAL_DATASET_VERSION = "smoke_v2"
 
-# Each case's "expect" is a minimal, honest check — not a semantic-quality
+# Each case's "expect" is a minimal, honest check, not a semantic-quality
 # benchmark. It confirms the pipeline routes to the right intent (and, for
 # the ambiguity case, actually asks for clarification) so a regression in
 # intent parsing shows up as a metric drop over time instead of silently
@@ -31,7 +31,7 @@ TEST_CASES = [
 
 def test_chat():
     # The system prompt is static regardless of user message (see
-    # AssistantService._build_system_prompt) — hash it once here rather than
+    # AssistantService._build_system_prompt). Hash it once here rather than
     # re-deriving it per request, since this is what actually determines
     # behavior for an LLM-prompted feature (there's no trained model/weights
     # to version, the prompt *is* the thing being versioned).

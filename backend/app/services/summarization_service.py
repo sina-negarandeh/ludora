@@ -1,4 +1,4 @@
-# Known limitation, tracked in docs/roadmap.md: app/database/models.py uses
+# Known limitation, tracked in docs/engineering/testing.md: app/database/models.py uses
 # SQLAlchemy's legacy Column(...) declarative style, not 2.0's typed
 # Mapped[]/mapped_column(). Pyright can't tell an instance attribute like
 # `game.rank` apart from the class-level Column descriptor, so it reports
@@ -38,13 +38,13 @@ class SummarizationService:
     def __init__(self, db: Session):
         self.db = db
         # Deliberately separate from the assistant's OPENAI_*/LLM_MODEL_NAME
-        # settings — see app.core.config.Settings for why.
+        # settings. See app.core.config.Settings for why.
         self.client = OpenAI(base_url=settings.SUMMARIZATION_OPENAI_BASE_URL, api_key=settings.SUMMARIZATION_OPENAI_API_KEY)
         self.model = settings.SUMMARIZATION_MODEL_NAME
         # Seeded so the same aspect's evidence sample (and thus the same LLM
         # input) is reproducible across offline generate_summaries.py runs.
         self._rng = random.Random(RANDOM_SEED)
-        # Per-call (prompt_hash, latency_seconds) log — an LLM-prompted feature's
+        # Per-call (prompt_hash, latency_seconds) log. An LLM-prompted feature's
         # "training" is really its prompt, so this is what generate_summaries.py
         # logs to MLflow instead of conventional model hyperparameters.
         self.llm_calls: list[dict] = []
@@ -113,7 +113,7 @@ Output ONLY valid JSON matching this schema. No markdown wrapping.
 
     def _classify_outcome(self, agg: GameAspectAggregate) -> tuple[str, float, float, float]:
         """Same Positive/Negative/Mixed-Neutral rule as the aspect cards
-        (AspectService.get_game_aspects(), GameDetail.tsx) — an aspect only
+        (AspectService.get_game_aspects(), GameDetail.tsx). An aspect only
         claims a confident label if that share of mentions clears
         CARD_DOMINANCE_THRESHOLD, otherwise it's genuinely split. Keeping
         this identical to the card logic means the summary paragraph can
@@ -155,7 +155,7 @@ Output ONLY valid JSON matching this schema. No markdown wrapping.
         for _sentiment, group_reviews in sentiment_groups.items():
             proportion = len(group_reviews) / len(reviews)
             sample_size = max(1, int(MAX_REVIEWS_PER_ASPECT * proportion))
-            # Shuffle safely for sampling (seeded — see __init__)
+            # Shuffle safely for sampling (seeded, see __init__)
             self._rng.shuffle(group_reviews)
             sampled.extend(group_reviews[:sample_size])
             
@@ -232,7 +232,7 @@ Evidence sample ({len(reviews)} of the mentions above; Positive: {positive}, Neg
                 mini_summary = self._summarize_aspect(agg.aspect, sampled_reviews, outcome, pos_ratio, neu_ratio, neg_ratio)
             except ValidationError:
                 # Retries in _call_llm_json already absorb the common
-                # transient case (empty completion); if it's still failing
+                # transient case (empty completion). If it's still failing
                 # after those, skip this one aspect rather than losing the
                 # whole game's summary over it -- especially important once
                 # this runs across many games unattended.

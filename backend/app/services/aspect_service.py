@@ -1,4 +1,4 @@
-# Known limitation, tracked in docs/roadmap.md: app/database/models.py uses
+# Known limitation, tracked in docs/engineering/testing.md: app/database/models.py uses
 # SQLAlchemy's legacy Column(...) declarative style, not 2.0's typed
 # Mapped[]/mapped_column(). Pyright can't tell an instance attribute like
 # `game.rank` apart from the class-level Column descriptor, so it reports

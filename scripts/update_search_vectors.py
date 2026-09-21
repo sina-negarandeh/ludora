@@ -7,17 +7,17 @@ def update_lexical_search_vectors():
     db = SessionLocal()
     
     # Weight A: Name
-    # Weight B: Themes, Mechanics, Categories, Subdomains, Families — every
+    # Weight B: Themes, Mechanics, Categories, Subdomains, Families. Every
     #   structured taxonomy tag, all in one tier. Subdomains/Families were
     #   missing from this tsvector entirely until now (a real gap: both are
-    #   used everywhere else — filters, the embedding document — but were
+    #   used everywhere else (filters, the embedding document) but were
     #   never indexed for lexical search, so a query for a subdomain name
     #   like "party game" or a family name matched nothing on that basis).
-    # Weight C: Description — free text; useful for phrase/unique-word
+    # Weight C: Description. Free text, useful for phrase/unique-word
     #   matches, but also the main source of incidental noise (a long,
     #   flavor-text-heavy description is more likely to contain a query's
     #   words by coincidence, unrelated to what the game is actually about
-    #   — see docs/ml/model-cards/search-lexical.md for a concrete example).
+    #   See docs/ml/search.md for a concrete example).
     #   Deliberately still below the structured tags in weight, not removed.
     # Weight D: Designers, Artists, Publishers
 

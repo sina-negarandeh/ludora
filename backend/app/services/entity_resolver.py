@@ -36,7 +36,7 @@ class EntityResolver:
     }
     # Credited-entity tags: real people/companies can genuinely hold more
     # than one role -- e.g. Uwe Rosenberg is a real, legitimate entry in
-    # both `designers` and `artists` (confirmed against the DB; not a
+    # both `designers` and `artists` (confirmed against the DB. Not a
     # data error). Cross-checking these the same way as the content tags
     # above would flag that as a false ambiguity even though the user's
     # phrasing ("designed by") and the LLM's field placement already
@@ -123,7 +123,7 @@ class EntityResolver:
         # The canonical fold, not `.lower()`: it collapses whitespace and
         # folds the German sharp s, so "Straße" typed as "STRASSE" counts as
         # the exact match it plainly is. Retrieval already compares queries
-        # this way; two notions of equality in one lookup is one too many.
+        # this way. Two notions of equality in one lookup is one too many.
         wanted = normalize_query(query)
         exact_matches = [r for r in items if normalize_query(r.game.name) == wanted]
         if len(exact_matches) == 1:

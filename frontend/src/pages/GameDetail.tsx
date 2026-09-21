@@ -365,7 +365,7 @@ const DistributionChart = ({
           <div className="w-px border-l-2 border-dashed border-neutral/30 h-full relative" />
         </div>
 
-        {/* Value Marker(s) — with more than one (e.g. Community Min/Max), each sits at its own
+        {/* Value Marker(s). With more than one (e.g. Community Min/Max), each sits at its own
             height so labels never collide with each other or with the AVG/reference chip above
             (measured: the chip is ~13px tall, each label ~14px tall, so levels need >=16px of
             clearance from the chip and >=16px from each other). Single-marker charts keep the
@@ -460,7 +460,7 @@ const generateNiceTicks = (min: number, max: number, targetCount = 6): number[] 
   return ticks;
 };
 
-// Compact axis-tick text — whole numbers stay bare, fractional ones get one decimal.
+// Compact axis-tick text. Whole numbers stay bare, fractional ones get one decimal.
 const formatTick = (v: number): string => Number.isInteger(v) ? v.toString() : v.toFixed(1);
 
 const PollBarChart: React.FC<{
@@ -483,7 +483,7 @@ const PollBarChart: React.FC<{
   const ticks = density ? pickTicks(bars.map(b => b.x)) : [];
 
   // Size bars to the tightest real gap between them, so adjacent values (e.g. ages 1 and 2)
-  // never overlap — then clamp their centers so the outermost bars stay inside the track.
+  // never overlap, then clamp their centers so the outermost bars stay inside the track.
   const positions = density ? bars.map(b => posFor(b.x) ?? 0).sort((a, b) => a - b) : [];
   let minGapPct = 100;
   for (let i = 1; i < positions.length; i++) {
@@ -603,7 +603,7 @@ const GameDistributions: React.FC<{ game: Game }> = ({ game }) => {
   }
 
   // BGG appears to fall back to the manufacturer's playtime when no distinct
-  // community min/max was ever recorded — empirically, min==max==mfg_playtime
+  // community min/max was ever recorded. Empirically, min==max==mfg_playtime
   // for every "collapsed" case (0 games have min==max diverging from mfg),
   // so treat that combination as absent data rather than genuine agreement.
   const hasDistinctCommunityPlaytime = !(
@@ -1101,7 +1101,7 @@ const ReviewCard: React.FC<{ review: Review; onReadMore: (review: Review) => voi
     const el = pRef.current;
     if (!el) return;
     // Character count is a poor proxy for whether the 4-line clamp actually cut
-    // anything off — wrapping depends on card width and word boundaries, so a
+    // anything off, since wrapping depends on card width and word boundaries, so a
     // ~300-char review can render in full within 4 lines. Measure the real
     // rendered overflow instead, so "Read more" never opens a modal showing
     // the exact same text already visible on the card.
@@ -1459,10 +1459,10 @@ const CommunityConsensus = ({ gameId, summary }: { gameId: number, summary?: str
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {(showAll ? aspects : aspects.slice(0, 6)).map((agg, idx) => {
           // Three-way sentiment: positive/negative only claim the card if
-          // they clear CARD_DOMINANCE_THRESHOLD (60%) — keep in sync with
+          // they clear CARD_DOMINANCE_THRESHOLD (60%). Keep in sync with
           // backend/app/core/ml_config.py::ABSAConfig.CARD_DOMINANCE_THRESHOLD.
           // Below that on both sides, the card falls back to Mixed/Neutral
-          // rather than picking an arbitrary plurality winner — a 45/10/45
+          // rather than picking an arbitrary plurality winner. A 45/10/45
           // positive/neutral/negative split is a genuinely divided aspect,
           // not a "positive" one on a coin-flip tiebreak.
           const total = Math.max(1, agg.total_mentions);
@@ -1478,8 +1478,8 @@ const CommunityConsensus = ({ gameId, summary }: { gameId: number, summary?: str
           // The displayed percentage (and the evidence quote, chosen
           // server-side the same way) always reflects the largest of the
           // three buckets. Crossing the dominance threshold above
-          // mathematically guarantees that bucket is also the largest — the
-          // other two must share the remainder — so this only diverges from
+          // mathematically guarantees that bucket is also the largest, since the
+          // other two must share the remainder, so this only diverges from
           // "the dominant sentiment" in the Mixed case, where there's no
           // single confident label anyway and the largest bucket is the
           // only sensible number to show.

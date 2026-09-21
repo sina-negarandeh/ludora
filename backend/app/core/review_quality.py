@@ -2,20 +2,20 @@
 
 Purpose: shrink the review pool *before* the genuinely expensive step
 (DeBERTa ABSA classification), not classify text quality in the abstract.
-Every signal here is a deterministic hash, count, or ratio over the text —
-no model inference, no training, no labeled data — so this is fast enough
+Every signal here is a deterministic hash, count, or ratio over the text:
+no model inference, no training, no labeled data. That is fast enough
 to run over the full ~4.2M-review corpus as a pre-filter. The one exception,
 stemming (NLTK's SnowballStemmer), is a rule-based suffix-stripping
 algorithm, not a learned model, and is only used for the one-time corpus
 statistics pass (scripts/build_review_quality_vocab.py) and at per-review
-scoring time for the specificity signal — never per-review for anything
+scoring time for the specificity signal, never per-review for anything
 performance-critical enough to matter.
 
-Design, in pipeline order (see docs/ml/model-cards/absa-deberta.md):
-  1. Language gate       — reuses reviews.language/language_confidence
-  2. Hard filters         — binary pass/fail on categorically unusable text
-  3. Dedup (exact + near) — SimHash, caller-managed (stateful across a run)
-  4. Weighted score       — information density, lexical diversity, domain
+Design, in pipeline order (see docs/ml/absa.md):
+  1. Language gate       : reuses reviews.language/language_confidence
+  2. Hard filters         : binary pass/fail on categorically unusable text
+  3. Dedup (exact + near) : SimHash, caller-managed (stateful across a run)
+  4. Weighted score       : information density, lexical diversity, domain
                             specificity, boilerplate penalty
 """
 import hashlib
@@ -34,7 +34,7 @@ from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 from app.core.ml_config import ABSAConfig
 
 # Same tokenization regex TfidfVectorizer uses elsewhere in this repo
-# (scripts/precompute_content_recommendations.py) — kept consistent rather
+# (scripts/precompute_content_recommendations.py), kept consistent rather
 # than introducing a second tokenization convention. Fast, stdlib-only.
 _TOKEN_PATTERN = re.compile(r"(?u)\b\w\w+\b")
 
@@ -48,8 +48,8 @@ def _ensure_nltk_stopwords() -> None:
 
 _ensure_nltk_stopwords()
 
-# Union of both, not either alone — sklearn's and NLTK's English stopword
-# lists don't fully overlap; combining them is a strict improvement in
+# Union of both, not either alone. sklearn's and NLTK's English stopword
+# lists don't fully overlap. Combining them is a strict improvement in
 # coverage for zero extra runtime cost (still just a frozenset lookup).
 STOPWORDS: set[str] = set(ENGLISH_STOP_WORDS) | set(nltk_stopwords.words("english"))
 
@@ -64,19 +64,19 @@ def _ensure_vader_lexicon() -> None:
 
 
 _ensure_vader_lexicon()
-# VADER — a fixed, hand-built lexicon + rule-based scorer (not trained by
-# us; same category as fastText's pretrained language model), specifically
+# VADER is a fixed, hand-built lexicon + rule-based scorer (not trained by
+# us. Same category as fastText's pretrained language model), specifically
 # designed for short, informal text like this. Added after finding that
 # stopword-ratio/density (this module's original signals) can't reliably
 # tell a genuine short opinion ("Cool little drafting game.", zero
 # stopwords) apart from a metadata/collection-log fragment ("Received
-# 04/08/2023", also zero stopwords) — both are short and stopword-free, but
+# 04/08/2023", also zero stopwords). Both are short and stopword-free, but
 # only one expresses sentiment. compound == 0.0 means the lexicon matched
 # *no* sentiment-bearing words at all, which is a real, if imperfect,
 # signal: it catches most metadata/trade-log noise, but also misses some
 # (a lexicon can't tell "best 3-4 players" apart from "this is the best
-# game", and won't match a typo like "Wast" for "waste") — see
-# docs/ml/model-cards/absa-deberta.md for the measured false-reject rate.
+# game", and won't match a typo like "Wast" for "waste"). See
+# docs/ml/absa.md for the measured false-reject rate.
 _sia = SentimentIntensityAnalyzer()
 
 
@@ -122,15 +122,15 @@ def has_valid_unicode(text: str) -> bool:
 
 def passes_language_filter(language: str | None, confidence: float | None) -> bool:
     """Reads the already-computed reviews.language/language_confidence
-    columns (scripts/detect_languages.py) — does not run fastText itself.
+    columns (scripts/detect_languages.py). Does not run fastText itself.
     The old compute_quality_score() re-ran language ID from scratch on every
-    call despite this column already existing; this is strictly redundant
+    call despite this column already existing. This is strictly redundant
     work removed, not new behavior."""
     return language == "en" and (confidence or 0.0) >= ABSAConfig.QUALITY_MIN_LANGUAGE_CONFIDENCE
 
 
 def passes_hard_filters(text: str) -> bool:
-    """Binary gate — categorically unusable text, no ambiguity. Deliberately
+    """Binary gate: categorically unusable text, no ambiguity. Deliberately
     cheap and run first: eliminates the most obvious garbage before any of
     the pricier per-review computation below runs."""
     if not text or not isinstance(text, str):
@@ -151,7 +151,7 @@ def passes_hard_filters(text: str) -> bool:
 
 
 # --- SimHash near-duplicate detection ---
-# Deterministic hashing, not a trained model — two near-identical texts
+# Deterministic hashing, not a trained model. Two near-identical texts
 # produce fingerprints with a small Hamming distance even when not
 # byte-identical, catching reformatted/lightly-edited duplicate reviews
 # that exact-match normalization (normalize_for_dedup) misses.
@@ -188,7 +188,7 @@ def is_near_duplicate(fingerprint: int, seen_fingerprints: Iterable[int], max_di
 # --- Continuous quality signals ---
 
 def information_density(tokens: list[str]) -> float:
-    """content tokens / total tokens — non-stopword share of the review."""
+    """content tokens / total tokens: the non-stopword share of the review."""
     if not tokens:
         return 0.0
     content = [t for t in tokens if t not in STOPWORDS]
@@ -196,7 +196,7 @@ def information_density(tokens: list[str]) -> float:
 
 
 def lexical_diversity(tokens: list[str]) -> float:
-    """unique tokens / total tokens (type-token ratio) — catches padded,
+    """unique tokens / total tokens (type-token ratio). Catches padded,
     repetitive text long enough to pass a pure length check
     ("good good good fun fun")."""
     if not tokens:
@@ -206,7 +206,7 @@ def lexical_diversity(tokens: list[str]) -> float:
 
 def specificity_score(tokens: list[str], domain_vocab: set[str] | None = None) -> float:
     """Fraction of (stemmed) tokens that are game-specific/content-bearing
-    terms, per ABSAConfig.DOMAIN_VOCABULARY — a corpus-derived,
+    terms, per ABSAConfig.DOMAIN_VOCABULARY, a corpus-derived,
     human-curated list (see scripts/build_review_quality_vocab.py), not a
     hand-guessed one. Both the vocabulary and the tokens here are stemmed,
     so "component"/"components" match the same vocabulary entry."""
@@ -225,7 +225,7 @@ def boilerplate_fraction(
     boilerplate_ngrams: set[tuple[str, ...]] | None = None,
     n: int | None = None,
 ) -> float:
-    """Fraction of tokens falling inside a corpus-frequent n-gram — catches
+    """Fraction of tokens falling inside a corpus-frequent n-gram. Catches
     templated phrases reused across *different* users' reviews, not just
     whole-review duplicates (which dedup/SimHash already handles)."""
     n = n or ABSAConfig.BOILERPLATE_NGRAM_SIZE
@@ -246,7 +246,7 @@ _BOILERPLATE_NGRAMS_PATH = os.path.join(
 
 def load_boilerplate_ngrams() -> set[tuple[str, ...]]:
     """Optional precomputed artifact (scripts/build_review_quality_vocab.py)
-    — if it hasn't been built yet, the boilerplate signal just contributes
+    If it hasn't been built yet, the boilerplate signal just contributes
     nothing rather than failing. Shared by every script that scores review
     quality, so the path/format lives in one place."""
     if not os.path.exists(_BOILERPLATE_NGRAMS_PATH):
@@ -261,7 +261,7 @@ def compute_quality_score(
     boilerplate_ngrams: set[tuple[str, ...]] | None = None,
 ) -> float:
     """Weighted combination of the four continuous signals. Hard gates,
-    language filtering, and dedup are applied separately upstream — they're
+    language filtering, and dedup are applied separately upstream. They're
     binary pass/fail decisions, not inputs to a weighted score."""
     tokens = tokenize(text)
     if not tokens:

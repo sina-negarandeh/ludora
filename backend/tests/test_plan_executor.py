@@ -157,7 +157,7 @@ def test_names_resolved_by_an_earlier_step_reach_the_handler():
     orch = FakeOrchestrator()
     _run(orch, _plan(GameFilters(subdomains=["Party"])))
 
-    # Step 0 has nothing resolved yet; step 1 runs against the exact id
+    # Step 0 has nothing resolved yet. Step 1 runs against the exact id
     # step 0 produced, so it can skip the fuzzy resolver.
     assert orch.known_seen[0] == {}
     assert orch.known_seen[1] == {"Found Game": 42}

@@ -13,7 +13,7 @@ Fixes a taxonomy mislabeling confirmed against BGG's own wiki
 - What this schema called "themes" is actually jvanelteren's
   boardgamecategory field, i.e. BGG's real Category taxonomy.
 - A genuine BGG "Theme" is a distinct thing: the `Theme:`-prefixed group
-  within BGG's Family field (e.g. "Theme: Cthulhu Mythos") — nothing in
+  within BGG's Family field (e.g. "Theme: Cthulhu Mythos"). Nothing in
   this schema sourced that until now.
 
 Plain drop-and-recreate, not a rename: the pipeline truncates and reloads
@@ -44,7 +44,7 @@ def upgrade() -> None:
     op.drop_index(op.f('ix_themes_name'), table_name='themes')
     op.drop_table('themes')
 
-    # subdomains — was "categories" (8 values: Thematic/Strategy/War/
+    # subdomains: was "categories" (8 values: Thematic/Strategy/War/
     # Family/CGS/Abstract/Party/Childrens)
     op.create_table(
         'subdomains',
@@ -63,7 +63,7 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_game_subdomains_subdomain_id'), 'game_subdomains', ['subdomain_id'], unique=False)
 
-    # categories — was "themes" (jvanelteren boardgamecategory, ~86 values)
+    # categories: was "themes" (jvanelteren boardgamecategory, ~86 values)
     op.create_table(
         'categories',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
@@ -81,7 +81,7 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_game_categories_category_id'), 'game_categories', ['category_id'], unique=False)
 
-    # themes — new, correctly sourced from BGG Family's "Theme:" group
+    # themes: new, correctly sourced from BGG Family's "Theme:" group
     op.create_table(
         'themes',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),

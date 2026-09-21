@@ -26,7 +26,7 @@ def main():
     # always read zero rows for them -- there's nothing here for those two
     # to evaluate.
     models = ['metadata', 'tfidf', 'graph_jaccard', 'deepwalk', 'cf_item_cosine', 'cf_als']
-    # Technique-family grouping, matching the precompute/training-side experiments —
+    # Technique-family grouping, matching the precompute/training-side experiments,
     # so a model's eval run lands in the same MLflow experiment as its training run.
     MODEL_EXPERIMENT = {
         'metadata': 'recommender/content_based', 'tfidf': 'recommender/content_based',

@@ -6,7 +6,7 @@ class MetricDistribution(BaseModel):
 
     Produced offline by `scripts/generate_distributions.py`, which bins the
     raw Kaggle values and smooths them. `x` holds the bin centres and
-    `density` the smoothed weight at each; both are the same length, and
+    `density` the smoothed weight at each. Both are the same length, and
     `cdf` is the running total, so a client can place a game on the curve
     ("heavier than 82% of strategy games") without recomputing anything.
     """

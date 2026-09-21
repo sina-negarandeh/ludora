@@ -9,7 +9,7 @@ to dodge a circular import.
 
 Both functions are pure. Resolution used to write resolved names into a
 mutable `_known_bgg_ids` map on the orchestrator, reset per request by
-convention; resolve_step now returns those names alongside the step, and
+convention. resolve_step now returns those names alongside the step, and
 the caller decides where to keep them (plan_executor keeps them in the
 walk's own state, which is where per-execution data belongs).
 """

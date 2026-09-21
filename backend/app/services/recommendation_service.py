@@ -1,4 +1,4 @@
-# Known limitation, tracked in docs/roadmap.md: app/database/models.py uses
+# Known limitation, tracked in docs/engineering/testing.md: app/database/models.py uses
 # SQLAlchemy's legacy Column(...) declarative style, not 2.0's typed
 # Mapped[]/mapped_column(). Pyright can't tell an instance attribute like
 # `game.rank` apart from the class-level Column descriptor, so it reports
@@ -126,7 +126,7 @@ class RecommendationService:
                 .all()
             )
 
-            # cosine_distance is 0 (identical) to 2 (opposite); similarity =
+            # cosine_distance is 0 (identical) to 2 (opposite). Similarity =
             # 1 - distance gives the conventional -1..1 cosine similarity
             # instead of the previous hardcoded, meaningless score of 1.0
             # for every single result.

@@ -29,7 +29,7 @@ def download_fasttext_model(model_path):
 
 def detect_language(ft_model, text_str):
     """Returns (language, confidence). 'unknown'/None means there was no
-    usable text to classify — distinct from a real, low-confidence guess,
+    usable text to classify, distinct from a real, low-confidence guess,
     which is still returned as-is so callers can threshold on `confidence`
     themselves rather than have the pipeline throw the guess away.
     """
@@ -83,7 +83,7 @@ def run(limit=None):
             if not rows:
                 break
 
-            # Process batch — a single row's prediction failing (e.g. malformed
+            # Process batch. A single row's prediction failing (e.g. malformed
             # text) must not crash the whole batch and leave that row NULL
             # forever, permanently re-blocking every future run on it.
             updates = []

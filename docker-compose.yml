@@ -19,13 +19,13 @@ services:
       retries: 5
 
   # No `backend` service: the backend needs to run natively on the host, not
-  # in this Docker Compose stack — as of the Qwen3-Embedding/MLX search
+  # in this Docker Compose stack. As of the Qwen3-Embedding/MLX search
   # migration, SearchService imports `mlx-embeddings`, and MLX only runs on
   # macOS with Apple Silicon (it's built on Metal/Accelerate). This
   # container used a `python:3.12-slim` (Linux) base image, which cannot
-  # install or run mlx at all — no rebuild fixes this, it's a platform
+  # install or run mlx at all. No rebuild fixes this, it's a platform
   # constraint, not a missing dependency. Run the backend with
-  # `cd backend && uv run uvicorn app.main:app --reload` instead — see
+  # `cd backend && uv run uvicorn app.main:app --reload` instead. See
   # docs/setup/README.md.
 
   pgadmin:

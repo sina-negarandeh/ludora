@@ -40,7 +40,7 @@ def upgrade() -> None:
     op.add_column('games', sa.Column('suggested_language_dependence', sa.JSON(), nullable=True))
 
     # jvanelteren boardgameexpansion / boardgameimplementation / boardgameintegration.
-    # Source data links by name, not BGGId; related_game_id is null wherever
+    # Source data links by name, not BGGId. related_game_id is null wherever
     # the name didn't resolve to an exact (case/whitespace-normalized) match
     # against a known game.
     op.create_table(

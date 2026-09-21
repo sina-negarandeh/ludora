@@ -1,13 +1,13 @@
-"""Shared MLflow tracking setup — local SQLite store, no server required.
+"""Shared MLflow tracking setup: local SQLite store, no server required.
 
 Every training/precompute/evaluation script uses `tracked_run()` instead of
 calling `mlflow.start_run()` directly, so the tracking URI and experiment
 naming convention stay consistent everywhere. MLflow 3.x deprecated the raw
-filesystem tracking backend in favor of a SQLite-backed local store — this
+filesystem tracking backend in favor of a SQLite-backed local store. That
 is still fully local and server-free, just a single `.db` file instead of a
-directory tree. Run history, params, and metrics land in `mlruns/mlflow.db`;
-artifacts land under `mlruns/artifacts/<experiment>/` (both gitignored —
-browse everything with `uv run --project backend mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db --port 5001`).
+directory tree. Run history, params, and metrics land in `mlruns/mlflow.db`.
+Artifacts land under `mlruns/artifacts/<experiment>/` (both gitignored).
+Browse everything with `uv run --project backend mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db --port 5001`).
 Port 5001, not MLflow's default 5000 -- on macOS (Monterey+), port 5000 is
 bound by the system AirPlay Receiver, so `mlflow ui` on its default port
 either fails to start or gets silently shadowed by that instead.
@@ -24,8 +24,8 @@ from contextlib import contextmanager
 
 import mlflow
 
-# Resolves to <repo-root>/mlruns regardless of the invoking process's CWD —
-# scripts run from repo root, services run from backend/, both land here.
+# Resolves to <repo-root>/mlruns regardless of the invoking process's CWD.
+# Scripts run from repo root, services run from backend/, both land here.
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 _MLRUNS_DIR = os.path.join(_REPO_ROOT, "mlruns")
 _TRACKING_DB = os.path.join(_MLRUNS_DIR, "mlflow.db")
@@ -50,11 +50,11 @@ def tracked_run(experiment: str, run_name: str | None = None):
 
     Experiments are grouped by technique family, not by individual model id,
     so that directly-comparable models land as separate *runs* within one
-    experiment — MLflow's run-comparison table only compares runs within the
+    experiment. MLflow's run-comparison table only compares runs within the
     same experiment, and "compare these algorithms side by side" is the
     whole point here (e.g. `recommender/collaborative` holds one run each
     for cf_item_cosine/cf_als, rather than two separate experiments).
-    See docs/ml/model-cards/ for the full experiment-per-model map.
+    See docs/ml/ for the full experiment-per-model map.
 
     Usage:
         with tracked_run("recommender/collaborative", run_name="cf_als_train"):
@@ -63,7 +63,7 @@ def tracked_run(experiment: str, run_name: str | None = None):
             mlflow.log_metrics({"precision_at_10": 0.12})
             mlflow.log_artifact(model_path)
 
-    LLM-prompted features (no trained model/hyperparameters — the prompt
+    LLM-prompted features (no trained model/hyperparameters, since the prompt
     text is the thing that determines behavior) live under a separate
     `llm/` namespace and log a different shape: a prompt hash, latency,
     and an eval-dataset version, not conventional hyperparameters. See
@@ -78,8 +78,8 @@ def write_results_json(name: str, data: dict) -> str:
     """Write an evaluation result to backend/evaluation/results/<name>_latest.json.
 
     Complements MLflow's full run history with a single, plain, version-
-    controllable file — for anyone (or a doc) who wants the current number
-    without opening the MLflow UI. Overwrites on every run by design; MLflow
+    controllable file, for anyone (or a doc) who wants the current number
+    without opening the MLflow UI. Overwrites on every run by design. MLflow
     is the place to look for history across runs.
     """
     results_dir = os.path.join(_REPO_ROOT, "backend", "evaluation", "results")

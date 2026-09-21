@@ -153,7 +153,7 @@ class AssistantOrchestrator:
         runs (see plan_graph.compile_plan) -- every "$stepN" reference is
         checked to point at an earlier, existing step up front, so the
         walk never has to handle an out-of-range or forward reference
-        itself; if compile_plan doesn't raise, every dependency lookup
+        itself. If compile_plan doesn't raise, every dependency lookup
         during execution is guaranteed safe.
 
         The walk itself lives in plan_executor as a LangGraph state

@@ -4,9 +4,9 @@ Revision ID: 7504c1be2bde
 Revises: f46da67cfb4f
 Create Date: 2026-08-17 12:47:46.564413
 
-Confirmed NULL across all 4.2M rows in the jvanelteren review source — the
+Confirmed NULL across all 4.2M rows in the jvanelteren review source. The
 raw data never carried a per-review timestamp, so nothing populates this
-column. Downgrade recreates it empty; there is no data to restore.
+column. Downgrade recreates it empty. There is no data to restore.
 """
 from typing import Sequence, Union
 

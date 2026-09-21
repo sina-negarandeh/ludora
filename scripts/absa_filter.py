@@ -27,7 +27,7 @@ def download_fasttext_model(model_path):
 
 
 # This pilot script is a frozen historical artifact (superseded by
-# app.core.review_quality — see docs/ml/absa.md) — its own quality formula
+# app.core.review_quality, see docs/ml/absa.md). Its own quality formula
 # and thresholds are inlined here rather than pulled from ABSAConfig, whose
 # quality-related constants now belong to that newer, differently-scaled
 # system. Keeps this script's behavior unchanged rather than silently

@@ -82,7 +82,7 @@ public enum Ranking {
     ///
     /// The top of a 28,000-game catalog is all 99.99-something, so rounding
     /// would print "100%" for a game that is not first. Above 99.9 it says so
-    /// without claiming a number; between 99 and 99.9 a decimal is the only
+    /// without claiming a number. Between 99 and 99.9 a decimal is the only
     /// thing that separates rank 1 from rank 200.
     public static func formatBetterThan(_ share: Double) -> String {
         let percent = share * 100

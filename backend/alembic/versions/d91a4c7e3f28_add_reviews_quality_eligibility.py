@@ -5,10 +5,10 @@ Revises: c4d8f21a9e56
 Create Date: 2026-08-18 01:15:00.000000
 
 Replaces the old JSON-cache sampling approach (data/stratified_samples.json,
-scripts/generate_stratified_sample.py — deleted) with persisted per-review
+scripts/generate_stratified_sample.py, deleted) with persisted per-review
 eligibility: at ~378K eligible reviews (measured against the full corpus,
 not a capped sample), a DB column is the right tool, not a growing cache
-file. scripts/filter_eligible_reviews.py computes both; absa_extract_hf.py
+file. scripts/filter_eligible_reviews.py computes both. absa_extract_hf.py
 reads is_absa_eligible directly instead of a cache.
 """
 from typing import Sequence, Union

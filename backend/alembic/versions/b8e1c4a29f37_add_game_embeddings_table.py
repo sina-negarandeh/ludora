@@ -5,11 +5,11 @@ Revises: 7504c1be2bde
 Create Date: 2026-08-17 18:30:00.000000
 
 games.embedding was a fixed-dimension VECTOR(384) column tied to one
-embedding model at a time — swapping models (or comparing two side by
+embedding model at a time, so swapping models (or comparing two side by
 side) meant either a destructive column migration or overwriting the
 only copy on every rerun, with no history. game_embeddings holds one row
 per (game, model) instead, so multiple models' vectors can coexist for
-comparison; embedding is left unsized (no fixed dim) since different
+comparison. Embedding is left unsized (no fixed dim) since different
 models produce different dimensions and each query already filters to
 one model before computing distance.
 """

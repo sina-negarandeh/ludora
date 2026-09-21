@@ -16,7 +16,7 @@ interface AssistantMessageBubbleProps {
 // cards and the assistant backend's _describe_aspect (which uses
 // ABSAConfig.CARD_DOMINANCE_THRESHOLD) -- kept as a literal here since
 // there's no shared config the frontend can import from the Python
-// backend; must stay in sync with that constant by hand.
+// backend. Must stay in sync with that constant by hand.
 const ASPECT_DOMINANCE_THRESHOLD = 0.6;
 
 const AspectChip: React.FC<{ aspect: AspectAggregate }> = ({ aspect }) => {

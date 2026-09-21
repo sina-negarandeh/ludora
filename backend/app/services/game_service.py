@@ -42,7 +42,7 @@ class GameService:
         # Normalized on the same terms as `/api/search/`, because a user
         # cannot tell these two entry points apart from the search field in
         # front of them. `ilike` was already case-insensitive, so the case
-        # fold is a no-op here; the whitespace fold is not. The raw string
+        # fold is a no-op here. The whitespace fold is not. The raw string
         # goes straight into the LIKE pattern, so a trailing space made
         # "catan " require a literal space after the name and dropped the
         # match count from 46 to 14. iOS inserts exactly that space when a

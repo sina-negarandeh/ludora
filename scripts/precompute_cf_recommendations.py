@@ -31,7 +31,7 @@ def main():
     # Reads the ratings table directly -- this used to read data/raw/user_ratings.csv,
     # a file that doesn't exist on disk (the script could never actually run).
     # Postgres already holds this exact interaction data post-ingest (26.2M rows,
-    # loaded once by ingest_master.py from master_ratings.csv); reading it from
+    # loaded once by ingest_master.py from master_ratings.csv). Reading it from
     # the DB instead of a second, divergent CSV copy is the same "ingest once,
     # everything else reads from Postgres" pattern used everywhere else in this
     # pipeline, and removes the missing-file failure mode entirely.
@@ -63,7 +63,7 @@ def main():
         print(f"\n--- Processing model: {model_name} ---")
 
         with tracked_run("recommender/collaborative", run_name=f"{model_name}_precompute"):
-            # Only the scalar hyperparameters set in __init__ — vars() also
+            # Only the scalar hyperparameters set in __init__, since vars() also
             # holds the (currently unfitted) similarity matrix/dict attrs.
             hyperparams = {k: v for k, v in vars(recommender).items() if isinstance(v, (int, float, str, bool))}
             mlflow.log_params({

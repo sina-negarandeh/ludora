@@ -35,7 +35,7 @@ def main():
         conn.commit()
 
     # Run from the repo root, matching every other pipeline script. Override
-    # via env var for Docker or any other cwd — see docs/setup/README.md.
+    # via env var for Docker or any other cwd. See docs/setup/README.md.
     base_path = os.environ.get('PROCESSED_DATA_DIR', 'data/processed')
     
     # 2. Insert Games via Pandas (since CSV has extra columns we need to drop/rename)
@@ -143,8 +143,8 @@ def main():
         copy_csv_to_postgres(conn, 'reviews', reviews_clean)
         conn.commit()
 
-        # Game relations (expansions/implementations/integrations) — game_id
-        # is index 0; related_game_id may be legitimately empty (unresolved
+        # Game relations (expansions/implementations/integrations). game_id
+        # is index 0. related_game_id may be legitimately empty (unresolved
         # name match) and is left as-is, not filtered.
         relations_clean = filter_csv_by_game(os.path.join(base_path, 'master_game_relations.csv'), 0)
         copy_csv_to_postgres(conn, 'game_relations', relations_clean)
