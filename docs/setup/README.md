@@ -5,7 +5,7 @@
 - Docker and Docker Compose (for the containerized path)
 - Python 3.10+ with [`uv`](https://docs.astral.sh/uv/) (for native backend/ML script execution)
 - Node.js (for native frontend execution)
-- Apple Silicon Mac, if you want the AI Assistant / Community Consensus features working locally. They call [Apple MLX](https://github.com/ml-explore/mlx); see [Local LLM server](#local-llm-server) below. Everything else (catalog, search, recommendations, ABSA display) works without it, since those features read precomputed data.
+- Apple Silicon Mac, if you want the AI Assistant / Community Consensus features working locally. They call [Apple MLX](https://github.com/ml-explore/mlx). See [Local LLM server](#local-llm-server) below. Everything else (catalog, search, recommendations, ABSA display) works without it, since those features read precomputed data.
 
 ## Quick start: Docker Compose + native backend
 
@@ -13,9 +13,13 @@
 docker compose up -d
 ```
 
-This starts three services (`docker-compose.yml`): `db` (`pgvector/pgvector:pg15`, port 5432, with a `pg_isready` healthcheck), `frontend` (Vite dev server, port 5173, `npm run dev -- --host 0.0.0.0`), and `pgadmin` (`dpage/pgadmin4`, port 5050, a database-inspection UI, login `admin@ludora.dev` / `admin`).
+This starts three services (`docker-compose.yml`):
 
-**There's no `backend` service. The backend always runs natively, never in Docker.** `SearchService` uses `mlx-embeddings` (Qwen3-Embedding-0.6B) for semantic search, and MLX is built on Apple's Metal and Accelerate frameworks; it only runs on macOS with Apple Silicon. A container built from a Linux base image, which is what `docker build` on this machine would produce, can't install or run `mlx` at all. This isn't a missing-dependency bug, it's a platform constraint no Dockerfile can fix. Run it with:
+- `db`: `pgvector/pgvector:pg15`, port 5432, with a `pg_isready` healthcheck.
+- `frontend`: Vite dev server, port 5173, `npm run dev -- --host 0.0.0.0`.
+- `pgadmin`: `dpage/pgadmin4`, port 5050, a database-inspection UI, login `admin@ludora.dev` / `admin`.
+
+**There's no `backend` service. The backend always runs natively, never in Docker**, because MLX has no Linux build. Why, in full: [architecture/README.md](../architecture/README.md#why-the-backend-is-not-a-compose-service). Run it with:
 
 ```bash
 cd backend
@@ -28,7 +32,7 @@ uv run uvicorn app.main:app --reload
 - Postgres: `localhost:5432`
 - pgAdmin: http://localhost:5050 (add a server with host `db`, port `5432`, user `ludora`)
 
-**Important: this brings up an empty database.** Nothing here runs any seed or migration step. To get a working catalog you need to apply the Alembic migrations, then run the data pipeline. See [Populating the database](#populating-the-database) below. If you're working against a Postgres volume someone already populated, you can skip this.
+**Important: this brings up an empty database**. Nothing here runs any seed or migration step. To get a working catalog you need to apply the Alembic migrations, then run the data pipeline. See [Populating the database](#populating-the-database) below. If you're working against a Postgres volume someone already populated, you can skip this.
 
 ## Native development
 
@@ -47,7 +51,7 @@ uv run alembic upgrade head
 
 ## Populating the database
 
-There's no single seed command; the data pipeline is a sequence of standalone scripts. Full script-by-script detail, including which raw files are actually read, is in [docs/architecture/data-pipeline.md](../architecture/data-pipeline.md). At minimum, in order:
+There's no single seed command. The data pipeline is a sequence of standalone scripts. Full script-by-script detail, including which raw files are actually read, is in [docs/architecture/data-pipeline.md](../architecture/data-pipeline.md). At minimum, in order:
 
 All pipeline scripts import from the `app` package, so they need to run under the backend's `uv` project even though they live outside `backend/`. From the repo root, that means `uv run --project backend python scripts/<name>.py`, not a bare `uv run python`:
 
@@ -66,23 +70,23 @@ uv run --project backend python scripts/update_embeddings.py
 uv run --project backend python scripts/update_search_vectors.py
 ```
 
-ABSA extraction, LLM summarization, and recommendation precompute are additional, optional stages layered on top; see [docs/architecture/data-pipeline.md](../architecture/data-pipeline.md#stage-4-the-absa-chain-sequential-each-step-depends-on-the-previous-ones-output) for the full chain. These commands are written from reading the scripts' source, not from a documented runbook that existed in the repo before this doc; if a command fails, check the script's argument parser (several accept flags not shown here) before assuming the doc is wrong.
+ABSA extraction, LLM summarization, and recommendation precompute are additional, optional stages layered on top. See [docs/architecture/data-pipeline.md](../architecture/data-pipeline.md#stage-4-the-absa-chain) for the full chain. These commands are written from reading the scripts' source, not from a documented runbook that existed in the repo before this doc. If a command fails, check the script's argument parser (several accept flags not shown here) before assuming the doc is wrong.
 
 ## Local LLM server
 
-The AI Assistant and LLM summarization features call an OpenAI-compatible local server, with separate config for each rather than shared, since the assistant serves live requests and summarization is an offline precompute job that can point at a different server or instance entirely. The assistant itself uses two models for two different routes: `LLM_MODEL_NAME` (`Qwen/Qwen3-4B-MLX-4bit`) serves only the `/api/assistant/parse` debug route; `PLAN_MODEL_NAME` (`Qwen/Qwen3-30B-A3B-MLX-4bit`) serves the live `/api/assistant/chat` route the frontend actually calls. See [docs/ml/assistant.md](../ml/assistant.md) for why two models. Summarization uses its own `SUMMARIZATION_MODEL_NAME` (`Qwen/Qwen3-4B-MLX-4bit`), independent of both. All three default to `http://localhost:8080/v1` (`OPENAI_BASE_URL`/`SUMMARIZATION_OPENAI_BASE_URL`). See `backend/app/core/config.py`, `assistant_service.py`, `summarization_service.py`.
+The AI Assistant and LLM summarization features call an OpenAI-compatible local server. Each keeps its own config rather than a shared one. The assistant serves live requests, and summarization is an offline precompute job that can point at another instance entirely. The assistant itself uses two models for two routes. `LLM_MODEL_NAME` (`Qwen/Qwen3-4B-MLX-4bit`) serves only the `/api/assistant/parse` debug route. `PLAN_MODEL_NAME` (`Qwen/Qwen3-30B-A3B-MLX-4bit`) serves the live `/api/assistant/chat` route the frontend actually calls. See [docs/ml/assistant.md](../ml/assistant.md) for why two models. Summarization uses its own `SUMMARIZATION_MODEL_NAME` (`Qwen/Qwen3-4B-MLX-4bit`), independent of both. All three default to `http://localhost:8080/v1` (`OPENAI_BASE_URL`/`SUMMARIZATION_OPENAI_BASE_URL`). See `backend/app/core/config.py`, `assistant_service.py`, `summarization_service.py`.
 
-`mlx_lm.server` isn't pinned to whichever model is passed to `--model` at startup. It loads any HuggingFace repo id named in a request's `model` field on first use and keeps it resident, so one running instance transparently serves all three model names above without needing to be started three times. Point the different `*_BASE_URL` settings at separate instances only if you actually want to isolate them (e.g. different hardware). To run it (Apple Silicon only):
+`mlx_lm.server` isn't pinned to whichever model is passed to `--model` at startup. It loads any HuggingFace repo id named in a request's `model` field on first use and keeps it resident. **One running instance therefore serves all three model names above.** Point the `*_BASE_URL` settings at separate instances only if you want to isolate them. To run it (Apple Silicon only):
 
 ```bash
 mlx_lm.server --model "Qwen/Qwen3-4B-MLX-4bit"
 ```
 
-The `--model` flag just sets which model is resident before the first request; a `/chat` call still transparently loads `Qwen/Qwen3-30B-A3B-MLX-4bit` on demand.
+The `--model` flag just sets which model is resident before the first request. A `/chat` call still transparently loads `Qwen/Qwen3-30B-A3B-MLX-4bit` on demand.
 
 Without this running, every other feature (catalog, search, recommendations, ABSA aspect cards) still works. Only the AI Assistant chat and any new Community Consensus generation require it. Existing `game_summaries` rows still display without the LLM server running.
 
-Since the backend runs natively (see above), it reaches this at the default `http://localhost:8080/v1` directly; no Docker networking indirection needed.
+Since the backend runs natively (see above), it reaches this at the default `http://localhost:8080/v1` directly. No Docker networking indirection needed.
 
 ## Environment variables
 
@@ -97,13 +101,12 @@ Since the backend runs natively (see above), it reaches this at the default `htt
 | `SUMMARIZATION_OPENAI_API_KEY` | `not-needed-for-local` (placeholder) | Backend (summarization) |
 | `SUMMARIZATION_MODEL_NAME` | `Qwen/Qwen3-4B-MLX-4bit` | Backend (summarization) |
 | `VITE_API_URL` | `http://localhost:8000` | Frontend |
-| `RAW_DATA_THRENJEN_DIR` | `data/raw/kaggle_datasets_threnjen_board-games-database-from-boardgamegeek` | Pipeline scripts (repo-root-relative; the default just works when run from the repo root, as documented above) |
+| `RAW_DATA_THRENJEN_DIR` | `data/raw/kaggle_datasets_threnjen_board-games-database-from-boardgamegeek` | Pipeline scripts (repo-root-relative, so the default works when you run from the repo root, as documented above) |
 | `RAW_DATA_JVANELTEREN_DIR` | `data/raw/kaggle_datasets_jvanelteren_boardgamegeek-reviews` | Pipeline scripts, same default |
 | `PROCESSED_DATA_DIR` | `data/processed` | Pipeline scripts, same default |
 
-`backend/app/core/config.py` ships a hardcoded default database credential for local development. See [docs/limitations.md](../limitations.md) for why this needs to change before any non-local use. No credential values are reproduced in this documentation set.
 
-## Verifying it worked
+## Checking it worked
 
 ```bash
 curl http://localhost:8000/health
@@ -111,3 +114,13 @@ curl "http://localhost:8000/api/games?limit=1"
 ```
 
 The second call should return a non-empty `items` array once the database has been populated.
+
+## Security posture: local only
+
+Ludora is configured to run locally. These are deliberate choices, not oversights. **Do not deploy this as-is.**
+
+- **No authentication on any route.** There is no login, no session, and no auth dependency anywhere.
+- **CORS is fully open** (`allow_origins=["*"]`, `allow_credentials=True`), marked `# For development` in source but not conditionally disabled.
+- **`DATABASE_URL` carries a hardcoded local default credential**, mirrored in `docker-compose.yml`. Moving to environment-only configuration, with a committed `.env.example` and no default, is the prerequisite for any non-local use.
+
+No credential values appear anywhere in this documentation set.

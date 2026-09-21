@@ -1,104 +1,144 @@
-# Aspect-Based Sentiment Analysis (ABSA)
+# Aspect-based sentiment analysis, and the Community Consensus paragraph
 
-**Status: Implemented (offline batch pipeline), classification in progress in resumable chunks. Eligibility is computed over the full ~4.2M-review corpus; classification has attempted 39,484 of 267,950 eligible reviews so far. See [Coverage](#coverage-full-corpus-filtered-not-sampled) below.**
+**Status: implemented as an offline batch pipeline. Eligibility is computed over the full ~4.2M-review corpus. Classification is running in resumable chunks and has attempted 39,484 of 267,950 eligible reviews**.
 
 ## Problem
 
-Star ratings don't say *why* someone liked or disliked a game. Extract per-aspect sentiment (for example "the rulebook was confusing" → `Rulebook: negative`) from free-text reviews, so the product can show what players actually said about a game, not just an average score.
+A star rating does not say *why* someone liked a game. Extract per-aspect sentiment from free text, so "the rulebook was confusing" becomes `Rulebook: negative`.
 
-## Inputs and outputs
+![Game Detail Community Consensus and aspect cards for Brass: Birmingham](../assets/images/game_detail_page.reviews.community_consensus.brass_birmingham.png)
 
-Input: a review's raw comment text, paired against each of a fixed 17-aspect taxonomy. Output: per `(review, aspect)`, a sentiment label (positive, negative, or neutral), the full 3-class softmax (`prob_positive`/`prob_neutral`/`prob_negative`, not just the winner's confidence), and an evidence sentence. Every winning prediction is stored regardless of confidence or label; filtering happens downstream at aggregation time, not extraction time (see [Storing the full record, not just the winner](#storing-the-full-record-not-just-the-winner) below).
+Two independent systems feed that one section. The cards come from the classifier below. The paragraph above them comes from a separate offline LLM pass. They are gated separately on purpose: a game can show cards with no paragraph, but never the reverse.
 
-## Taxonomy (17 aspects)
+## Taxonomy: 17 aspects, cut from 22
 
 Mechanics, Strategy, Theme, Replayability, Components, Artwork, Rulebook, Setup, Learning Curve, Complexity, Downtime, Player Interaction, Balance, Luck, Solo Play, Game Length, Value.
 
-Reduced from an original 22 (dropped Gameplay, Immersion, Production Quality, Teardown, Player Count) after checking each aspect against whether knowing community consensus there actually helps a user, backed by real mention-frequency counts across the corpus, not just judgment. See `backend/app/core/ml_config.py::ABSAConfig.TAXONOMY` for the full per-aspect rationale: Teardown had 2 mentions across the entire eligible corpus versus Setup's 50, Immersion had 6 versus Theme's 294, and Player Count is the wrong shape for a single sentiment score since "great at 2, drags at 5" isn't one verdict, and it duplicates the structured `suggested_num_players` poll data already shown elsewhere on the game page.
+Five were dropped, each against real mention counts rather than judgment alone:
 
-## One approach today; an earlier one was tried and removed
+- **Gameplay**, too broad. It added nothing beyond Mechanics, Strategy, Balance, and Player Interaction combined.
+- **Immersion**, 6 mentions against Theme's 294. Reviewers do not separate "good theme" from "felt immersed".
+- **Production Quality**, a vaguer umbrella over the more specific Components and Artwork.
+- **Teardown**, 2 mentions in the entire eligible corpus, against Setup's 50.
+- **Player Count**, the wrong shape for one sentiment score. "Great at 2, drags at 5" is not one verdict, and the structured `suggested_num_players` poll already answers it elsewhere on the page.
 
-`scripts/absa_extract_hf.py` is the only extraction script in the repo, described below. An earlier approach, `scripts/absa_extract.py`, called a local Ollama server (`qwen2.5:7b`) with a hand-written JSON-extraction system prompt, asking the generative model to output `positive|negative|mixed|neutral` per aspect directly as JSON, reading from the CSV-based pilot filter (`pilot_absa_filtered.csv`). That script has been removed from the repo entirely; only the pilot artifact it produced, `data/processed/pilot_absa_filtered.csv`, is still on disk.
+Aspect count is also a real performance lever, roughly linear down to about 11 aspects. The cut was still decided on whether each aspect helps a reader, not on speed.
 
-The direction of the change is clear from what shipped: from a generative LLM prompted for JSON, to a discriminative zero-shot classifier purpose-built for sentence-pair classification. Discriminative classifiers are typically faster and more consistent for a fixed label set than prompting a generative model per item, which is why the current pipeline works this way.
+## Why a discriminative classifier, not a prompted LLM
 
-## Current approach: DeBERTa zero-shot classification
+An earlier pipeline asked a local Ollama `qwen2.5:7b` for `positive|negative|mixed|neutral` per aspect as JSON, reading from a CSV pilot filter. It was removed entirely.
 
-`scripts/absa_extract_hf.py` uses `yangheng/deberta-v3-base-absa-v1.1` via HuggingFace `transformers` (`AutoModelForSequenceClassification`, with `mps`/`cuda`/`cpu` auto-detected). The **base** checkpoint, not the larger one, chosen for speed and coverage (same trainer and ~180K-example training corpus, so the domain mismatch discussed below is identical either size, not made worse). For each review, the whole review text is paired with each of the 17 aspect strings as a sentence-pair input (`tokenizer(text, aspect)`), all 17 in one forward pass (`ABSAConfig.BATCH_SIZE = 17`). This is a 3-way classification per pair (negative, neutral, positive). Evidence is not generated by the model; it's a regex fallback that returns the first sentence in the review containing the literal aspect word. A review with an evidence-matched sentence for a given aspect gets a `review_aspects` row for it, no matter which of the three classes wins or how confident the model was.
+The current path pairs each review with each of the 17 aspect strings as sentence-pair input to `yangheng/deberta-v3-base-absa-v1.1`. All 17 go in one forward pass, 3-way output per pair. A discriminative classifier is faster and more consistent than prompting a generative model per item. The label set here is fixed, which is exactly that case.
 
-**Batching, measured, not assumed.** Batching within one review (all aspects in one forward pass) is the optimum. Batching across different reviews was tested and found to make things dramatically worse, a projected 10.18h to 58.14h at 16 reviews per batch, because `padding=True` pads every sequence in a batch to the longest one present, so mixing reviews of different lengths wastes compute padding short reviews out to match long ones. Reducing aspect count also measurably speeds this up, roughly linearly down to about 11 aspects, with diminishing returns below that as fixed per-forward-pass overhead starts to dominate. That's a real lever, at the cost of taxonomy coverage, which is why the taxonomy reduction above was evaluated on its own merits, whether the aspect helps users, not chosen purely for speed.
+The **base** checkpoint, not the larger one. Both share a trainer and the same ~180K-example corpus (SemEval-2014/2016, MAMS), so checkpoint size does not change the domain mismatch discussed under Evaluation. It only changes speed.
 
-### Storing the full record, not just the winner
+Evidence sentences are **not** model-selected. They are a regex fallback returning the first sentence containing the literal aspect word.
 
-`review_aspects` stores every winning prediction, positive, negative, and neutral, plus the complete 3-class softmax (`prob_positive`, `prob_neutral`, `prob_negative`, migration `129f9cdc157b`), not just the winner's confidence. Storing the full record makes every confidence and sentiment decision a query-time one: `ABSAConfig.WINNER_PROB_THRESHOLD` (0.7, applied uniformly across all three sentiments) is enforced in `scripts/absa_aggregate.py`, not extraction, so it can be retuned without ever re-running the ~4h classification pass. The three probabilities are also fully recoverable from `(sentiment, confidence, sentiment_score)` alone via simple algebra (they sum to 1, differ by `sentiment_score = prob_positive - prob_negative`, and the winner equals `confidence`), but storing them explicitly avoids relying on that being rediscovered by a future reader.
+### Batching, measured
 
-0.7 was chosen from a real probe (400-review sample, 126 evidence-matched pairs): median winner confidence was 0.991 for positive, 0.968 for negative, but only 0.843 for neutral. The model is rarely genuinely torn, but a naive 0.5 bar filters out almost nothing, since 100% of stored positive/negative predictions already clear it. At 0.7, 81.7% of that sample's positive/negative evidence survives; at 0.9, 71.4%. It's a starting point, not a final calibration; the sample is small and worth revisiting once more of the corpus is classified.
+| Configuration | Throughput |
+|---|---|
+| `batch_size=11`, tuned for the larger checkpoint | 9.66 reviews/sec |
+| All 17 aspects in one pass | **12.04 reviews/sec** |
+| Padding batches wider (44, 88) | no further gain |
+| Batching across different reviews, 16 per batch | projected 10.18h to 58.14h |
 
-### Quality and eligibility filtering before extraction
+Cross-review batching fails because `padding=True` pads every sequence to the longest in the batch. Mixing review lengths therefore burns compute, padding short reviews out to match long ones. Once every aspect is in one pass there is nothing left to batch.
 
-`app.core.review_quality` is a cheap, model-free pipeline (no training, no labeled data) designed to run over the full review corpus, not a pre-restricted subset:
+### Investigated and ruled out
 
-1. **Language gate.** Reuses `reviews.language`/`language_confidence`, already computed by `scripts/detect_languages.py`, instead of recomputing fastText inference per call.
-2. **Hard filters.** Binary pass/fail: minimum chars/tokens, valid Unicode, at least one letter, and detectable sentiment via NLTK's VADER lexicon. VADER is a fixed, pretrained lexicon, added because a large fraction of what the earlier heuristics let through was [BGG](https://boardgamegeek.com/) collection and trade-log notes and metadata dumps ("Received 04/08/2023", "Weight: 2.67 / 5 Includes Collectors box"), not opinions, and stopword-ratio/density (this module's other signals) can't reliably tell those apart from genuine short opinions like "Cool little drafting game." (also zero stopwords).
-3. **Dedup.** Exact (normalized-text hash) and near-duplicate (64-bit SimHash, bucketed for full-corpus scale, since comparing every candidate against every previously-seen fingerprint is O(n²) and intractable at hundreds of thousands of reviews; bucketing by a prefix of the fingerprint bounds each comparison to same-bucket candidates, at the cost of occasionally missing a near-dup pair whose difference falls in those bits).
-4. **Weighted score.** Information density (content/total token ratio), lexical diversity (unique/total, catches padded repetitive text), domain specificity (corpus-derived, hand-curated vocabulary, see `scripts/build_review_quality_vocab.py`), and a boilerplate penalty (corpus-frequent n-grams, catches templated phrases reused across different users' reviews). Threshold calibrated against a real 50K-review score distribution, not guessed; see `ABSAConfig.QUALITY_SCORE_THRESHOLD`.
+- **ONNX quantization via `optimum`**. Blocked by a hard dependency conflict: `optimum` requires `transformers<4.58`, and this project is on `transformers>=5.15` for the Qwen3-Embedding work.
+- **A smaller DistilBERT ABSA checkpoint** (`lhoestq/distilbert-base-uncased-finetuned-absa-as`). Its model card does not say whether it generalizes to arbitrary custom aspects, which is the zero-shot property this whole pipeline depends on. It may be locked to its own training aspect set. Settling that needs real testing, not a doc read.
 
-Full design rationale, including what was tried and reverted (a stopword-ratio hard filter, dropped after it wrongly flagged genuine short reviews as bad), lives in `backend/app/core/ml_config.py::ABSAConfig` and `backend/app/core/review_quality.py`.
+## Quality and eligibility filtering
 
-### Coverage: full-corpus filtered, not sampled
+`app.core.review_quality` is deliberately cheap and model-free, so it can run over the whole corpus rather than a pre-restricted sample. Four stages:
 
-`scripts/filter_eligible_reviews.py` streams the entire ~4.2M-review corpus once (not restricted to top-ranked games, no per-game cap) and persists eligibility directly on `reviews.is_absa_eligible`/`quality_score`. Measured against the real corpus: 267,950 reviews eligible (about 6.4% of 4,208,067 scanned) in 835.6 seconds (about 14 minutes).
+1. **Language gate**, reusing `reviews.language`/`language_confidence` that `scripts/detect_languages.py` already computed with fastText, rather than calling fastText per review.
+2. **Hard filters**: minimum chars and tokens, valid Unicode, at least one letter, and detectable sentiment via NLTK's VADER lexicon.
+3. **Dedup**: exact normalized-text hash, plus 64-bit SimHash bucketed by fingerprint prefix. Comparing every candidate against every prior fingerprint is O(n²) and intractable at this scale. Bucketing bounds each comparison, at the cost of occasionally missing a near-dup whose difference falls in those bits.
+4. **Weighted score** over information density, lexical diversity, corpus-derived domain specificity, and a boilerplate-phrase penalty. Threshold 0.6, calibrated against a real 50K-review score distribution where p90 sat around 0.6, not guessed.
 
-`scripts/absa_extract_hf.py` reads `is_absa_eligible` directly, no JSON cache, no artificial cap, and processes in `quality_score` descending order, so an interrupted run leaves the best reviews done first, not an arbitrary prefix. Resume is tracked via `reviews.absa_processed_at` (migration `44cec28c864a`), set on every review the script runs inference on, marked regardless of whether that review produced any storable aspect rows. That matters because a review that gets classified but yields zero evidence-matched aspects never gets a `review_aspects` row, so tracking "was this attempted" separately from "did it produce a row" is what makes resumability correct rather than silently re-classifying an ever-growing backlog. The script also accepts `--minutes N` to stop cleanly after a wall-clock budget, checked once per review and safe to interrupt anytime since every review's outcome is committed immediately. The pipeline runs in bounded chunks (30 minutes at a time, for instance) rather than as one multi-hour sitting, and each run prints a backlog summary (attempted, eligible, remaining, plus an ETA at that session's measured rate) so progress is visible across sessions. As of this writing: 39,484 of 267,950 eligible reviews attempted, 13,739 of those yielding at least one storable aspect, at a measured throughput of roughly 20-24 reviews per second.
+**Why VADER is in there**. A large fraction of what the earlier heuristics passed was not opinion at all. It was BGG collection and trade-log notes, and metadata dumps like "Received 04/08/2023" or "Weight: 2.67 / 5 Includes Collectors box". Density and stopword ratio cannot separate those from a genuine short opinion, because "Cool little drafting game" also has zero stopwords.
 
-A separate, earlier pilot artifact, `data/processed/pilot_absa_filtered.csv` (13,332 rows, about 3.9 MB), belongs to the Ollama pathway above, not the current DeBERTa pathway. It's evidence of an earlier iteration, not of current-pipeline coverage.
+**Tried and reverted:** a stopword-ratio hard filter, dropped after it wrongly flagged genuine short reviews.
 
-## Aggregation
+## Storing the full record, not just the winner
 
-`scripts/absa_aggregate.py` rolls `review_aspects` up into `game_aspect_aggregates` via a single `INSERT ... SELECT ... GROUP BY game_id, aspect ... ON CONFLICT DO UPDATE`: positive, negative, and neutral counts, `total_mentions`, and `mean_sentiment` (average of `sentiment_score`), restricted to rows with `sentiment IN ('positive','negative','neutral')` and `confidence >= ABSAConfig.WINNER_PROB_THRESHOLD`. `neutral_count` is a real, confidence-filtered count; it's what drives the card and summary Mixed state (see [Serving](#serving) below and [Downstream: LLM summarization](#downstream-llm-summarization-community-consensus-paragraph)). `mixed_count` stays always 0, since `sentiment` is never actually `'mixed'` anywhere in this pipeline, only positive, negative, or neutral.
+`review_aspects` holds every winning prediction plus the complete 3-class softmax, at any confidence, for all three labels.
 
-## Serving
+That makes every confidence and sentiment decision a **query-time** decision. `WINNER_PROB_THRESHOLD` (0.7) is enforced in aggregation, not extraction, so it can be retuned without re-running the multi-hour classification pass. The probabilities are technically recoverable from `(sentiment, confidence, sentiment_score)` by algebra, but storing them explicitly avoids depending on a future reader rediscovering that.
 
-`AspectService` (`GET /api/games/{game_id}/aspects`) reads `game_aspect_aggregates`, filtered to `total_mentions >= ABSAConfig.MIN_MENTIONS_FOR_DISPLAY` (5), and returns it to `CommunityConsensus`, the aspect-cards UI component (`GameDetail.tsx`); see [docs/product/features.md](../product/features.md). The cards render as soon as aspect data exists; they don't wait on the LLM summary paragraph below, which is a separate, independently-gated data source (`game_summaries`). A game can show cards with no paragraph, but not the reverse.
+0.7 came from a 400-review probe with 126 evidence-matched pairs. Median winner confidence was 0.991 positive, 0.968 negative, and only 0.843 neutral. A naive 0.5 bar filters almost nothing, since every stored positive and negative prediction already clears it. At 0.7, 81.7% of that sample's positive and negative evidence survives. At 0.9, 71.4%. A starting point, not a final calibration, and worth revisiting once more of the corpus is classified.
 
-Each card reads as confidently **Positive** or **Negative** only if that share of mentions clears `ABSAConfig.CARD_DOMINANCE_THRESHOLD` (60%); otherwise it falls back to a **Mixed** state (amber ring, `ScaleIcon`) rather than picking a coin-flip plurality winner. A 45/10/45 positive/neutral/negative split reads as Mixed, not "Positive" by a hair. Crossing 60% for positive or negative mathematically guarantees that bucket is also the largest of the three, so the displayed percentage and evidence quote always come from whichever bucket has the most mentions; "confident label" and "largest bucket" only diverge in the Mixed case, where there's no single confident label anyway. For confident cards, `AspectService` returns up to 3 evidence quotes from the dominant sentiment; for Mixed cards, it returns one positive and one negative quote (falling back to neutral if one side is too thin) so the card shows why it's mixed instead of an arbitrary near-tied quote. This logic has to stay in sync between `AspectService.get_game_aspects()` (Python) and the equivalent dominant-bucket computation in `GameDetail.tsx` (TypeScript), since the two languages can't share the implementation.
+## Resumability, and the bug that forced it
 
-## Downstream: LLM summarization ("Community Consensus" paragraph)
+`absa_extract_hf.py` reads `is_absa_eligible` directly, no cache and no cap, in `quality_score` descending order, so an interrupted run leaves the **best** reviews done rather than an arbitrary prefix. `--minutes N` stops cleanly on a wall-clock budget, and every review's outcome commits immediately, so interrupting is always safe.
 
-**Status: Implemented (offline script), single-game only.** `SummarizationService` (`backend/app/services/summarization_service.py`) turns ABSA aggregates into the paragraph shown above the aspect cards. It's called only by `scripts/generate_summaries.py`, not by any live API route, so this is a batch or offline feature, not something that runs on demand.
+Resume is tracked on `reviews.absa_processed_at`, set on every review the script runs inference on, **regardless of whether that review produced any row**. That distinction is the whole point. A review that classifies but yields zero evidence-matched aspects never produces a `review_aspects` row. Tracking "was this attempted" separately from "did it produce a row" is what makes resume work, rather than silently re-classifying an ever-growing backlog.
 
-Pipeline, per game: require at least 15 reviews with usable ABSA signal (distinct `review_id` count, confidence-filtered, not a raw `review_aspects` row count, which overstates it since one review can produce several aspect rows). Select the top 5 aspects by `total_mentions` (minimum 5 mentions each, reading `game_aspect_aggregates`, the same table and threshold the aspect cards use). For each aspect, sample up to 100 evidence rows (proportional by sentiment, filtered to `confidence >= ABSAConfig.WINNER_PROB_THRESHOLD`, same as aggregation) and ask the local LLM for a one-sentence mini-summary (`AspectMiniSummary` Pydantic schema). A final LLM call combines all mini-summaries into a 2-3 sentence paragraph (`FinalGameSummary` schema), with an explicit anti-hallucination instruction in the prompt: "Do not invent information," "Every factual claim must be supported by one or more supplied themes."
+## Aggregation and card states
 
-**Outcome consistency with the aspect cards.** Each aspect's Positive/Negative/Mixed-Neutral verdict is computed with the exact same `CARD_DOMINANCE_THRESHOLD` rule `AspectService` uses for the cards (`SummarizationService._classify_outcome()`), passed into the mini-summary prompt as ground truth, and used to overwrite whatever sentiment label the LLM returns, so the paragraph can never describe an aspect differently than its card does. Evidence sampling applies the identical `sentiment IN (...) AND confidence >= ...` filter aggregation uses, so the evidence the LLM sees is exactly what's being counted, not a superset.
+`absa_aggregate.py` rolls rows into `game_aspect_aggregates` with one `INSERT ... SELECT ... GROUP BY ... ON CONFLICT DO UPDATE`, restricted to rows clearing `WINNER_PROB_THRESHOLD`. `mixed_count` is always 0, because `sentiment` is never `'mixed'` anywhere in this pipeline.
 
-**Summarization's LLM config is fully separate from the assistant's**, not just a different model name (`app.core.config.Settings.SUMMARIZATION_OPENAI_BASE_URL`/`SUMMARIZATION_OPENAI_API_KEY`/`SUMMARIZATION_MODEL_NAME`, versus the assistant's `OPENAI_BASE_URL`/`OPENAI_API_KEY`/`LLM_MODEL_NAME`). Summarization is an offline precompute job, the assistant serves live requests, and the two should never need to point at the same server instance. Both currently default to `Qwen/Qwen3-4B-MLX-4bit`.
+A card claims **Positive** or **Negative** only when that share of mentions clears 60% (`CARD_DOMINANCE_THRESHOLD`). Otherwise it shows **Mixed** rather than a coin-flip plurality winner, so 45/10/45 reads as Mixed and not "Positive by a hair".
 
-**A real, reproduced reliability bug and its fix.** Larger-evidence prompts intermittently returned an empty completion, well under the token budget, that failed schema validation, traced to the model spending its generation budget on hidden reasoning tokens rather than the requested JSON. Both prompts now include Qwen3's `/no_think` directive, and `_call_llm_json` retries up to `SummarizationConfig.MAX_LLM_RETRIES` times before giving up gracefully (skip one aspect, or skip the whole game if final synthesis fails) rather than crashing. Full measured detail in [model-cards/summarization-llm.md](model-cards/summarization-llm.md#reliability-a-real-measured-failure-mode-and-its-fix).
+Crossing 60% mathematically guarantees that bucket is also the largest of the three. The shown percentage and quote therefore always come from the biggest bucket. "Confident label" and "largest bucket" diverge only in the Mixed case, where there is no confident label anyway. Confident cards show up to 3 quotes from the dominant side. Mixed cards show one positive and one negative, so the split is legible rather than asserted.
 
-`scripts/generate_summaries.py` hardcodes a single target game, "Brass: Birmingham." There's no batch or loop-over-all-games invocation anywhere in the repo, so whatever `game_summaries` rows exist were generated one game at a time, by hand. This is the biggest practical gap now that ABSA classification covers thousands of games.
+This rule lives in both `AspectService.get_game_aspects()` and `GameDetail.tsx`, and has to stay in sync, because Python and TypeScript cannot share the implementation.
 
-No evaluation of summary quality exists: no human rating, no faithfulness check beyond the prompt's own instructions.
+## Downstream: the Community Consensus paragraph
 
-## Evaluation
+**Status: implemented, still one game at a time**. `SummarizationService` is called only by `scripts/generate_summaries.py`, never by a live route.
 
-**None exists.** There's no ground-truth aspect annotation set anywhere in the repo, so no classification accuracy (precision, recall, F1 against a labeled set) can be computed or reported. The quality-filter validation described above, manually reading samples, checked whether input to ABSA is substantive; it isn't an evaluation of the DeBERTa classifier's own accuracy.
+A game needs at least 15 reviews with usable ABSA signal, counted as **distinct confidence-filtered `review_id`s**, not `review_aspects` rows, which overstate it. Brass: Birmingham measured 175 rows from only 112 distinct reviews.
 
-## Known limitations (and what was actually checked)
+Then: top 5 aspects by mentions, with up to 100 evidence rows each, sampled proportionally by sentiment. One LLM call per aspect gives a one-sentence mini-summary. A final call synthesizes a 2-to-3 sentence paragraph. Both schemas are Pydantic-checked. The prompt forbids inventing information and forbids absolute claims.
 
-- **Coverage is the full corpus by eligibility (267,950 reviews); classification is in progress, run in bounded chunks rather than one sitting.** 39,484 reviews attempted as of this writing (about 14.7%), 13,739 of those yielding at least one storable aspect, across 4,463 distinct games with at least one aggregated aspect. Measured throughput has held steady around 20-24 reviews per second across multiple sessions and a range of games, validated individually against Brass: Birmingham, Pandemic Legacy: Season 1, Ark Nova, Gloomhaven, and Twilight Imperium: Fourth Edition before the chunked run began, giving a real full-corpus projection of roughly 3 to 3.5 more hours of processing, spread across however many chunked sessions it takes.
-- **The quality filter's precision was manually validated, not just assumed.** Reading a real sample of what the filter (before adding VADER) was passing found genuine false positives: BGG collection and trade-log notes ("Traded away for Scotland Yard, May 2010") and metadata dumps ("Play Time: 90 - 120 Minutes Weight: 4.05") that scored well on density and diversity despite carrying zero opinion content. One numeric rating-breakdown example scored the highest in a sample (0.900) despite not being prose at all. Adding a VADER zero-sentiment hard filter measurably improved this, removing about 22% of the previously-eligible pool, but it's not perfect: it still misses cases where metadata happens to contain a lexicon-positive word out of context ("3-6 Recommended 4-5 Best" describing player counts, not the game), and it occasionally over-rejects genuine opinions with typos ("Wast of money" for "waste") or uncommon sentiment words ("Bland fantasy theme," since "bland" isn't in VADER's lexicon) that a lexicon-based approach can't catch. That's a real, disclosed precision ceiling for a cheap, model-free filter, not a claim of perfect input quality. Spot-checking evidence quotes surfaced under the neutral label specifically also found this same class of noise, for example a BGG subdomain/category listing classified as neutral, which is why the "Mixed / Neutral" card label is deliberately hedged wording, not a claim that every neutral row reflects genuine ambivalence.
-- Neutral predictions are stored (with full probabilities) but not yet aggregated or surfaced in the UI; see [Aggregation](#aggregation) above.
-- Evidence sentences are regex-matched, not model-selected, so they may not be the sentence that actually drove the sentiment classification.
-- No accuracy evaluation exists for the DeBERTa classifier itself. Classification quality is unverified against any ground truth, and the model is trained on restaurant and laptop reviews (SemEval), not board games, a domain mismatch that switching from large to base doesn't change either way.
-- `data/processed/pilot_absa_filtered.csv`, a leftover artifact from the removed Ollama-based approach, is still present on disk with no current pipeline reading it.
+**The paragraph cannot contradict the cards**. Each aspect's verdict is computed with the same `CARD_DOMINANCE_THRESHOLD` rule the cards use. It is passed into the prompt as ground truth, and then **overwrites** whatever sentiment the LLM returned. Evidence sampling applies the identical confidence filter aggregation uses, so the LLM sees exactly what is being counted, not a superset. Checked against Brass's real data: 26/26, 22/22, 20/20, 16/16 evidence against `total_mentions`, no discrepancy.
 
-## Related code
+Sampling uses a seeded `random.Random`, so the same aspect draws the same evidence and the same LLM input across runs.
 
-- `scripts/absa_extract_hf.py` (current; `scripts/absa_extract.py`, the earlier Ollama-based approach, has been removed)
-- `scripts/absa_filter.py` (superseded pilot path, frozen; see its own header comment), `scripts/filter_eligible_reviews.py`, `scripts/build_review_quality_vocab.py`
-- `scripts/absa_aggregate.py`
-- `backend/app/core/review_quality.py`, `backend/app/core/ml_config.py::ABSAConfig`
-- `backend/app/services/aspect_service.py`, `backend/app/database/models.py` (`Review.is_absa_eligible`/`quality_score`/`absa_processed_at`, `ReviewAspect` including `prob_positive`/`prob_neutral`/`prob_negative`, `GameAspectAggregate`)
-- Migrations: `d91a4c7e3f28` (`is_absa_eligible`/`quality_score`), `129f9cdc157b` (raw sentiment probabilities), `44cec28c864a` (`absa_processed_at`, true resumability)
-- `frontend/src/pages/GameDetail.tsx` (`CommunityConsensus` card component)
-- `data/processed/pilot_absa_filtered.csv`, `data/review_quality_vocab_candidates.txt`, `data/boilerplate_ngrams.json`
+### A measured failure, and its fix
+
+Larger prompts intermittently returned an **empty completion** that failed schema validation. One case: 46 evidence lines for Ark Nova's Theme aspect, `finish_reason=stop`, well under `MAX_TOKENS`, at about **30s** latency against 1-3s for successful calls. The same aspect with fewer evidence lines succeeded.
+
+That latency gap points at the model spending its generation budget on hidden reasoning tokens and never reaching the JSON.
+
+Both prompts now carry Qwen3's `/no_think` directive. The previously-failing case then ran **3 for 3** at 0.9-2.7s and about 57 completion tokens. The full pipeline took all 5 of Ark Nova's aspects on first attempt, at 1.4-2.8s each. `_call_llm_json` also retries twice on a validation failure. One unresolvable aspect is skipped and the game still generates. A failed final synthesis skips the game rather than leaving it half-written.
+
+**Summarization's LLM config is fully separate from the assistant's**, not just a different model name. Summarization is an offline precompute job and the assistant serves live requests. The two should never have to agree on a server instance, even though both currently default to `Qwen/Qwen3-4B-MLX-4bit`.
+
+## Measured
+
+- **Eligibility:** 267,950 of 4,208,067 reviews eligible, about 6.4%, in 835.6 seconds.
+- **Classification:** 39,484 attempted, 13,739 yielding at least one storable aspect, across 4,463 distinct games. Throughput has held at **20-24 reviews/sec** across many chunked sessions and a range of games, projecting roughly 3 to 3.5 more hours.
+- **Spot-checked end to end** against Brass: Birmingham, Pandemic Legacy: Season 1, Ark Nova, Gloomhaven, and Twilight Imperium: Fourth Edition. That included genuine Mixed-state cards, with a 50/50 split surfacing both quotes.
+
+MLflow: `reviews/absa` for the pipeline, `llm/review_summarization` for the paragraph. The latter logs per-call prompt hashes and latency rather than a fit config, since there is no fit.
+
+## Evaluation: none exists
+
+There is no ground-truth aspect annotation set anywhere in this repo, so no precision, recall, or F1 can be computed for the classifier. The DeBERTa model's own published benchmark is the only external signal, and nothing here checks it against this corpus.
+
+The manual quality-filter review described below checked whether the **input** is substantive. That is not an evaluation of the classifier's accuracy. No summary-quality evaluation exists either: no human rating, no faithfulness check beyond the prompt's own instructions.
+
+## Known limitations
+
+- **Classification covers 14.7% of eligible reviews so far**. Eligibility is full-corpus. Classification is not, yet.
+- **Summaries are generated one game at a time**. `generate_summaries.py` hardcodes "Brass: Birmingham" and no batch invocation exists. Classification already covers thousands of games, so the pipeline is ready for a loop over eligible games.
+- **The quality filter has a real, disclosed precision ceiling**. Before VADER, genuine false positives got through. Trade-log notes like "Traded away for Scotland Yard, May 2010" passed. So did metadata dumps like "Play Time: 90 - 120 Minutes Weight: 4.05". One numeric rating breakdown scored highest in its sample at 0.900 despite not being prose. VADER removed about 22% of the previously-eligible pool but is not complete. It still passes "3-6 Recommended 4-5 Best", a player count rather than an opinion, because the text happens to contain a lexicon-positive word. It also over-rejects typos like "Wast of money", and words outside its lexicon like "Bland fantasy theme". Spot-checking neutral-labeled evidence found the same class of noise, which is why the card says "Mixed / Neutral" rather than claiming genuine ambivalence.
+- **Evidence sentences are regex-matched**, so they may not be the sentence that actually drove the classification.
+- **Neutral predictions are stored but not surfaced** in the UI.
+- **Temperature 0.0 does not guarantee determinism**. Not every inference server does, and nothing here checks it. `/no_think` plus retry fixes the one failure actually observed, not determinism in general.
+- **`/no_think` trades away Qwen3's reasoning entirely** for this feature. Justified here, where the task is a templated one-sentence summary over supplied evidence. Not a universal recommendation.
+- **Domain mismatch is unmeasured**. The model is trained on restaurant and laptop reviews, not board games.
+- `data/processed/pilot_absa_filtered.csv` is a leftover from the removed Ollama path, still on disk, read by nothing.
+
+## Where the code is
+
+- Pipeline, in order: `scripts/filter_eligible_reviews.py` → `scripts/absa_extract_hf.py` → `scripts/absa_aggregate.py` → `scripts/generate_summaries.py`
+- `backend/app/core/review_quality.py`, `backend/app/core/ml_config.py` (`ABSAConfig`, `SummarizationConfig`)
+- `backend/app/services/{aspect_service,summarization_service}.py`
+- Migrations: `d91a4c7e3f28` (eligibility), `129f9cdc157b` (full softmax), `44cec28c864a` (`absa_processed_at`)
+- Frozen pilot path: `scripts/absa_filter.py`, kept for reference with its own inlined copy of the old formula

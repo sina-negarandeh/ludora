@@ -1,37 +1,33 @@
 # Ludora documentation
 
-Start with [README.md](../README.md) for the 60-second overview, or [case-study.md](case-study.md) for the full narrative. This index groups everything else by reader intent.
+Start at [README.md](../README.md) for what this is and why. This page is the map.
 
-## I want the full story
-- [case-study.md](case-study.md): problem, product, architecture, data, ML, results, tradeoffs
+These docs explain **why** things are built the way they are, and **how to run them**. They deliberately do not narrate what the code does. For that, read the code. Where a doc states a number, that number was measured, and the doc says how. Each one ends with its own **Known limitations**.
 
-## I want to see what it does
-- [product/features.md](product/features.md): every feature, with real screenshots, evidence, and known limitations
+## The ML systems
 
-## I want to understand how it's built
-- [architecture/README.md](architecture/README.md): system design, service boundaries, request flows, diagram
-- [architecture/data-pipeline.md](architecture/data-pipeline.md): the offline ETL/ML script order, script by script
-- [data/README.md](data/README.md): dataset provenance, schema, taxonomy, data quality rules, glossary
+| System | Problem | Doc |
+|---|---|---|
+| AI Assistant | Natural language over the catalog: typed parsing, deterministic execution | [ml/assistant.md](ml/assistant.md) |
+| Search | Find a game by name, or by describing it | [ml/search.md](ml/search.md) |
+| Review NLP | Per-aspect sentiment from 4.2M reviews, then a Community Consensus paragraph | [ml/absa.md](ml/absa.md) |
+| Recommendations | Suggest related games, and let 9 algorithms be compared | [ml/recommenders.md](ml/recommenders.md) |
 
-## I want the ML/AI detail
-- [ml/README.md](ml/README.md): overview and index of all four systems
-- [ml/search.md](ml/search.md): lexical, semantic, hybrid (RRF) search
-- [ml/recommenders.md](ml/recommenders.md): the nine-model recommendation engine, model by model
-- [ml/absa.md](ml/absa.md): aspect-based sentiment analysis and LLM summarization
-- [ml/assistant.md](ml/assistant.md): the conversational AI assistant
-- [ml/evaluation.md](ml/evaluation.md): measured vs. observed vs. unevaluated, system by system
+## The clients
 
-## I want to run it or contribute
-- [setup/README.md](setup/README.md): verified setup, environment variables, local LLM server
-- [engineering/testing.md](engineering/testing.md): the actual state of test coverage
-- [../AGENTS.md](../AGENTS.md): navigation and invariants for anyone extending this repo
+- [../frontend/README.md](../frontend/README.md): the React web client, screen by screen
+- [../ios/README.md](../ios/README.md): the native SwiftUI client, screen by screen
 
-## I want the unvarnished truth
-- [limitations.md](limitations.md): every known gap, in one place
-- [roadmap.md](roadmap.md): concretely evidenced planned or unfinished work
+## How it works
 
-## I'm updating these docs after a code change
-- [maintenance/coverage-map.md](maintenance/coverage-map.md): which docs claim what, so a change propagates everywhere it needs to, not just to the first doc you find
+- [architecture/README.md](architecture/README.md): service boundaries, request flow, the system diagram
+- [architecture/data-pipeline.md](architecture/data-pipeline.md): which offline script runs when, and why in that order
+- [data/README.md](data/README.md): dataset provenance, the BGG taxonomy, schema, data-quality rules, glossary
 
-## Assets
-- [assets/images/](assets/images/): screenshots referenced throughout this documentation set
+## Running and contributing
+
+- [setup/README.md](setup/README.md): setup, environment variables, the local LLM server, and the security posture
+- [engineering/testing.md](engineering/testing.md): the real state of test coverage
+- [../AGENTS.md](../AGENTS.md): repo-wide conventions and invariants, plus nested files per side
+
+Screenshots referenced throughout live in [assets/images/](assets/images/).

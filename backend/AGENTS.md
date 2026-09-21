@@ -23,7 +23,7 @@ uv run pytest                                    # backend/tests/ only -- see Te
 uv run python evaluation/evaluate_search.py      # evaluation scripts (needs --group ml first; search results are committed, recommenders/CF aren't run yet)
 ```
 
-The repo-root `Makefile` wraps the common ones (`make backend`, `make lint`, `make typecheck`, `make test`, `make check` for all three in CI's order); `make help` for the full list.
+The repo-root `Makefile` wraps the common ones (`make backend`, `make lint`, `make typecheck`, `make test`, `make check` for all three in CI's order). Run `make help` for the full list.
 
 ## Architecture
 
@@ -33,15 +33,19 @@ Only two recommender classes exist, under `app/recommenders/collaborative/` (`It
 
 ## Offline pipeline
 
-All 21 ML/data scripts (build/ingest, ABSA, summarization, embeddings, search vectors, recommendation precompute) live in the repo-root `scripts/`, not under `backend/`. Confirm what a script actually writes before assuming it's live; several compute output nothing downstream reads. Run order: `docs/architecture/data-pipeline.md`.
+All 21 ML/data scripts (build/ingest, ABSA, summarization, embeddings, search vectors, recommendation precompute) live in the repo-root `scripts/`, not under `backend/`. Check what a script actually writes before assuming it's live. Several compute output that nothing downstream reads. Run order: `docs/architecture/data-pipeline.md`.
 
 ## Local LLM
 
-`AssistantService` and `SummarizationService` call `OPENAI_BASE_URL` (default `http://localhost:8080/v1`) / `LLM_MODEL_NAME` (default `Qwen/Qwen3-4B-MLX-4bit`), an OpenAI-SDK-compatible local server, with structured JSON output validated against a Pydantic schema. Everything else in the app works without it running.
+`AssistantService` and `SummarizationService` call `OPENAI_BASE_URL` (default `http://localhost:8080/v1`) / `LLM_MODEL_NAME` (default `Qwen/Qwen3-4B-MLX-4bit`), an OpenAI-SDK-compatible local server, with structured JSON output checked against a Pydantic schema. Everything else in the app works without it running.
 
 ## Testing
 
-`ruff`, `pyright`, and `pytest` are dev dependencies (`uv sync`; excluded from a lean install via `uv sync --no-dev`) and all three run in CI on every PR (`.github/workflows/backend-ci.yml`). `pytest` is scoped to `backend/tests/` (`[tool.pytest.ini_options]`), a small, genuinely infra-free suite -- not the repo-root `test_*.py` scripts, which still print output instead of asserting, several of which require a live DB and/or the local LLM server pytest's default discovery would otherwise try to run for real. If you add real coverage for those, put shared fixtures in a `conftest.py` rather than hand-rolling DB setup per script. Detail: `docs/engineering/testing.md`.
+`ruff`, `pyright`, and `pytest` are dev dependencies. `uv sync` installs them, and `uv sync --no-dev` excludes them from a lean install. All three run in CI on every PR (`.github/workflows/backend-ci.yml`).
+
+`pytest` is scoped to `backend/tests/` (`[tool.pytest.ini_options]`), a small, genuinely infra-free suite. That scope excludes the repo-root `test_*.py` scripts, which still print output instead of asserting. Several of those need a live DB or the local LLM server, and pytest's default discovery would otherwise try to run them for real.
+
+If you add real coverage for those, put shared fixtures in a `conftest.py` rather than hand-rolling DB setup per script. Detail: `docs/engineering/testing.md`.
 
 ## Security
 

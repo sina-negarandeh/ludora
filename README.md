@@ -2,26 +2,33 @@
 
 # Ludora
 
-Ludora is a board game discovery app built on two merged [BoardGameGeek](https://boardgamegeek.com/) datasets from Kaggle: about 28,000 games, 26 million ratings, 4.2 million reviews. It's a full-stack, ML-heavy portfolio project. Hybrid search, a nine-algorithm recommendation engine you can compare side by side, aspect-based sentiment analysis over community reviews, and a conversational assistant that parses requests into typed intents instead of guessing at free text. Every claim in this repo is backed by something you can check yourself: a script you can rerun, an endpoint you can curl, a metric you can recompute.
+Ludora is a board game discovery app. It merges two [BoardGameGeek](https://boardgamegeek.com/) datasets from Kaggle: about 28,000 games, 26 million ratings, 4.2 million reviews.
 
-**Start here:** [Case study](docs/case-study.md) (problem, architecture, data, ML, results, a 10 minute read), [feature catalogue](docs/product/features.md) (every feature, with screenshots), [known limitations](docs/limitations.md) (what's actually missing, stated plainly).
+It is a full-stack, ML-heavy system. It offers hybrid search, a nine-algorithm recommendation engine you can compare side by side, and aspect-based sentiment analysis over community reviews. A conversational assistant parses requests into typed intents instead of guessing at free text.
+
+You can check every claim in this repo yourself: rerun a script, curl an endpoint, or recompute a metric.
+
+**Start here:** [docs/](docs/README.md) is the map. The [web client](frontend/README.md) and [iOS client](ios/README.md) show every screen. Every doc ends with what that system does not do.
 
 ---
 
 ## What's in it
 
-- **Catalog and discovery.** A filterable, sortable grid of ~28K games (subdomain, category, BGG family, mechanic, players, complexity, playtime), with hand-built SVG statistics: density distributions, rating histograms, recommendation gauges.
-- **Hybrid search.** Lexical search through Postgres full-text, semantic "vibe" search through `Qwen3-Embedding-0.6B` and pgvector, and a fused mode combining both with Reciprocal Rank Fusion.
-- **Recommendation engine.** Nine model IDs across four paradigms: popularity, content-based (TF-IDF, metadata blend, semantic embedding, graph Jaccard, DeepWalk), collaborative filtering (item-item cosine, ALS), and a live cross-paradigm hybrid blend. Compare coverage and diversity across all nine from the UI. See [docs/ml/recommenders.md](docs/ml/recommenders.md) for which models compute live and which read from a precomputed table.
-- **Aspect-based sentiment analysis.** A 17-aspect zero-shot classifier (`yangheng/deberta-v3-base-absa-v1.1`) extracts what reviewers actually said about mechanics, strategy, theme, and more. Shown as per-aspect cards, plus an LLM-written "Community Consensus" paragraph once one's been generated for that game.
-- **AI assistant.** A chat sidebar that parses natural language into a typed plan (browse, search, compare, recommend, look up one game) with a locally hosted LLM (Apple MLX, OpenAI-compatible), then renders the result as structured cards instead of a wall of text. [PydanticAI](https://ai.pydantic.dev/) turns the model's output into a validated schema, re-prompting it with the validation error when it gets the shape wrong; [LangGraph](https://langchain-ai.github.io/langgraph/) executes the resulting plan, and can loosen an over-constrained request one filter at a time when nothing matches. Ask for "a quick, very heavy party game" and it tells you it relaxed the complexity limit rather than silently answering a different question.
-- **Native iOS client.** A SwiftUI app reading the same API: browse, filter, sort, search, game detail, statistics, rankings, ratings, and reviews.
+Four ML systems, then two clients that read them.
 
-Full breakdown with screenshots: [docs/product/features.md](docs/product/features.md).
+- **AI assistant**. A chat sidebar that parses natural language into a *typed plan* rather than guessing at free text. The intents are browse, search, compare, recommend, and look up one game. It runs on a locally hosted LLM (Apple MLX, OpenAI-compatible) and renders structured cards instead of a wall of text. [PydanticAI](https://ai.pydantic.dev/) checks the model's output against a schema and re-prompts it with the error when the shape is wrong. [LangGraph](https://langchain-ai.github.io/langgraph/) executes the plan, and can loosen an over-constrained request one filter at a time. Ask for "a quick, very heavy party game" and it tells you it relaxed the complexity limit rather than silently answering a different question. → [docs/ml/assistant.md](docs/ml/assistant.md)
+- **Hybrid search**. Lexical through Postgres full-text, semantic "vibe" search through `Qwen3-Embedding-0.6B` and pgvector, and a fused mode combining both with Reciprocal Rank Fusion. All three modes are evaluated, and the results are committed. → [docs/ml/search.md](docs/ml/search.md)
+- **Review NLP**. A 17-aspect zero-shot classifier (`yangheng/deberta-v3-base-absa-v1.1`) extracts what reviewers actually said about mechanics, strategy, theme, and more. A cheap model-free quality pipeline filters the 4.2M-review corpus down first. A local LLM then synthesizes the per-aspect output into a "Community Consensus" paragraph that cannot contradict the cards beneath it. → [docs/ml/absa.md](docs/ml/absa.md)
+- **Recommendation engine**. Nine model IDs across four paradigms. Popularity, content-based (TF-IDF, metadata blend, semantic embedding, graph Jaccard, DeepWalk), collaborative filtering (item-item cosine, ALS), and a live cross-paradigm hybrid blend. Comparable side by side on the same game, from the UI. → [docs/ml/recommenders.md](docs/ml/recommenders.md)
+
+Two clients read the same API:
+
+- **Web** (React 19, TypeScript). A filterable grid over ~28K games, plus a game detail page whose statistics are hand-built SVG: density distributions, rating histograms, and an arc gauge. → [frontend/README.md](frontend/README.md)
+- **iOS** (SwiftUI, no third-party dependencies). The same catalog and game detail, natively. → [ios/README.md](ios/README.md)
 
 ## What it doesn't do
 
-No user accounts, so no personalization: every visitor sees the same catalog. Full list: [docs/limitations.md](docs/limitations.md).
+No user accounts, so no personalization: every visitor sees the same catalog. It is a discovery and exploration tool, not a personalized app. Each doc's **Known limitations** section is the honest accounting for that system.
 
 ## Stack
 
@@ -31,21 +38,19 @@ No user accounts, so no personalization: every visitor sees the same catalog. Fu
 
 **iOS:** Swift 6 (strict concurrency), SwiftUI, iOS 17+, Swift Package Manager, no third-party dependencies.
 
-**AI/LLM:** Apple MLX for local inference behind an OpenAI-compatible endpoint. PydanticAI for typed, self-repairing structured output; LangGraph for stateful plan execution.
+**AI/LLM:** Apple MLX for local inference behind an OpenAI-compatible endpoint. PydanticAI for typed, self-repairing structured output. LangGraph for stateful plan execution.
 
 **Infra:** Docker Compose for Postgres, frontend, and pgAdmin. The backend runs natively since MLX needs macOS on Apple Silicon. 27 tracked Alembic migrations, 21 offline ETL/ML scripts.
 
-## Under the hood
+## How it's built
 
-**Machine learning.** Four subsystems, each a different problem. Search fuses Postgres full-text and pgvector semantic retrieval with Reciprocal Rank Fusion (k=60) at request time. Reviews NLP runs a 17-aspect zero-shot ABSA classifier (DeBERTa) over free-text reviews, then an LLM synthesizes the per-aspect output into a "Community Consensus" paragraph. Recommendations span nine model IDs across four paradigms. The assistant is the agentic one: PydanticAI parses a request into a typed schema against a local LLM, a compile step rejects any plan whose step references don't resolve, and a LangGraph state machine executes it against the same services the rest of the app uses. The model decides what to do; everything downstream is deterministic code. Detail in [docs/ml/](docs/ml/).
+**Frontend**. React 19 and strict TypeScript. The statistics section on the game detail page is hand-rolled SVG with Catmull-Rom-style smoothing, not a charting library. It covers density curves, percentile positioning, rating histograms, and an arc gauge. See [frontend/README.md](frontend/README.md#distribution-charts).
 
-**Frontend.** React 19 and strict TypeScript. The statistics section on the game detail page (density curves, percentile positioning, rating histograms, an arc gauge) is hand-rolled SVG with Catmull-Rom-style smoothing, not a charting library. See [docs/product/features.md#4-statistics--distribution-charts](docs/product/features.md#4-statistics--distribution-charts).
+**iOS**. A native SwiftUI client. The models, the API client, and the values derived from them live in a `LudoraKit` Swift package that imports only Foundation. Its tests therefore run from the command line, with no Xcode project and no simulator. View code stays in the app target. See [ios/AGENTS.md](ios/AGENTS.md).
 
-**iOS.** A native SwiftUI client. The models, the API client, and the values derived from them live in a `LudoraKit` Swift package that imports only Foundation. Its tests therefore run from the command line, with no Xcode project and no simulator. View code stays in the app target. See [ios/AGENTS.md](ios/AGENTS.md).
+**Backend**. A layered FastAPI service where routes call services, services call the ORM or a recommender class, and nothing skips a layer. 19 REST endpoints. See [docs/architecture/README.md](docs/architecture/README.md).
 
-**Backend.** A layered FastAPI service where routes call services, services call the ORM or a recommender class, and nothing skips a layer. 19 REST endpoints. See [docs/architecture/README.md](docs/architecture/README.md).
-
-**Database.** PostgreSQL with the pgvector extension for embedding search, a normalized schema with dedicated entity and join tables for every taxonomy type (subdomain, category, theme, family), and 27 tracked, reversible Alembic migrations. See [docs/data/README.md](docs/data/README.md).
+**Database**. PostgreSQL with the pgvector extension for embedding search. The schema is normalized, with dedicated entity and join tables for every taxonomy type: subdomain, category, theme, family. It has 27 tracked, reversible Alembic migrations. See [docs/data/README.md](docs/data/README.md).
 
 ## Screenshots
 
@@ -65,54 +70,35 @@ No user accounts, so no personalization: every visitor sees the same catalog. Fu
 |---|---|---|
 | <img src="docs/assets/images/ios_app.browse.default.png" alt="iOS browse" width="240"> | <img src="docs/assets/images/ios_app.game_detail.hero.brass_birmingham.png" alt="iOS game detail" width="240"> | <img src="docs/assets/images/ios_app.game_detail.stats.official.brass_birmingham.png" alt="iOS statistics" width="240"> |
 
-More in [docs/product/features.md](docs/product/features.md), including the ratings histogram, user reviews, and every AI assistant response type.
+More in the [web client](frontend/README.md) and [iOS client](ios/README.md) READMEs, including the ratings histogram, user reviews, and every AI assistant response type.
 
 ## Getting started
 
 ```bash
-docker compose up -d
+docker compose up -d                                            # Postgres, frontend, pgAdmin
+cd backend && uv sync && uv run uvicorn app.main:app --reload   # the backend runs natively
 ```
 
-This brings up Postgres, the frontend, and pgAdmin. **The backend runs natively, not in Docker.** `SearchService` uses `mlx-embeddings` (Qwen3-Embedding-0.6B) for semantic search, and MLX is built on Metal, so it only runs on macOS with Apple Silicon:
+Then open http://localhost:5173. The backend stays out of Docker because MLX has no Linux build, explained in [docs/architecture/README.md](docs/architecture/README.md#why-the-backend-is-not-a-compose-service).
 
-```bash
-cd backend && uv sync && uv run uvicorn app.main:app --reload
-```
+**This brings up an empty database.** Nothing seeds it. [docs/setup/README.md](docs/setup/README.md) has everything needed to populate it.
 
-- Frontend: http://localhost:5173
-- API + Swagger docs: http://localhost:8000/docs
-- Postgres: `localhost:5432`
-
-A root `Makefile` wraps both of the above plus lint/typecheck/test (`make help` for the full list).
-
-This brings up an **empty** database; nothing here seeds it. To populate the catalog, run the data pipeline (raw CSVs, then a master dataset, then Postgres, then embeddings and search vectors). See [docs/setup/README.md](docs/setup/README.md) for exact commands and [docs/architecture/data-pipeline.md](docs/architecture/data-pipeline.md) for what each of the 21 scripts does. The AI assistant and "Community Consensus" generation also need a local MLX server (Apple Silicon only); everything else works without it.
-
-The iOS client is a separate Xcode project at `ios/Ludora/Ludora.xcodeproj`. Open it and press Run with the backend running. `make ios-test` runs its package tests without Xcode or a simulator. See [ios/README.md](ios/README.md).
+The iOS client is a separate Xcode project. `make ios-test` runs its package tests with no Xcode and no simulator: [ios/README.md](ios/README.md).
 
 ## Data
 
-Two Kaggle datasets, merged on BGG ID: [threnjen/board-games-database-from-boardgamegeek](https://www.kaggle.com/datasets/threnjen/board-games-database-from-boardgamegeek/) for game metadata, and [jvanelteren/boardgamegeek-reviews](https://www.kaggle.com/datasets/jvanelteren/boardgamegeek-reviews/) for ratings and reviews. Not every file in either dataset ends up used by the pipeline; see [docs/data/README.md](docs/data/README.md) for exactly which CSVs feed which tables.
+Two Kaggle datasets, merged on BGG ID: [threnjen/board-games-database-from-boardgamegeek](https://www.kaggle.com/datasets/threnjen/board-games-database-from-boardgamegeek/) for game metadata, and [jvanelteren/boardgamegeek-reviews](https://www.kaggle.com/datasets/jvanelteren/boardgamegeek-reviews/) for ratings and reviews. The pipeline does not use every file in either dataset. See [docs/data/README.md](docs/data/README.md) for exactly which CSVs feed which tables.
 
-All of it traces back to [BoardGameGeek](https://boardgamegeek.com/) and its community: two decades of ratings, reviews, and game data contributed by people who love the hobby. This project is a personal proof of concept built to learn and to build the thing I wanted to build, not a commentary on BGG or a competitor to it, and it's not used for any commercial purpose. The data belongs to BoardGameGeek and the people who contributed it, not to this project.
+All of it traces back to [BoardGameGeek](https://boardgamegeek.com/) and its community: two decades of ratings, reviews, and game data contributed by people who love the hobby.
 
-## Documentation map
+Ludora is not a commentary on BGG, not a competitor to it, and not used for any commercial purpose. The data belongs to BoardGameGeek and the people who contributed it, not to this project.
 
-| Doc | What it answers |
-|---|---|
-| [docs/case-study.md](docs/case-study.md) | The full problem, product, architecture, data, ML, and results narrative |
-| [docs/product/features.md](docs/product/features.md) | Every user-facing feature, with screenshots and code references |
-| [docs/architecture/README.md](docs/architecture/README.md) | System design, service boundaries, request flows |
-| [docs/architecture/data-pipeline.md](docs/architecture/data-pipeline.md) | The offline ETL/ML script order, script by script |
-| [docs/data/README.md](docs/data/README.md) | Dataset provenance, schema, taxonomy, data quality rules |
-| [docs/ml/README.md](docs/ml/README.md) | Search, recommenders, ABSA, and the assistant, one doc per system |
-| [docs/ml/evaluation.md](docs/ml/evaluation.md) | What's measured, what's observed but unverified, what isn't evaluated at all |
-| [docs/engineering/testing.md](docs/engineering/testing.md) | The actual state of test coverage: minimal but real backend CI, everything else still manual |
-| [docs/setup/README.md](docs/setup/README.md) | Verified setup and environment variable reference |
-| [docs/roadmap.md](docs/roadmap.md) | Concretely evidenced planned or unfinished work |
-| [docs/limitations.md](docs/limitations.md) | Every known gap, in one place |
-| [ios/README.md](ios/README.md) | Building and running the native iOS client |
-| [AGENTS.md](AGENTS.md) | Navigation and invariants for anyone, human or AI, extending this repo |
+## Documentation
+
+[docs/](docs/README.md) is the map: four ML systems, the two clients, how it is built, and how to run it. [AGENTS.md](AGENTS.md) holds the conventions and invariants for extending the repo.
+
+Every doc explains *why*, not what the code does, and ends with its own **Known limitations**.
 
 ## Status
 
-Actively developed, local-first, not deployed anywhere public. Built end to end over a short, concentrated build window rather than long-lived incremental development. That covers the schema through 27 migrations, 21 pipeline scripts, 19 API endpoints, a React web app, and a native iOS client.
+Actively developed and local-first: 27 migrations, 21 pipeline scripts, 19 API endpoints, a React web app, and a native iOS client.
