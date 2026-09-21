@@ -134,7 +134,7 @@ def run_deepwalk(session, games, bgg_ids, computed_at, batch_size=200):
     """DeepWalk graph embeddings via gensim Word2Vec (model id: 'deepwalk').
 
     Replaces the memory-heavy, never-actually-trained node2vec PyPI-package
-    path (scripts/build_node2vec_graph.py / train_node2vec.py — removed).
+    path (scripts/build_node2vec_graph.py / train_node2vec.py, both removed).
     Random walk generation is seeded for reproducibility.
     """
     LIMIT = RecommenderConfig.RECS_PER_MODEL_LIMIT

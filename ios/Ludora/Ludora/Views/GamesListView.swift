@@ -4,7 +4,7 @@ import SwiftUI
 /// The browse screen: one full-screen card at a time, swiped vertically.
 ///
 /// A pager rather than the web app's grid, because the shapes are different.
-/// A 4-across grid works on a wide display; on a phone the same grid becomes
+/// A 4-across grid works on a wide display. On a phone the same grid becomes
 /// a single narrow column, which is the row list this replaced and which
 /// wasted the box art entirely. One card per screen gives the art the room
 /// it deserves.
@@ -12,7 +12,7 @@ import SwiftUI
 /// Vertical, not horizontal, for three reasons. A left-edge horizontal swipe
 /// is the navigation-back gesture, so a horizontal pager competes with the
 /// system for it. A 28,000-game catalog is an unbounded feed, and unbounded
-/// lists read vertically; a horizontal carousel signals a short curated
+/// lists read vertically. A horizontal carousel signals a short curated
 /// shelf. And a vertical page is full-height by construction, which is what
 /// lets the cover expand instead of sitting in a 4:3 band.
 ///
@@ -158,7 +158,7 @@ struct GamesListView: View {
     ///
     /// The scroll view deliberately does not clip, so the neighbouring cards
     /// stay visible past the page. The toolbar's blur used to absorb the one
-    /// above; with the toolbar gone, its bottom edge ran into the status bar
+    /// above. With the toolbar gone, its bottom edge ran into the status bar
     /// instead. This does that job in the palette rather than in glass, and
     /// it fades out well above the card so it never touches the card in view.
     private var topScrim: some View {
@@ -228,7 +228,7 @@ struct GamesListView: View {
     /// out of reach exactly when someone wants to narrow a result set, and
     /// lexical search and filters are designed to combine. Neither
     /// `searchToolbarBehavior(.minimize)` nor a `ToolbarSpacer` arrangement
-    /// changed that; both were tried on device.
+    /// changed that. Both were tried on device.
     private var filtersButton: some View {
         let count = browser.query.activeFilterCount
 

@@ -31,7 +31,7 @@ def main():
         # ABSA backlog completes), so re-checking it each run is deliberate,
         # not wasted work -- it's a cheap SQL query, not an LLM call.
         already_done = {r[0] for r in db.execute(text("SELECT game_id FROM game_summaries")).fetchall()}
-        print(f"{len(already_done)} games already summarized — will be skipped.")
+        print(f"{len(already_done)} games already summarized, will be skipped.")
 
         if args.game_id:
             candidate_ids = [args.game_id]
@@ -40,7 +40,7 @@ def main():
             # the display floor. generate_game_summary() does the precise
             # eligibility check (including the distinct-qualifying-review
             # count) per game and returns None if it's not actually
-            # eligible; this just avoids querying every one of the ~28K
+            # eligible. This just avoids querying every one of the ~28K
             # catalog games when most have no ABSA data yet.
             rows = db.execute(text("""
                 SELECT DISTINCT game_id FROM game_aspect_aggregates
@@ -76,7 +76,7 @@ def main():
             if args.limit and (generated + skipped_ineligible + failed) >= args.limit:
                 break
             if args.minutes and (time.time() - start_time) >= args.minutes * 60:
-                print(f"\nTime budget of {args.minutes} min reached — stopping (resumable next run).")
+                print(f"\nTime budget of {args.minutes} min reached. Stopping (resumable next run).")
                 break
 
             game = db.query(Game).filter(Game.bgg_id == game_id).first()
@@ -104,10 +104,10 @@ def main():
         print("\n--- Batch complete ---")
         print(f"Generated: {generated}, skipped (ineligible or exhausted retries): {skipped_ineligible}, failed (unexpected error): {failed}")
         print(f"Elapsed: {elapsed:.1f}s" + (f" ({elapsed / generated:.1f}s/game generated)" if generated else ""))
-        print("Note: the eligible-candidate count is a moving target that grows as more of the ABSA classification backlog completes — this is not a fixed total the way ABSA's eligible-review count is.")
+        print("Note: the eligible-candidate count is a moving target that grows as more of the ABSA classification backlog completes. This is not a fixed total the way ABSA's eligible-review count is.")
 
-        # LLM-prompted features don't have conventional hyperparameters —
-        # what actually determines behavior is the prompt + model, so
+        # LLM-prompted features don't have conventional hyperparameters.
+        # What actually determines behavior is the prompt + model, so
         # that's what gets logged here, aggregated across the whole batch.
         if summarizer.llm_calls:
             latencies = [c["latency_seconds"] for c in summarizer.llm_calls]

@@ -69,7 +69,7 @@ def test_committed_artifact_is_drawable():
     ],
 )
 def test_rejects_a_curve_no_client_could_draw(tmp_path, curve, expected):
-    """A ragged or truncated curve raises nowhere; it just draws wrong.
+    """A ragged or truncated curve raises nowhere. It just draws wrong.
 
     So it has to fail on read, with the metric named, rather than reach a
     client. `response_model` would not catch any of these.

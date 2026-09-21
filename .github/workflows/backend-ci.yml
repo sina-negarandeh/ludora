@@ -32,7 +32,7 @@ jobs:
 
       # Plain `uv sync` installs main deps + the dev group only -- the ml
       # group (torch, transformers, ...) is opt-in (`--group ml`), and not
-      # needed for lint/type-check/the infra-free test suite here; see the
+      # needed for lint/type-check/the infra-free test suite here. See the
       # group's own comment in pyproject.toml.
       - name: Install dependencies
         run: uv sync

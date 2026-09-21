@@ -1,6 +1,6 @@
 """Single source of truth for ML/DL/NLP/RecSys hyperparameters.
 
-These are reproducibility-critical values, not runtime settings — they live
+These are reproducibility-critical values, not runtime settings. They live
 here as plain literals in version control rather than in pydantic_settings
 (env-overridable config is for infra knobs like OPENAI_BASE_URL, which stays
 in app.core.config.Settings). Every script/service that trains, precomputes,
@@ -20,10 +20,10 @@ class SearchConfig:
 
     # MLX-converted Qwen3-Embedding-0.6B, served via the `mlx-embeddings`
     # package (decoder-based, last-token pooling, 1024-dim native output,
-    # 32K token context — replaces all-MiniLM-L6-v2 as of this pass).
+    # 32K token context, replacing all-MiniLM-L6-v2 as of this pass).
     # 4-bit DWQ (dynamic-range weight quantization) chosen over mxfp8 for
     # throughput: mxfp8 measured ~0.47s/doc on this hardware (a ~28K-game
-    # catalog would take 3-4h) — MLX's fast-matmul path is more mature for
+    # catalog would take 3-4h). MLX's fast-matmul path is more mature for
     # 4-bit than for mxfp8, and DWQ specifically targets retaining
     # near-full-precision quality despite the drop to 4-bit, unlike naive
     # round-to-nearest quantization. Swap this string to try mxfp8 or the
@@ -48,9 +48,9 @@ class SearchConfig:
     SORT_RELEVANCE_POOL_SIZE = 25
     # Embedding document construction (scripts/update_embeddings.py).
     # Tried raising this to 4,000 on the reasoning that Qwen3's 32K context
-    # *can* handle longer input — but measured against the actual catalog,
+    # *can* handle longer input, but measured against the actual catalog,
     # the median document is identical at 1,500 vs 4,000 chars (316 tokens
-    # either way — most descriptions are already short), while 4,000 nearly
+    # either way, since most descriptions are already short), while 4,000 nearly
     # triples the tail (p99 1,146 vs 549 tokens, max 1,313 vs 553). A long
     # document also isn't free for embedding *quality*: pooling a long,
     # often flavor-text-heavy BGG description into one fixed-size vector
@@ -63,13 +63,13 @@ class SearchConfig:
     DESCRIPTION_TRUNCATE_CHARS = 1500
     # Tokenizer max_length passed to mlx_embeddings' batch_encode_plus.
     # Measured p99=549, max=553 tokens at DESCRIPTION_TRUNCATE_CHARS=1500
-    # (500-doc sample) — 768 is a real backstop with headroom, not 2,048
+    # (500-doc sample). 768 is a real backstop with headroom, not 2,048
     # of mostly-unused budget every batch pads toward.
     EMBED_MAX_TOKENS = 768
-    # Was 500 under all-MiniLM-L6-v2 (22M params, 256-token cap — cheap to
+    # Was 500 under all-MiniLM-L6-v2 (22M params, 256-token cap, cheap to
     # batch large). Qwen3-Embedding-0.6B is a much larger decoder model over
     # much longer sequences, so a large batch risks memory pressure on
-    # unified memory; start conservative and raise it if your hardware
+    # unified memory. Start conservative and raise it if your hardware
     # handles it comfortably.
     EMBED_BATCH_SIZE = 32
 
@@ -89,8 +89,8 @@ class SearchConfig:
     # match against. Ranges are kept identical, by hand, to the filter
     # presets in frontend/src/pages/GamesList.tsx (search for 'Light (1-2)')
     # so the UI and the embedding vocabulary never disagree on what "light"
-    # or "heavy" means. (min, max, phrase) — max is exclusive except the
-    # last bucket; None means unbounded.
+    # or "heavy" means. (min, max, phrase): max is exclusive except the
+    # last bucket. None means unbounded.
     WEIGHT_BUCKETS = [
         (1.0, 2.0, "light strategy game, easy to learn"),
         (2.0, 3.5, "medium-weight strategy game"),
@@ -107,45 +107,45 @@ class SearchConfig:
 class ABSAConfig:
     """Aspect-based sentiment extraction (DeBERTa zero-shot classifier)."""
 
-    # base, not large — same trainer (yangheng) and training corpus (~180K
+    # base, not large. Same trainer (yangheng) and training corpus (~180K
     # augmented SemEval-2014/2016 + MAMS examples) as the large checkpoint,
-    # just a smaller architecture. Chosen for speed/coverage, not accuracy —
+    # just a smaller architecture. Chosen for speed/coverage, not accuracy:
     # the domain mismatch (restaurant/laptop reviews, not board games) is
-    # identical either size; this doesn't make that better or worse.
+    # identical either size. This doesn't make that better or worse.
     MODEL_NAME = "yangheng/deberta-v3-base-absa-v1.1"
-    # Fixed 17-aspect taxonomy — every extraction run classifies against
+    # Fixed 17-aspect taxonomy. Every extraction run classifies against
     # exactly this list, never a subset, so aggregates stay comparable.
     # Reduced from an original 22 (Gameplay, Immersion, Production Quality,
     # Teardown, Player Count dropped) after reviewing each aspect against
     # "does knowing community consensus on this actually help a user," not
-    # just "can a classifier score it" — checked against real mention
+    # just "can a classifier score it". Checked against real mention
     # frequency in the corpus, not just judgment: Teardown had 2 mentions
-    # across the entire eligible corpus vs. Setup's 50; Immersion had 6 vs.
+    # across the entire eligible corpus vs. Setup's 50. Immersion had 6 vs.
     # Theme's 294 (reviewers don't distinguish "good theme" from "felt
-    # immersed" — it's the same comment); Gameplay was too broad to add
+    # immersed", it's the same comment). Gameplay was too broad to add
     # information beyond Mechanics+Strategy+Balance+Player Interaction
-    # combined; Production Quality was a vaguer umbrella over the more
-    # specific, more-discussed Components/Artwork; Player Count is the
+    # combined. Production Quality was a vaguer umbrella over the more
+    # specific, more-discussed Components/Artwork. Player Count is the
     # wrong shape for a single sentiment score ("great at 2, bad at 5" isn't
     # one verdict) and is redundant with the structured suggested_num_players
     # poll data already shown elsewhere on the game page. See
-    # docs/ml/model-cards/absa-deberta.md for the full per-aspect rationale.
+    # docs/ml/absa.md for the full per-aspect rationale.
     TAXONOMY = [
         "Mechanics", "Strategy", "Theme", "Replayability", "Components", "Artwork",
         "Rulebook", "Setup", "Learning Curve", "Complexity", "Downtime",
         "Player Interaction", "Balance", "Luck", "Solo Play", "Game Length", "Value",
     ]
     # Aspects are classified in chunks of this size per review to bound peak
-    # GPU/MPS memory — set to len(TAXONOMY) so all aspects run in one forward
+    # GPU/MPS memory. Set to len(TAXONOMY) so all aspects run in one forward
     # pass. Measured against the real deberta-v3-base checkpoint (at the
     # time, with the original 22-aspect taxonomy): batch_size=11 (the old
-    # default, tuned for the larger checkpoint) ran at 9.66 rev/sec; 22 (all
+    # default, tuned for the larger checkpoint) ran at 9.66 rev/sec. 22 (all
     # aspects in one pass) hit 12.04 rev/sec (~20% faster) with no further
     # gain at 44/88, since the taxonomy size is already the max useful batch
-    # — there's nothing more to batch once every aspect is in one pass.
+    # since there's nothing more to batch once every aspect is in one pass.
     # Batching *across different reviews* was also tested and found to be
     # actively worse (10.18h -> 58.14h projected at batch=16 reviews), since
-    # padding pads every sequence in a batch to the longest one present —
+    # padding pads every sequence in a batch to the longest one present, so
     # mixing reviews of different lengths wastes compute on short ones.
     BATCH_SIZE = 17
     # Applied at aggregation (absa_aggregate.py), not extraction --
@@ -160,7 +160,7 @@ class ABSAConfig:
     # negative, 0.843 for neutral -- the model rarely lands in a genuinely
     # ambiguous 3-way split. At 0.5 (the old value), 100% of already-stored
     # pos/neg predictions already cleared it -- effectively no filter at
-    # all. At 0.7, 81.7% of that same evidence survives; at 0.9, 71.4%.
+    # all. At 0.7, 81.7% of that same evidence survives. At 0.9, 71.4%.
     # 0.7 is a starting point, not a final calibration -- the sample is
     # small (only 15 negative/15 neutral pairs) and worth revisiting once
     # the full corpus is classified.
@@ -168,7 +168,7 @@ class ABSAConfig:
 
     # Reviews-section card state (AspectService, GameDetail.tsx): an aspect
     # reads as confidently Positive/Negative only if that share of mentions
-    # clears this bar; otherwise the card falls back to a Mixed/Neutral
+    # clears this bar. Otherwise the card falls back to a Mixed/Neutral
     # state. This catches the case plain plurality-of-three misses -- e.g.
     # 45% positive / 10% neutral / 45% negative has a technical positive
     # "winner" by a hair, but that's a genuinely split aspect, not a
@@ -183,58 +183,58 @@ class ABSAConfig:
 
     # Minimum total_mentions for an aspect to surface as a card in the
     # reviews-section UI (AspectService.get_game_aspects). A separate knob
-    # from SummarizationConfig.MIN_ASPECT_MENTIONS below — same value today,
+    # from SummarizationConfig.MIN_ASPECT_MENTIONS below. Same value today,
     # but they gate different decisions (show a card vs. feed the LLM
     # summarizer) and are free to diverge.
     MIN_MENTIONS_FOR_DISPLAY = 5
 
     # --- Review quality/eligibility filter (app.core.review_quality) ---
     # Purpose: shrink the review pool *before* the expensive DeBERTa step,
-    # not classify text quality in the abstract — every signal here is a
+    # not classify text quality in the abstract. Every signal here is a
     # deterministic hash/count/ratio, no model inference, no training, cheap
     # enough to run over the full ~4.2M-review corpus. See
-    # docs/ml/model-cards/absa-deberta.md for the full design rationale.
+    # docs/ml/absa.md for the full design rationale.
 
-    # Language gate — reuses reviews.language/language_confidence (already
+    # Language gate: reuses reviews.language/language_confidence (already
     # computed by scripts/detect_languages.py) instead of recomputing fastText
     # inference per call, which the old compute_quality_score() did.
     QUALITY_MIN_LANGUAGE_CONFIDENCE = 0.5
 
-    # Hard gates — binary pass/fail, categorically unusable text. Run first
+    # Hard gates: binary pass/fail, categorically unusable text. Run first
     # since they're the cheapest check and eliminate the most obvious
     # garbage before any pricier per-review computation runs.
     QUALITY_MIN_CHARS = 10
     QUALITY_MIN_TOKENS = 3
     # Reject text where 10%+ of characters are control/unassigned/
-    # private-use/surrogate code points — a cheap proxy for corrupted
+    # private-use/surrogate code points, a cheap proxy for corrupted
     # encoding or garbage byte sequences.
     QUALITY_MAX_BAD_UNICODE_RATIO = 0.1
 
-    # SimHash near-duplicate detection — 64-bit fingerprint, Hamming distance
+    # SimHash near-duplicate detection: 64-bit fingerprint, Hamming distance
     # <= this many bits counts as a near-duplicate. 3/64 is a conventional
     # starting point for near-dup web text (used e.g. in Google's original
-    # SimHash near-duplicate detection); not tuned against this corpus yet.
+    # SimHash near-duplicate detection). Not tuned against this corpus yet.
     QUALITY_SIMHASH_BITS = 64
     QUALITY_SIMHASH_MAX_DISTANCE = 3
 
     # Weighted combination of the four continuous signals (information
     # density, lexical diversity, domain specificity, boilerplate penalty)
-    # into one final score. Starting weights, not yet empirically tuned —
+    # into one final score. Starting weights, not yet empirically tuned.
     # scripts/build_review_quality_vocab.py reports the real score
     # distribution on this corpus so the threshold below can be set from
     # measured percentiles rather than guessed.
     QUALITY_DENSITY_WEIGHT = 0.35
     QUALITY_DIVERSITY_WEIGHT = 0.25
     QUALITY_SPECIFICITY_WEIGHT = 0.30
-    QUALITY_SPECIFICITY_SCALE = 3.0  # domain-term hit rate is naturally small; scale up before capping at 1.0
+    QUALITY_SPECIFICITY_SCALE = 3.0  # domain-term hit rate is naturally small. Scale up before capping at 1.0
     QUALITY_BOILERPLATE_WEIGHT = 0.30
     # Calibrated against a real 50K-review sample (any language, to see
     # true gate attrition): after language + hard filters, scores were
     # p10=0.326 p25=0.373 p50=0.431 p75=0.511 p90=0.604. 0.6 sits at
-    # roughly the 90th percentile — deliberately selective per an explicit
+    # roughly the 90th percentile, deliberately selective per an explicit
     # "don't mind a higher threshold" preference. Measured against the full
     # corpus (scripts/filter_eligible_reviews.py): ~378K/4.2M reviews pass
-    # (~9%) — every review that clears this bar is used for ABSA, not
+    # (~9%). Every review that clears this bar is used for ABSA, not
     # capped or further sampled down.
     QUALITY_SCORE_THRESHOLD = 0.6
 
@@ -246,7 +246,7 @@ class ABSAConfig:
     # ahead of specific ones, so those were dropped and only genuinely
     # game-specific/content-bearing terms (mechanics, components, genres,
     # terms matching the ABSA aspect taxonomy) were kept. Stored as stems
-    # (NLTK SnowballStemmer) — scoring stems review tokens the same way
+    # (NLTK SnowballStemmer). Scoring stems review tokens the same way
     # before checking membership, so "component"/"components" both match.
     DOMAIN_VOCABULARY = {
         "card", "rule", "mechan", "theme", "turn", "board", "strategi", "strateg",
@@ -263,18 +263,18 @@ class ABSAConfig:
         "explor", "cooper",
     }
 
-    # Boilerplate n-grams — corpus-derived (same script), applied by raw
+    # Boilerplate n-grams: corpus-derived (same script), applied by raw
     # frequency threshold with no human curation step: an n-gram repeated
     # across hundreds of *different* reviews is unambiguously templated
     # filler regardless of judgment calls, unlike single-word vocabulary.
     BOILERPLATE_NGRAM_SIZE = 4
     BOILERPLATE_MIN_COUNT = 50
 
-    # fastText language-ID model — pinned external download, not a trained
+    # fastText language-ID model: a pinned external download, not a trained
     # artifact, so it's tracked here by URL/filename rather than in MLflow.
     # Used by scripts/detect_languages.py (produces reviews.language/
     # language_confidence) and the superseded scripts/absa_filter.py pilot
-    # path — no longer used by the canonical filtering pipeline, which reads
+    # path, no longer used by the canonical filtering pipeline, which reads
     # the precomputed columns instead of running fastText itself.
     FASTTEXT_MODEL_URL = "https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.ftz"
     FASTTEXT_MODEL_FILENAME = "lid.176.ftz"
@@ -321,7 +321,7 @@ class RecommenderConfig:
     # confidence (the previous behavior) conflates "how confident are we
     # this interaction is positive" with the rating's own polarity, so a
     # rating of 2/10 got read as a weak-but-positive signal instead of a
-    # dislike. alpha=40 is the paper's own default; not tuned against this
+    # dislike. alpha=40 is the paper's own default. Not tuned against this
     # dataset specifically.
     CF_ALS_CONFIDENCE_ALPHA = 40
 
@@ -332,7 +332,7 @@ class RecommenderConfig:
     TFIDF_MAX_FEATURES = 10000
     RECS_PER_MODEL_LIMIT = 10
 
-    # --- Graph-based (part of the content paradigm — see class docstring) ---
+    # --- Graph-based (part of the content paradigm, see class docstring) ---
     # subdomains/families added alongside mechanics/categories -- previously
     # missing from every content model except embedding. "themes" is
     # deliberately NOT its own relation here: BGG's Theme: namespace is
@@ -344,7 +344,7 @@ class RecommenderConfig:
         "mechanics": 0.35, "categories": 0.25, "subdomains": 0.15, "families": 0.1,
         "designers": 0.05, "publishers": 0.025, "artists": 0.025,
     }
-    # DeepWalk-via-Word2Vec graph embedding (model id: "deepwalk" — this
+    # DeepWalk-via-Word2Vec graph embedding (model id: "deepwalk", which
     # replaces the real, unused node2vec PyPI-package path, which never
     # produced an artifact and has been removed).
     DEEPWALK_NUM_WALKS = 10

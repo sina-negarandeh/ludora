@@ -9,7 +9,7 @@ from app.core import embeddings as embedding_model
 
 def bucket_label(value, buckets):
     """Map a numeric value to its bucket's text phrase (SearchConfig.WEIGHT_BUCKETS /
-    PLAYTIME_BUCKETS) — converts a raw number into the same descriptive vocabulary
+    PLAYTIME_BUCKETS). Converts a raw number into the same descriptive vocabulary
     the frontend's own filter presets use, since embedding models represent
     phrases like "heavy strategy game" far better than a raw float or int.
     """
@@ -18,7 +18,7 @@ def bucket_label(value, buckets):
     last = len(buckets) - 1
     for i, (low, high, phrase) in enumerate(buckets):
         # Every bucket's upper bound is exclusive except the very last one,
-        # which is inclusive — otherwise a value sitting exactly on the top
+        # which is inclusive. Otherwise a value sitting exactly on the top
         # of the whole range (e.g. game_weight == 5.0, the max on BGG's
         # 1-5 scale) would match no bucket at all.
         upper_ok = high is None or value < high or (i == last and value == high)
@@ -51,9 +51,9 @@ def build_structured_document(game_name, description, themes, mechanics, categor
     if families:
         doc_parts.append("Families:\n" + "\n".join(families))
 
-    # Bucketed numeric descriptors — designers/artists/publishers are
+    # Bucketed numeric descriptors. Designers/artists/publishers are
     # deliberately excluded (lexical search already handles proper-noun
-    # matches at the D-weight tier; adding them here would only dilute the
+    # matches at the D-weight tier. Adding them here would only dilute the
     # thematic signal from the fields above, not add retrieval capability).
     weight_phrase = bucket_label(game_weight, SearchConfig.WEIGHT_BUCKETS)
     playtime_phrase = bucket_label(mfg_playtime, SearchConfig.PLAYTIME_BUCKETS)
@@ -70,7 +70,7 @@ def update_embeddings():
     db = SessionLocal()
 
     # Query to fetch games and their relevant metadata.
-    # Designers, artists, and publishers are deliberately omitted — lexical
+    # Designers, artists, and publishers are deliberately omitted, since lexical
     # search already covers proper-noun matches (search_vector's D-tier).
     query = """
         SELECT
@@ -115,7 +115,7 @@ def update_embeddings():
         )
         items.append((row.bgg_id, doc))
 
-    # Sort by document length before batching — batch_encode_plus pads every
+    # Sort by document length before batching. batch_encode_plus pads every
     # item in a batch up to that batch's longest member, so pulling games in
     # raw DB order means one long outlier inflates its entire batch's cost
     # for no quality benefit. Sorting first makes each batch length-uniform,
@@ -135,7 +135,7 @@ def update_embeddings():
         print(f"Encoding batch {i//batch_size + 1}/{(len(items) + batch_size - 1)//batch_size}...")
         embeddings = embedding_model.encode(documents, is_query=False)
 
-        # Upsert into game_embeddings — one row per (game, model), so a
+        # Upsert into game_embeddings, one row per (game, model), so a
         # rerun of a *different* model doesn't touch or lose this one's rows.
         rows = [
             {

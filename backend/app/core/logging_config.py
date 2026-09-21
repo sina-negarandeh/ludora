@@ -5,7 +5,7 @@ processor pipeline, not per-module ad hoc setup.
 
 Console-rendered (human-readable key=value pairs), not JSON: this runs
 locally only, with no log shipping/aggregation pipeline behind it (see
-docs/limitations.md's "no online feedback loop"), so the priority is a
+docs/ml/recommenders.md's "no online feedback loop"), so the priority is a
 developer reading these logs directly, not a machine parsing them.
 Swapping to JSON for a real deployment is a one-line renderer change
 (structlog.processors.JSONRenderer() in place of ConsoleRenderer()),

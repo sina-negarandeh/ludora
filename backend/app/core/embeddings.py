@@ -2,7 +2,7 @@
 
 Both SearchService (live query encoding) and scripts/update_embeddings.py
 (offline document encoding) need to load and run the same configured model
-the same way — this is the one place that does it, so the two call sites
+the same way. This is the one place that does it, so the two call sites
 can't drift on load args, instruction-prefix handling, or tokenization.
 
 Loads once per process (module-level cache), consistent with how the
@@ -24,7 +24,7 @@ def _get_model():
         # CI's pytest step failed importing this module at all on a
         # GitHub-hosted Linux runner. Deferring the import means anything
         # that only imports this module (the whole app.main chain, for
-        # instance) still works on any platform; only an actual call to
+        # instance) still works on any platform. Only an actual call to
         # _get_model()/encode() requires MLX, same as it always has.
         from mlx_embeddings.utils import load as _mlx_load
         _model, _tokenizer = _mlx_load(SearchConfig.EMBEDDING_MODEL)
@@ -38,9 +38,9 @@ def _get_model():
 def encode(texts: list[str], is_query: bool = False) -> list[list[float]]:
     """Encode a batch of texts to L2-normalized embedding vectors.
 
-    `is_query=True` applies SearchConfig.QUERY_INSTRUCTION — the asymmetric
+    `is_query=True` applies SearchConfig.QUERY_INSTRUCTION, the asymmetric
     instruction prefix instruction-aware models (e.g. Qwen3-Embedding) expect
-    on the query side only — but only when the configured model is actually
+    on the query side only, but only when the configured model is actually
     in SearchConfig.INSTRUCTION_AWARE_MODELS. Documents are always encoded
     plain, regardless of this flag.
     """

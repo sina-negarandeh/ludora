@@ -65,7 +65,7 @@ def load_distributions() -> bytes:
     """The artifact, read and vetted once.
 
     Takes no arguments on purpose. An injectable path would give one file
-    several cache keys under `maxsize=1` and let a test evict the real entry;
-    tests exercise `read_distributions` directly instead.
+    several cache keys under `maxsize=1` and let a test evict the real entry.
+    Tests exercise `read_distributions` directly instead.
     """
     return read_distributions(DISTRIBUTIONS_PATH)

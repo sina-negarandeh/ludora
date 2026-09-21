@@ -4,7 +4,7 @@ import SwiftUI
 @main
 struct LudoraApp: App {
     /// One client for the process. `LudoraConfiguration.localhost` works in
-    /// the simulator; on a physical device switch to `.lan(host:)` with the
+    /// the simulator. On a physical device switch to `.lan(host:)` with the
     /// Mac's address, since the device cannot resolve the host's localhost.
     private let client = LudoraClient(configuration: .localhost)
 

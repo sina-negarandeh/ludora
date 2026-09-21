@@ -91,7 +91,7 @@ struct FiltersView: View {
 
     /// Semantic and hybrid go to `/api/search/`, which takes no filters.
     /// The old sheet admitted this in grey caption text under the mode
-    /// picker; saying it once, up top, where it changes what the whole sheet
+    /// picker. Saying it once, up top, where it changes what the whole sheet
     /// means, is more honest than a footnote.
     private var inertFiltersNotice: some View {
         Section {
@@ -300,7 +300,7 @@ struct FiltersView: View {
     }
 
     private func loadVocabularies() async {
-        // Four independent lookups; no reason to serialize them.
+        // Four independent lookups. No reason to serialize them.
         async let subs = try? await client.subdomains()
         async let cats = try? await client.categories()
         async let mechs = try? await client.mechanics()

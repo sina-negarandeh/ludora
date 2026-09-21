@@ -1,7 +1,7 @@
 """Infra-free smoke tests: no live DB, no local LLM server. Catches a
 broken import, a broken route/schema definition, or a startup-time error
 without needing anything CI doesn't have. Deeper coverage (the real
-gap tracked in docs/roadmap.md) needs a DB fixture and belongs in its
+gap tracked in docs/engineering/testing.md) needs a DB fixture and belongs in its
 own test module once that exists.
 """
 from fastapi.testclient import TestClient

@@ -15,7 +15,7 @@ public enum SearchMode: String, Codable, CaseIterable, Sendable {
 ///
 /// Search is a POST, not a GET, because the filter object nests too deeply
 /// to express as query parameters. Browse (`/api/games/`) is the GET with
-/// flat query parameters; see `GameQuery`.
+/// flat query parameters. See `GameQuery`.
 public struct SearchRequest: Codable, Sendable {
     public let q: String
     public let mode: SearchMode

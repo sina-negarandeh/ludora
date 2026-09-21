@@ -50,15 +50,15 @@ class GameSubfamily(Base):
 # --- Entity Tables ---
 
 class Category(Base):
-    """BGG's real Category field (boardgamecategory) — e.g. Adventure,
-    Economic, Card Game. Not the old "categories" concept; see Subdomain.
+    """BGG's real Category field (boardgamecategory): e.g. Adventure,
+    Economic, Card Game. Not the old "categories" concept. See Subdomain.
     """
     __tablename__ = "categories"
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, unique=True, index=True, nullable=False)
 
 class Theme(Base):
-    """BGG Family's "Theme:" group only (e.g. "Theme: Cthulhu Mythos") —
+    """BGG Family's "Theme:" group only (e.g. "Theme: Cthulhu Mythos"),
     distinct from Category. See docs/data/README.md.
     """
     __tablename__ = "themes"
@@ -67,7 +67,7 @@ class Theme(Base):
 
 class Subdomain(Base):
     """BGG's rank/leaderboard type (Thematic/Strategy/War/Family/CGS/
-    Abstract/Party/Childrens) — this used to be mislabeled "Category".
+    Abstract/Party/Childrens). This used to be mislabeled "Category".
     """
     __tablename__ = "subdomains"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -80,7 +80,7 @@ class Mechanic(Base):
 
 class Family(Base):
     """A BGG Family namespace/group (e.g. "Animals", "Mechanism", "Theme",
-    "Crowdfunding") — the full boardgamefamily field, all 72 groups. See
+    "Crowdfunding"): the full boardgamefamily field, all 72 groups. See
     Subfamily for the specific values within a group, and docs/data/README.md.
     """
     __tablename__ = "families"
@@ -90,7 +90,7 @@ class Family(Base):
 class Subfamily(Base):
     """A specific BGG Family value within a group (e.g. "Bears" within
     "Animals"). Includes the Theme: group, which is also separately
-    extracted into the themes table today — consolidating the two is a
+    extracted into the themes table today. Consolidating the two is a
     later decision.
     """
     __tablename__ = "subfamilies"
@@ -144,7 +144,7 @@ class Game(Base):
     subdomain_ranks = Column(JSON, nullable=True)
 
     # Fields computed by build_master_dataset.py that previously never
-    # reached the schema — see docs/architecture/data-pipeline.md.
+    # reached the schema. See docs/architecture/data-pipeline.md.
     min_playtime = Column(Integer, nullable=True)
     max_playtime = Column(Integer, nullable=True)
     bayes_avg_rating = Column(Float, nullable=True)
@@ -155,13 +155,13 @@ class Game(Base):
     is_reimplementation = Column(Boolean, nullable=True)
 
     # jvanelteren poll data (Best/Recommended/Not Recommended per player
-    # count, age votes, language-dependence votes) — replaces the flat,
+    # count, age votes, language-dependence votes). Replaces the flat,
     # unused Threnjen best_players/good_players/com_age_rec/language_ease.
     suggested_num_players = Column(JSON, nullable=True)
     suggested_playerage = Column(JSON, nullable=True)
     suggested_language_dependence = Column(JSON, nullable=True)
 
-    # Search Column — semantic vectors live in GameEmbedding, not here (see below).
+    # Search Column. Semantic vectors live in GameEmbedding, not here (see below).
     search_vector = Column(TSVECTOR)
 
     # Relationships (Using selectin to prevent N+1 query performance issues)
@@ -175,10 +175,10 @@ class Game(Base):
     artists = relationship("Artist", secondary="game_artists", lazy="selectin")
 
 class GameEmbedding(Base):
-    """One row per (game, embedding model) — not a 1:1 column on Game, since
+    """One row per (game, embedding model), not a 1:1 column on Game, since
     switching or comparing embedding models means having more than one
     model's vectors present at once. `embedding` has no fixed dimension at
-    the column level (different models produce different dims); every query
+    the column level (different models produce different dims). Every query
     filters to a single `model` before computing distance, so vectors of
     different dimensions never get compared against each other.
     """
@@ -199,7 +199,7 @@ class GameEmbedding(Base):
 
 class GameRelation(Base):
     """boardgameexpansion / boardgameimplementation / boardgameintegration
-    from jvanelteren. Source data links by name, not BGGId — related_game_id
+    from jvanelteren. Source data links by name, not BGGId. related_game_id
     is null wherever related_name didn't resolve to an exact match. See
     docs/data/README.md and backend/scripts/build_master_dataset.py.
     """
@@ -264,7 +264,7 @@ class ReviewAspect(Base):
     # recoverable from (sentiment, confidence, sentiment_score) -- the
     # values ARE fully reconstructable from those three (they sum to 1,
     # differ by sentiment_score, and the winner equals confidence), but
-    # that requires re-deriving the algebra every time; storing them
+    # that requires re-deriving the algebra every time. Storing them
     # directly keeps review_aspects a genuinely self-documenting raw record.
     prob_positive = Column(Float)
     prob_neutral = Column(Float)
@@ -300,7 +300,7 @@ class Review(Base):
     comment = Column(Text)
     language = Column(String(10), index=True)
     language_confidence = Column(Float, nullable=True)
-    # Set by scripts/filter_eligible_reviews.py — app.core.review_quality's
+    # Set by scripts/filter_eligible_reviews.py, from app.core.review_quality's
     # weighted score and the final language+hard-filter+dedup+threshold
     # decision, persisted per review rather than recomputed or cached in a
     # JSON file (at ~378K eligible rows out of 4.2M, a real DB column is the

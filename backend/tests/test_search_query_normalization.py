@@ -1,7 +1,7 @@
 """Query normalization, and the layer it lives in.
 
 The two retrieval legs disagreed about case. `websearch_to_tsquery`
-lowercases while building lexemes, so lexical search never cared; the
+lowercases while building lexemes, so lexical search never cared. The
 embedding model does, so semantic search returned a different neighbourhood
 for "catan" than for "Catan", and hybrid inherited it through the RRF union.
 Measured against the live catalog before the fix: 149 hybrid matches topped
@@ -66,7 +66,7 @@ def test_normalize_folds_the_german_sharp_s():
 
 def test_normalize_keeps_accents():
     # The lexical leg leans on the 'english_unaccent' config to match
-    # "Chvatil" against "Chvátil"; roughly 9-10% of designers and artists
+    # "Chvatil" against "Chvátil". Roughly 9-10% of designers and artists
     # have non-ASCII names. Stripping diacritics here would move that
     # decision out of Postgres and break it.
     assert normalize_query("Vlaada CHVÁTIL") == "vlaada chvátil"

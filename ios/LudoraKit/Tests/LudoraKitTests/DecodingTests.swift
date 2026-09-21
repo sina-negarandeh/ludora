@@ -153,7 +153,7 @@ struct DecodingTests {
         let group = try #require(groups.first)
         #expect(!group.group.isEmpty)
         let value = try #require(group.values.first)
-        // `name` is fully qualified "Group: Value"; `value` is the bare
+        // `name` is fully qualified "Group: Value". `value` is the bare
         // label. Filtering sends `name`, so this distinction is load-bearing.
         #expect(value.name.contains(value.value))
     }
@@ -178,7 +178,7 @@ struct GameQueryTests {
     }
 
     @Test func repeatedKeysCarryEachTagSeparately() {
-        // FastAPI reads a repeated key as a list; comma-joining would
+        // FastAPI reads a repeated key as a list. Comma-joining would
         // become one filter value containing a comma.
         var query = GameQuery()
         query.mechanics = ["Worker Placement", "Deck Building"]

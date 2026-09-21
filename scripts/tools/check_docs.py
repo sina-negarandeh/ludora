@@ -3,11 +3,10 @@
 
 The docs state a handful of numbers that are mechanically derivable: how many
 Alembic migrations exist, how many pipeline scripts, how many REST endpoints.
-Seventeen sites across seven files repeat them. They went stale silently:
+Many sites across the doc set repeat them, and they went stale silently:
 `migrations` and `scripts` were transposed for an unknown period, and a
-hand-maintained tracking row in `docs/maintenance/coverage-map.md` had itself
-gone stale on all three numbers. A careful manual correction pass still left
-four of the seventeen wrong.
+hand-maintained tracking row had itself gone stale on all three numbers. A
+careful manual correction pass still left four of seventeen sites wrong.
 
 So the numbers are checked here rather than tracked by hand. Run by
 `make docs-check`, and by `make check` alongside lint, typecheck, and test.

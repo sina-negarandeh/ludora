@@ -4,7 +4,7 @@ import Foundation
 ///
 /// The raw value is the wire key, so a lookup cannot be misspelled into a
 /// silently missing chart. These five are what
-/// `scripts/generate_distributions.py` emits; anything else is drift, and a
+/// `scripts/generate_distributions.py` emits. Anything else is drift, and a
 /// decode that meets one should say so rather than shrug.
 public enum Metric: String, CaseIterable, Hashable, Sendable {
     case complexity = "Complexity"

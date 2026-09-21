@@ -35,7 +35,7 @@ def main():
     # Two separate sessions/connections: yield_per() below puts the read
     # session in server-side-cursor (stream_results) mode, and writing on
     # that same connection while the cursor is open invalidates it
-    # (psycopg.errors.InvalidCursorName) — same issue already hit and fixed
+    # (psycopg.errors.InvalidCursorName). Same issue already hit and fixed
     # in filter_eligible_reviews.py.
     read_db = SessionLocal()
     write_db = SessionLocal()
@@ -55,7 +55,7 @@ def main():
     # review_aspects.review_id, which only reflects reviews that produced at
     # least one evidence-matched aspect. A review can be legitimately
     # attempted and yield zero storable aspects (no literal aspect-word
-    # sentence match); treating "has a review_aspects row" as "was
+    # sentence match). Treating "has a review_aspects row" as "was
     # processed" silently re-ran those reviews' inference on every
     # subsequent --minutes-bounded session, wasting more compute each time
     # as the unmarked backlog grew.
@@ -81,7 +81,7 @@ def main():
             if args.limit and total_reviews_processed >= args.limit:
                 break
             if args.minutes and (time.time() - start_time) >= args.minutes * 60:
-                print(f"\nTime budget of {args.minutes} min reached — stopping (resumable next run).")
+                print(f"\nTime budget of {args.minutes} min reached. Stopping (resumable next run).")
                 break
 
             text_val = r.comment
@@ -110,8 +110,8 @@ def main():
                     # Store every winning prediction -- positive, negative,
                     # AND neutral -- with its confidence, rather than
                     # filtering at extraction time. review_aspects becomes
-                    # the complete raw record of what the classifier said;
-                    # any confidence/sentiment threshold used for display or
+                    # the complete raw record of what the classifier said.
+                    # Any confidence/sentiment threshold used for display or
                     # aggregation (ABSAConfig.WINNER_PROB_THRESHOLD, applied
                     # in absa_aggregate.py) becomes a query-time decision
                     # instead, freely revisable without ever re-running the
@@ -178,7 +178,7 @@ def main():
     backlog_db.close()
     remaining = total_eligible - total_done
     print(f"\n--- Backlog status ---")
-    print(f"{total_done}/{total_eligible} eligible reviews attempted overall ({remaining} remaining) — {reviews_with_aspects} of those yielded at least one storable aspect.")
+    print(f"{total_done}/{total_eligible} eligible reviews attempted overall ({remaining} remaining). {reviews_with_aspects} of those yielded at least one storable aspect.")
     if remaining > 0 and total_reviews_processed > 0:
         rate = total_reviews_processed / elapsed
         eta_minutes = (remaining / rate) / 60

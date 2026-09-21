@@ -69,7 +69,7 @@ class SearchService:
         self.rrf_k = SearchConfig.RRF_K
 
     def search_lexical(self, q: str, limit: int = SearchConfig.CANDIDATE_POOL_SIZE) -> dict[int, int]:
-        # 'english_unaccent' (not plain 'english') — must match the config
+        # 'english_unaccent' (not plain 'english'). Must match the config
         # search_vector itself was built with (scripts/update_search_vectors.py),
         # or accent-insensitive matching silently doesn't happen: querying
         # "Chvatil" against an 'english'-tokenized tsvector containing
@@ -79,15 +79,15 @@ class SearchService:
         
         # Rank the results using ts_rank_cd. Tried adding normalization=1
         # (divide by 1 + log(document length)) to discount long, noisy
-        # descriptions — measured it against a real query ("worker
+        # descriptions. Measured it against a real query ("worker
         # placement"): it dropped the exact-name match "Worker Placement"
         # out of the top 5 entirely (its own description is long, so it got
         # penalized as much as an irrelevant long document would), while
         # promoting a much weaker match with a short description to #1.
         # ts_rank_cd's length normalization applies to the whole combined
         # tsvector, not per-field, so it can't distinguish "long because
-        # noisy" from "long because it's a substantive, relevant match" —
-        # reverted; not a clear win over the default.
+        # noisy" from "long because it's a substantive, relevant match".
+        # Reverted, not a clear win over the default.
         results = (
             self.db.query(Game.bgg_id)
             .filter(Game.search_vector.op("@@")(tsquery))
@@ -101,7 +101,7 @@ class SearchService:
     def search_semantic(self, q: str, limit: int = SearchConfig.CANDIDATE_POOL_SIZE) -> dict[int, int]:
         embedding = embedding_model.encode([q], is_query=True)[0]
 
-        # Filter to the currently-configured model first — game_embeddings can
+        # Filter to the currently-configured model first. game_embeddings can
         # hold rows for more than one model at once (e.g. during a comparison),
         # and vectors of different dimensions can't be compared to each other.
         results = (

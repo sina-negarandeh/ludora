@@ -38,7 +38,7 @@ public struct GameQuery: Hashable, Sendable {
     public var order: SortOrder = .ascending
 
     /// Lexical search over name and description. For semantic or hybrid
-    /// retrieval use `LudoraClient.search(_:)` instead; this parameter is
+    /// retrieval use `LudoraClient.search(_:)` instead. This parameter is
     /// full-text only.
     public var query: String?
 

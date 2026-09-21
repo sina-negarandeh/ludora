@@ -3,9 +3,9 @@ import pandas as pd
 import json
 import ast
 
-# Run from the repo root (matches every other pipeline script — see
-# docs/setup/README.md). Override via env var for Docker or any other cwd;
-# inside the backend container these must be set explicitly, since
+# Run from the repo root (matches every other pipeline script, see
+# docs/setup/README.md). Override via env var for Docker or any other cwd.
+# Inside the backend container these must be set explicitly, since
 # data/raw/... is not reachable from /app (see docker-compose.yml).
 RAW_DATA_THRENJEN_DIR = os.environ.get(
     'RAW_DATA_THRENJEN_DIR',
@@ -52,7 +52,7 @@ def to_json_string(val):
 def resolve_with_fallback(final_df, primary_series, threnjen_csv_path, usecols_filter=None, name_transform=None):
     """For each game: primary_series's list if non-empty, else a name list
     built from a Threnjen wide one-hot file (BGGId + one binary column per
-    entity name), but ONLY reading rows for games that actually need it —
+    entity name), but ONLY reading rows for games that actually need it,
     not the full ~21,925-row file, which matters once files get wide
     (publishers_reduced.csv alone is 1,866 columns).
     """
@@ -76,8 +76,8 @@ def resolve_with_fallback(final_df, primary_series, threnjen_csv_path, usecols_f
 
 def extract_relational_data_from_lists(bgg_ids, lists_series, entity_name):
     """Build an entity table + game-mapping table from a Series of
-    per-game name lists (already resolved — primary source, fallback, or
-    both — by the caller).
+    per-game name lists, already resolved by the caller from the primary
+    source, the fallback, or both.
     """
     print(f"Extracting relational data for {entity_name}...")
     entity_set = set()
@@ -104,7 +104,7 @@ def extract_relational_data_from_lists(bgg_ids, lists_series, entity_name):
 def split_family_tag(tag):
     """BGG Family tags are namespaced as "Group: Value" (e.g. "Animals:
     Bears"). A small number (93 of 77,056 instances) carry no namespace at
-    all — bucketed under a synthetic "Other" group.
+    all, bucketed under a synthetic "Other" group.
     """
     if ':' in tag:
         group, value = tag.split(':', 1)
@@ -115,7 +115,7 @@ def split_family_tag(tag):
 def extract_family_data(bgg_ids, lists_series):
     """Family tags carry a BGG namespace prefix ("Group: Value"). Modeled as
     two levels: families (the 72 groups) and subfamilies (the 4,208 values,
-    FK'd to their group) — games link to the leaf level only, since a game
+    FK'd to their group). Games link to the leaf level only, since a game
     is never tagged with a bare group in the source data. See
     docs/data/README.md.
     """
@@ -231,7 +231,7 @@ def main():
     final_df['suggested_language_dependence'] = master_df['suggested_language_dependence'].apply(to_json_string)
 
     # Temporarily bring along the stringified arrays needed for relational
-    # extraction below; all dropped before the final games CSV is written.
+    # extraction below. All dropped before the final games CSV is written.
     final_df['boardgamecategory'] = master_df['boardgamecategory']
     final_df['boardgamemechanic'] = master_df['boardgamemechanic']
     final_df['boardgamefamily'] = master_df['boardgamefamily']
@@ -244,7 +244,7 @@ def main():
 
     os.makedirs(PROCESSED_DATA_DIR, exist_ok=True)
 
-    # --- Subdomains (BGG's rank/leaderboard type — was mislabeled "categories") ---
+    # --- Subdomains (BGG's rank/leaderboard type, was mislabeled "categories") ---
     subdomain_names = ['Thematic', 'Strategy', 'War', 'Family', 'CGS', 'Abstract', 'Party', 'Childrens']
     subdomain_df = pd.DataFrame({'id': range(1, 9), 'name': subdomain_names})
 
@@ -270,10 +270,10 @@ def main():
                 game_subdomain_list.append({'game_id': bgg_id, 'subdomain_id': sub_id})
     game_subdomain_df = pd.DataFrame(game_subdomain_list).drop_duplicates()
 
-    # --- Categories (BGG's real boardgamecategory field — was mislabeled "themes") ---
+    # --- Categories (BGG's real boardgamecategory field, was mislabeled "themes") ---
     # Primary: jvanelteren boardgamecategory. Fallback (for the ~428 games
     # with no jvanelteren row): Threnjen's non-"Theme_" themes.csv columns,
-    # then Threnjen's subcategories.csv — both verified as the same BGG
+    # then Threnjen's subcategories.csv. Both verified as the same BGG
     # Category taxonomy, not a separate concept. See docs/data/README.md.
     category_primary = final_df['boardgamecategory'].apply(parse_stringified_list)
     category_lists = resolve_with_fallback(
@@ -287,7 +287,7 @@ def main():
     )
     cat_df, game_cat_df = extract_relational_data_from_lists(final_df['bgg_id'], category_lists, 'category')
 
-    # --- Themes (BGG Family's "Theme:" group only — genuinely new, never sourced before) ---
+    # --- Themes (BGG Family's "Theme:" group only, genuinely new) ---
     theme_primary = final_df['boardgamefamily'].apply(
         lambda v: [i[len(THEME_PREFIX):] for i in parse_stringified_list(v) if i.startswith(THEME_PREFIX)]
     )
@@ -299,9 +299,9 @@ def main():
     )
     theme_df, game_theme_df = extract_relational_data_from_lists(final_df['bgg_id'], theme_lists, 'theme')
 
-    # --- Families (BGG Family, boardgamefamily — the full field, all 72
+    # --- Families (BGG Family, boardgamefamily: the full field, all 72
     # namespaces including Theme:, which is also separately extracted above
-    # into its own table today; consolidating the two is a later decision) ---
+    # into its own table today. Consolidating the two is a later decision) ---
     family_lists = final_df['boardgamefamily'].apply(parse_stringified_list)
     family_df, subfamily_df, game_subfamily_df = extract_family_data(final_df['bgg_id'], family_lists)
 
@@ -377,7 +377,7 @@ def main():
         build_game_relations(final_df, 'boardgameintegration', 'integration', name_to_id),
     ], ignore_index=True)
     # related_game_id must write as a clean integer or empty string, not
-    # "2092.0" — Postgres COPY rejects float-formatted text for an int column.
+    # "2092.0". Postgres COPY rejects float-formatted text for an int column.
     relations_df['related_game_id'] = relations_df['related_game_id'].astype('Int64')
     relations_df.to_csv(os.path.join(PROCESSED_DATA_DIR, 'master_game_relations.csv'), index=False)
 

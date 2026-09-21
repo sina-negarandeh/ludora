@@ -65,7 +65,7 @@ struct FamilyGroupingTests {
     }
 
     /// The real strings, from the captured detail fixture. Hand-written
-    /// cases above cover the parsing; this checks the grouping survives
+    /// cases above cover the parsing. This checks the grouping survives
     /// whatever the catalog actually contains.
     @Test("groups the fixture's families")
     func groupsFixtureFamilies() throws {

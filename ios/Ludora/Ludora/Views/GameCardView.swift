@@ -11,7 +11,7 @@ import SwiftUI
 ///
 /// The blurred backdrop is the detail worth keeping. Box art has wildly
 /// varying aspect ratios, so fitting the art inside a fixed frame leaves
-/// bars; the web app fills them with a blurred, scaled copy of the same
+/// bars. The web app fills them with a blurred, scaled copy of the same
 /// image. It reads as intentional rather than as letterboxing.
 struct GameCardView: View {
     let game: Game
@@ -35,7 +35,7 @@ struct GameCardView: View {
     /// No fixed aspect ratio: the details block has an intrinsic height and
     /// the cover takes whatever the page has left, so on a tall phone the
     /// art gets the room instead of a 4:3 sliver of it. The web card fixes
-    /// 4:3 because it sits in a grid of equal cells; a full-page card has no
+    /// 4:3 because it sits in a grid of equal cells. A full-page card has no
     /// neighbours to line up with.
     ///
     /// The art is an `overlay` on a plain `Color`, not a sibling in a

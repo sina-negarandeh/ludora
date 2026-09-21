@@ -1,13 +1,13 @@
 """One-time corpus-statistics pass for the review quality filter.
 
 Derives two artifacts from a sample of the review corpus:
-  1. Domain vocabulary CANDIDATES — frequent, non-stopword (stemmed) terms,
+  1. Domain vocabulary CANDIDATES: frequent, non-stopword (stemmed) terms,
      written out for human curation, not auto-applied. Raw frequency alone
      surfaces generic praise words ("game", "fun", "great") ahead of
-     specific ones ("meeple", "worker-placement", "rulebook") — see
-     docs/ml/model-cards/absa-deberta.md for why this needs a human pass
+     specific ones ("meeple", "worker-placement", "rulebook"). See
+     docs/ml/absa.md for why this needs a human pass
      rather than a purely statistical cutoff.
-  2. Boilerplate n-grams — phrases repeated across ABSAConfig.BOILERPLATE_MIN_COUNT
+  2. Boilerplate n-grams: phrases repeated across ABSAConfig.BOILERPLATE_MIN_COUNT
      or more *different* reviews. Applied by frequency threshold alone, no
      curation needed: an n-gram reused across hundreds of different users'
      reviews is unambiguously templated filler regardless of judgment calls,
@@ -54,13 +54,13 @@ def main():
     for i, (comment,) in enumerate(rows):
         tokens = tokenize(comment)
 
-        # Vocabulary candidates: stemmed, non-stopword, non-numeric —
+        # Vocabulary candidates: stemmed, non-stopword, non-numeric, which
         # consolidates word forms ("component"/"components") before ranking.
         for t in tokens:
             if t not in STOPWORDS and len(t) > 2 and not t.isdigit():
                 term_counts[stem(t)] += 1
 
-        # Boilerplate: raw (unstemmed) n-grams — we want literal repeated
+        # Boilerplate: raw (unstemmed) n-grams, since we want literal repeated
         # phrasing here, not stemmed-and-blurred phrasing.
         for j in range(len(tokens) - ngram_n + 1):
             ngram_counts[tuple(tokens[j:j + ngram_n])] += 1

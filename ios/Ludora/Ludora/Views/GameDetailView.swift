@@ -9,12 +9,12 @@ import SwiftUI
 /// Ratings, then Reviews.
 ///
 /// The one structural difference is that the big sections collapse. The web
-/// lays this out in two columns you can skim past; a phone has one column and
+/// lays this out in two columns you can skim past. A phone has one column and
 /// no such affordance, so folding a section away is how it gets one.
 ///
 /// Deliberately does not show the ABSA aspect breakdown, the community
 /// consensus paragraph, or recommendations. Those exist on the backend and
-/// are out of scope for this version; see ios/AGENTS.md.
+/// are out of scope for this version. See ios/AGENTS.md.
 struct GameDetailView: View {
     let bggID: Int
 
@@ -116,7 +116,7 @@ struct GameDetailView: View {
 
                 // Two rows, as on the web: the subdomains as solid pills,
                 // then the categories as outlined ones. Categories belong
-                // here rather than in a section far below; they are how the
+                // here rather than in a section far below. They are how the
                 // game is described ("Age of Reason", "Economic"), not a
                 // vocabulary to go browsing through.
                 if !game.subdomains.isEmpty {
@@ -245,7 +245,7 @@ struct GameDetailView: View {
     /// What the publisher states: one chart per stated field.
     ///
     /// A table rather than four near-identical call sites. Only the title,
-    /// the metric and the game's own value differ; everything else the old
+    /// the metric and the game's own value differ. Everything else the old
     /// version passed in per call is a property of the metric and now lives
     /// on `Metric.axis`.
     @ViewBuilder
@@ -526,7 +526,7 @@ struct GameDetailView: View {
         do {
             // Independent requests, so run them concurrently rather than
             // making each wait on the one before. Only the detail is
-            // required; the rest degrade to a missing section or a missing
+            // required. The rest degrade to a missing section or a missing
             // line, so they are fetched with `try?`.
             async let detail = client.game(bggID: bggID)
             async let counts = try? client.subdomains()
@@ -781,7 +781,7 @@ struct ExpandableText: View {
     let text: String
     /// The web collapses past 1600 characters, but that is a threshold for a
     /// wide column. The same text on a phone is roughly three screens, so
-    /// this clips far sooner; the web's number would leave most descriptions
+    /// this clips far sooner. The web's number would leave most descriptions
     /// uncollapsed here, which is the case that prompted this.
     private let longEnough = 600
     private let collapsedHeight: CGFloat = 260

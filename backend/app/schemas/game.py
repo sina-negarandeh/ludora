@@ -29,7 +29,7 @@ class GameBase(BaseModel):
     year_published: int | None = Field(None, description="The year the game was originally published.")
     game_weight: float | None = Field(None, description="Complexity rating on a scale of 1.0 (light) to 5.0 (heavy).")
     avg_rating: float | None = Field(None, description="Average community rating on a scale of 1.0 to 10.0.")
-    bayes_avg_rating: float | None = Field(None, description="BGG's Bayesian-weighted average rating — the value BGG itself uses for ranking.")
+    bayes_avg_rating: float | None = Field(None, description="BGG's Bayesian-weighted average rating, the value BGG itself uses for ranking.")
     stddev_rating: float | None = Field(None, description="Standard deviation of community ratings.")
     num_weight_votes: int | None = Field(None, description="Number of users who voted on this game's complexity weight.")
     min_players: int | None = Field(None, description="Minimum number of players supported.")
@@ -56,14 +56,14 @@ class GameBase(BaseModel):
     def _normalize_single_poll_entry(cls, v):
         # BGG's raw XML-to-JSON poll data collapses a single-entry poll list
         # down to a bare object instead of a one-item list (an xmltodict-style
-        # single-child quirk from ingestion) — wrap it back into a list rather
+        # single-child quirk from ingestion). Wrap it back into a list rather
         # than reject or drop it.
         if isinstance(v, dict):
             return [v]
         return v
-    subdomains: list[str] = Field(default_factory=list, description="BGG's rank/leaderboard classification (e.g., 'Strategy', 'Family') — not a content tag.")
+    subdomains: list[str] = Field(default_factory=list, description="BGG's rank/leaderboard classification (e.g., 'Strategy', 'Family'), not a content tag.")
     categories: list[str] = Field(default_factory=list, description="BGG's real Category tags (e.g., 'Economic', 'Fantasy').")
-    themes: list[str] = Field(default_factory=list, description="BGG Family 'Theme:' tags — narrow setting/franchise tags (e.g., 'Cthulhu Mythos'), distinct from Category.")
+    themes: list[str] = Field(default_factory=list, description="BGG Family 'Theme:' tags: narrow setting/franchise tags (e.g., 'Cthulhu Mythos'), distinct from Category.")
     families: list[str] = Field(default_factory=list, description="BGG Family tags across all 72 namespaces (e.g., 'Animals: Bears', 'Mechanism: 4X'), shown as 'Group: Value'.")
     mechanics: list[str] = Field(default_factory=list, description="List of mechanics (e.g., 'Worker Placement', 'Deck Building').")
     designers: list[str] = Field(default_factory=list, description="List of game designers.")

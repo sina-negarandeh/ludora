@@ -4,7 +4,7 @@ Revision ID: c4d8f21a9e56
 Revises: b8e1c4a29f37
 Create Date: 2026-08-17 21:55:00.000000
 
-Postgres's built-in 'english' text search config does not fold diacritics —
+Postgres's built-in 'english' text search config does not fold diacritics.
 'Chvátil' and 'Chvatil' tokenize to different, non-matching lexemes. Measured
 against the live catalog: ~9% of designers, ~10% of artists, 5% of publishers
 have non-ASCII names, so a plain-keyboard search for any of them (no accent
@@ -31,7 +31,7 @@ def upgrade() -> None:
     """Upgrade schema."""
     op.execute("CREATE EXTENSION IF NOT EXISTS unaccent")
     # CREATE TEXT SEARCH CONFIGURATION has no IF NOT EXISTS clause in
-    # Postgres — this migration only ever runs once via Alembic's own
+    # Postgres. This migration only ever runs once via Alembic's own
     # tracking, so that's fine.
     op.execute("""
         CREATE TEXT SEARCH CONFIGURATION public.english_unaccent

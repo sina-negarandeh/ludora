@@ -90,7 +90,7 @@ struct RangeSlider: View {
             .overlay(Circle().strokeBorder(Color.ludoraPrimary, lineWidth: 3))
             .shadow(color: .ludoraText.opacity(0.25), radius: 3, y: 1)
             // Attached before `position` so the gesture only claims the
-            // knob's own area; a gesture added afterwards would cover the
+            // knob's own area. A gesture added afterwards would cover the
             // whole track and the second knob would never see a drag.
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .named(space))

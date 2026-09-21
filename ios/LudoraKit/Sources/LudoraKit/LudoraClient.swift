@@ -73,7 +73,7 @@ public enum LudoraError: Error, LocalizedError, Sendable {
 ///
 /// Scoped to what this app renders. Recommendations, the ABSA aspect data,
 /// and the assistant all exist on the backend and are deliberately absent
-/// here; see ios/AGENTS.md.
+/// here. See ios/AGENTS.md.
 public actor LudoraClient {
     private let configuration: LudoraConfiguration
     private let session: URLSession
@@ -90,7 +90,7 @@ public actor LudoraClient {
     // MARK: - Games
 
     /// Browse and filter the catalog. Also does lexical search when
-    /// `query.query` is set; for semantic or hybrid retrieval use
+    /// `query.query` is set. For semantic or hybrid retrieval use
     /// `search(_:)`.
     public func games(_ query: GameQuery = GameQuery()) async throws -> PaginatedGames {
         try await get("/api/games/", queryItems: query.queryItems)
@@ -121,7 +121,7 @@ public actor LudoraClient {
     // MARK: - Search
 
     /// Lexical, semantic, or hybrid search. A POST because the request body
-    /// nests; see `SearchRequest`.
+    /// nests. See `SearchRequest`.
     public func search(_ request: SearchRequest) async throws -> PaginatedSearchResults {
         try await post("/api/search/", body: request)
     }
@@ -222,7 +222,7 @@ public actor LudoraClient {
 
     /// FastAPI's error envelope is `{"detail": ...}`, where the value is a
     /// string for a raised `HTTPException` and an array of field errors for a
-    /// validation failure. Only the string form is worth showing a user; the
+    /// validation failure. Only the string form is worth showing a user. The
     /// array reduces to the first message rather than a wall of JSON.
     static func detail(from data: Data) -> String? {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],

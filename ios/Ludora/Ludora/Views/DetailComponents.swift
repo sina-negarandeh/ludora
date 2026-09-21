@@ -146,8 +146,8 @@ struct RankingCard: View {
 /// cover as `w-full h-auto object-contain`, so a tall box and a wide one
 /// each take the height they need, and behind it puts an "ambient glow": the
 /// same image blurred, scaled slightly past the edges and nudged down. The
-/// browse card's letterboxed backdrop exists to fill a fixed cell in a grid;
-/// nothing here is a cell, so the art is simply the art.
+/// browse card's letterboxed backdrop exists to fill a fixed cell in a grid.
+/// Nothing here is a cell, so the art is simply the art.
 ///
 /// The glow is a `background`, applied after `clipShape` so the clip takes
 /// the artwork and not the glow, which needs to spill past the edges to read

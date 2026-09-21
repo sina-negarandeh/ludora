@@ -4,7 +4,7 @@ import SwiftUI
 ///
 /// The detail page runs long: description, six vocabularies, eight charts,
 /// two ranking cards, a histogram and ten reviews. On a desktop that is a
-/// two-column layout you can skim; on a phone it is one column you have to
+/// two-column layout you can skim. On a phone it is one column you have to
 /// scroll past. Collapsing is how a phone gets the same "skip this part"
 /// affordance the web gets from its layout.
 ///

@@ -15,7 +15,7 @@ final class GameBrowser {
         case idle
         case loading
         /// Carries a message rather than the error itself so the view has
-        /// nothing to decide; `LudoraError` already writes user-facing text.
+        /// nothing to decide. `LudoraError` already writes user-facing text.
         case failed(String)
     }
 

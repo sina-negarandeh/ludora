@@ -19,7 +19,7 @@ struct CurveMarker: Identifiable {
 ///
 /// Drawn with Swift Charts rather than a hand-built path so the axis,
 /// scaling and accessibility come from the framework. The web hand-rolls an
-/// SVG because it has to; this does not.
+/// SVG because it has to. This does not.
 struct DistributionChartCard: View {
     let title: String
     let summary: String
@@ -29,7 +29,7 @@ struct DistributionChartCard: View {
     let fieldName: String
     let leftLabel: String
     let rightLabel: String
-    /// "Heavier than", "Longer than" — the phrase the percentile sentence uses.
+    /// "Heavier than", "Longer than": the phrase the percentile sentence uses.
     let comparative: String
     /// How the AVG chip formats its number.
     let formatAverage: (Double) -> String
@@ -96,7 +96,7 @@ struct DistributionChartCard: View {
         .overlay { RoundedRectangle(cornerRadius: 16).strokeBorder(Color.ludoraSurface) }
     }
 
-    /// One marker reads as a sentence; several are prefixed by their label so
+    /// One marker reads as a sentence. Several are prefixed by their label so
     /// "Community Min" and "Community Max" stay apart.
     private func sentence(for marker: CurveMarker, share: Double) -> String {
         let core = "\(comparative.lowercased()) \(Int((share * 100).rounded()))% of \(fieldName)"

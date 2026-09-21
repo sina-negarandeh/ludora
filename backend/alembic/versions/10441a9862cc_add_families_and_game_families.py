@@ -21,9 +21,9 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema."""
     # BGG Family (boardgamefamily), grouped by namespace (e.g. "Animals",
-    # "Mechanism", "Theme", "Crowdfunding") — the full, ungrouped field, all
+    # "Mechanism", "Theme", "Crowdfunding"): the full, ungrouped field, all
     # 72 namespaces including Theme: (which is also separately extracted
-    # into the themes table today; consolidating them is a later decision).
+    # into the themes table today. Consolidating them is a later decision).
     op.create_table(
         'families',
         sa.Column('id', sa.Integer(), nullable=False),

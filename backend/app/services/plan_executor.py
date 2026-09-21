@@ -10,7 +10,7 @@ a cycle.
 
 This graph adds exactly that one cycle (execute -> relax -> execute) and
 nothing else. The plan itself is still validated by compile_plan first,
-and still walked in position order; LangGraph owns only the control flow
+and still walked in position order. LangGraph owns only the control flow
 between steps, not the plan's shape.
 
 Topology is fixed and compiled once at import (see PLAN_EXECUTOR at the
@@ -32,7 +32,7 @@ from app.schemas.assistant import AssistantResponse, GameFilters, ParsedIntent
 from app.services.plan_graph import PlanGraph
 from app.services.plan_resolution import extract_chainable_values, resolve_step
 
-# Numeric range bounds get dropped on a relax pass; taxonomy filters and
+# Numeric range bounds get dropped on a relax pass. Taxonomy filters and
 # player counts do not. This isn't arbitrary: the parsing prompt's own
 # rules 14 and 16 tell the model to INVENT these numbers when the user
 # only said something vague ("light" -> max_complexity=2.0, "quick" ->
@@ -73,7 +73,7 @@ if _unknown_filters:
 
 class PlanState(TypedDict):
     """Everything the walk needs. `graph` is the compiled plan (data
-    flowing through a fixed topology, see the module docstring);
+    flowing through a fixed topology, see the module docstring).
     `relaxed_filters` maps position -> the bounds already dropped from
     that step. It does double duty: it tells the caller WHICH part of the
     request was loosened (keyed rather than flattened, so two relaxed

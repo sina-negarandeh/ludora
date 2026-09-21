@@ -9,7 +9,7 @@ import PackageDescription
 // while no simulator runtime is.
 //
 // Nothing in this target imports SwiftUI or UIKit. The app target owns all
-// of that; this one owns models, networking, and decoding.
+// of that. This one owns models, networking, and decoding.
 let package = Package(
     name: "LudoraKit",
     platforms: [.iOS(.v17), .macOS(.v14)],
